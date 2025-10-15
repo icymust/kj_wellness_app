@@ -1,0 +1,73 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16
+    container_name: postgres
+    environment:
+      POSTGRES_DB: ndl
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ndl"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  pgadmin:
+    image: dpage/pgadmin4:9
+    container_name: pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    depends_on:
+      - db
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin:/var/lib/pgadmin
+
+  app:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: backend
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/ndl
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: postgres
+      SERVER_PORT: 5173
+      # при желании: SPRING_JPA_HIBERNATE_DDL_AUTO=update
+    ports:
+      - "5173:5173"
+    # Для быстрых итераций можно включить монтирование исходников и запуск через mvn spring-boot:run
+    # volumes:
+    #   - ./src:/app/src
+    #   - ./pom.xml:/app/pom.xml
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: frontend
+    depends_on:
+      - app
+    environment:
+      VITE_API_BASE: http://localhost:5173
+    ports:
+      - "8080:8080"
+    # Если хочешь hot-reload при правке файлов из IDE — раскомментируй:
+    # volumes:
+    #   - ./ndl-frontend:/app
+    #   - /app/node_modules
+
+volumes:
+  pgdata:
+  pgadmin:
