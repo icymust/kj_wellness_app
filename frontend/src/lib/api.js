@@ -28,4 +28,6 @@ export const api = {
   login: (email, password) => request("/auth/login", { method: "POST", body: { email, password } }),
   refresh: (refreshToken) => request("/auth/refresh", { method: "POST", body: { refreshToken } }),
   me: (accessToken) => request("/protected/me", { token: accessToken }),
+  getProfile: (accessToken) => request("/profile", { token: accessToken }),
+  saveProfile: (accessToken, payload) => request("/profile", { method: "PUT", token: accessToken, body: payload }),
 };

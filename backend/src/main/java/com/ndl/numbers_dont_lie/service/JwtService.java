@@ -1,4 +1,6 @@
-package com.ndl.numbers_dont_lie.auth;
+package com.ndl.numbers_dont_lie.service;
+
+import com.ndl.numbers_dont_lie.entity.UserEntity;
 
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;

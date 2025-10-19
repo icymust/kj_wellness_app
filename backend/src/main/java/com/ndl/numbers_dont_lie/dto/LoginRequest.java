@@ -1,4 +1,4 @@
-package com.ndl.numbers_dont_lie.auth;
+package com.ndl.numbers_dont_lie.dto;
 
 public class LoginRequest {
     public String email;

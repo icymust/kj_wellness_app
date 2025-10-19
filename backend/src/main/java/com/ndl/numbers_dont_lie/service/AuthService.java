@@ -1,5 +1,8 @@
-package com.ndl.numbers_dont_lie.auth;
 
+package com.ndl.numbers_dont_lie.service;
+
+import com.ndl.numbers_dont_lie.repository.UserRepository;
+import com.ndl.numbers_dont_lie.entity.UserEntity;
 import org.springframework.security.crypto.bcrypt.BCrypt;
 import org.springframework.stereotype.Service;
 

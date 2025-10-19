@@ -1,4 +1,4 @@
-package com.ndl.numbers_dont_lie.auth;
+package com.ndl.numbers_dont_lie.entity;
 
 import jakarta.persistence.*;
 import java.time.Instant;

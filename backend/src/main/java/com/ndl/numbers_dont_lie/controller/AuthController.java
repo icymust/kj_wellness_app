@@ -1,5 +1,12 @@
-package com.ndl.numbers_dont_lie.auth;
+package com.ndl.numbers_dont_lie.controller;
 
+import com.ndl.numbers_dont_lie.store.AuthStore;
+import com.ndl.numbers_dont_lie.service.AuthService;
+import com.ndl.numbers_dont_lie.entity.UserEntity;
+import com.ndl.numbers_dont_lie.dto.LoginRequest;
+import com.ndl.numbers_dont_lie.dto.RefreshRequest;
+import com.ndl.numbers_dont_lie.dto.TokensResponse;
+import com.ndl.numbers_dont_lie.service.JwtService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -70,10 +77,10 @@ public class AuthController {
     }
 
     public AuthController(AuthStore store, AuthService authService, JwtService jwt) {
-    this.store = store;
-    this.authService = authService;
-    this.jwt = jwt;
-}
+        this.store = store;
+        this.authService = authService;
+        this.jwt = jwt;
+    }
 
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody LoginRequest req) {

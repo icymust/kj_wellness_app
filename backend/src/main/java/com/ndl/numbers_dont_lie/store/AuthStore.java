@@ -1,5 +1,6 @@
-package com.ndl.numbers_dont_lie.auth;
+package com.ndl.numbers_dont_lie.store;
 
+import com.ndl.numbers_dont_lie.model.User;
 import org.springframework.stereotype.Component;
 
 import java.util.HashMap;
