@@ -10,6 +10,10 @@ export default function App() {
   const [refreshToken, setRefreshToken] = useState("");
   const [me, setMe] = useState(null);
   const [log, setLog] = useState("");
+  const [newWeight, setNewWeight] = useState("");
+  const [weightAt, setWeightAt] = useState("");
+  const [weights, setWeights] = useState([]);
+  const [summary, setSummary] = useState(null);
 
   const [profile, setProfile] = useState({
     age: "",
@@ -112,6 +116,29 @@ export default function App() {
     }
   }
 
+  async function addWeight(e){ e.preventDefault();
+  try{
+    const res = await api.weightAdd(accessToken, Number(newWeight), weightAt || null);
+    logMsg("Weight added", res.entry);
+    setNewWeight(""); setWeightAt("");
+    await loadWeights();
+  }catch(err){ logMsg("Weight add error:", {status:err.status, data:err.data}); }
+  }
+  async function loadWeights(){
+    try{
+      const res = await api.weightList(accessToken);
+      setWeights(res.entries || []);
+      logMsg("Weight list loaded", (res.entries||[]).length);
+    }catch(err){ logMsg("Weight list error:", {status:err.status, data:err.data}); }
+  }
+  async function loadSummary(){
+    try{
+      const res = await api.analyticsSummary(accessToken);
+      setSummary(res);
+      logMsg("Analytics summary", res);
+    }catch(err){ logMsg("Summary error:", {status:err.status, data:err.data}); }
+  }
+
   return (
     <div style={{ maxWidth: 720, margin: "2rem auto", fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, sans-serif" }}>
       <h1>Numbers Don’t Lie — Auth Demo</h1>
@@ -133,6 +160,33 @@ export default function App() {
             <div>Verification link:</div>
             <code style={{ wordBreak: "break-all" }}>{verificationLink}</code>
           </div>
+        )}
+      </section>
+
+      <section style={{ border:"1px solid #ddd", padding:16, borderRadius:12, marginTop:16 }}>
+        <h2>Weight Progress</h2>
+        <form onSubmit={addWeight} style={{ display:"grid", gap:8 }}>
+          <label>Weight (kg) <input value={newWeight} onChange={e=>setNewWeight(e.target.value)} required /></label>
+          <label>Timestamp (ISO, optional) <input placeholder="2025-10-15T21:10:00Z" value={weightAt} onChange={e=>setWeightAt(e.target.value)} /></label>
+          <small>Если пусто — сохранится текущий timestamp. Повтор того же timestamp вернёт 409.</small>
+          <button type="submit" disabled={!accessToken}>Add</button>
+        </form>
+
+        <div style={{ marginTop:8 }}>
+          <button onClick={loadWeights} disabled={!accessToken}>Load history</button>
+          <ul>{weights.map(w=>(
+            <li key={w.id}>{w.at} — {w.weightKg} kg</li>
+          ))}</ul>
+        </div>
+      </section>
+
+      <section style={{ border:"1px solid #ddd", padding:16, borderRadius:12, marginTop:16 }}>
+        <h2>Analytics</h2>
+        <button onClick={loadSummary} disabled={!accessToken}>Load BMI & Wellness</button>
+        {summary && (
+          <pre style={{ background:"#f7f7f7", padding:12, borderRadius:8, marginTop:8 }}>
+            {JSON.stringify(summary, null, 2)}
+          </pre>
         )}
       </section>
 

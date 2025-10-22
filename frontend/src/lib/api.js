@@ -30,4 +30,8 @@ export const api = {
   me: (accessToken) => request("/protected/me", { token: accessToken }),
   getProfile: (accessToken) => request("/profile", { token: accessToken }),
   saveProfile: (accessToken, payload) => request("/profile", { method: "PUT", token: accessToken, body: payload }),
+  weightAdd: (token, weightKg, at) =>
+  request("/progress/weight", { method: "POST", token, body: { weightKg, at } }),
+  weightList: (token) => request("/progress/weight", { token }),
+  analyticsSummary: (token) => request("/analytics/summary", { token }),
 };
