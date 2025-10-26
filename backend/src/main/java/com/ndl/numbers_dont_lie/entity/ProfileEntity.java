@@ -19,6 +19,7 @@ public class ProfileEntity {
   @Column(length = 16)  private String gender;         // male|female|other
   private Integer heightCm;         // 50..300
   private Double  weightKg;         // 20..500
+  private Double  targetWeightKg;   // цель по весу (кг)
   @Column(length = 24)  private String activityLevel;  // low|moderate|high
   @Column(length = 32)  private String goal;           // weight_loss|muscle_gain|general_fitness
 
@@ -33,6 +34,8 @@ public class ProfileEntity {
   public void setHeightCm(Integer heightCm) { this.heightCm = heightCm; }
   public Double getWeightKg() { return weightKg; }
   public void setWeightKg(Double weightKg) { this.weightKg = weightKg; }
+  public Double getTargetWeightKg() { return targetWeightKg; }
+  public void setTargetWeightKg(Double targetWeightKg) { this.targetWeightKg = targetWeightKg; }
   public String getActivityLevel() { return activityLevel; }
   public void setActivityLevel(String activityLevel) { this.activityLevel = activityLevel; }
   public String getGoal() { return goal; }

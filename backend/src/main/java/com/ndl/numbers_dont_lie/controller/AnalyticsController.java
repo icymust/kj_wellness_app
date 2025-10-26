@@ -1,6 +1,7 @@
 package com.ndl.numbers_dont_lie.controller;
 
 import com.ndl.numbers_dont_lie.health.HealthCalc;
+import com.ndl.numbers_dont_lie.health.GoalProgress;
 import com.ndl.numbers_dont_lie.entity.UserEntity;
 import com.ndl.numbers_dont_lie.entity.ProfileEntity;
 import com.ndl.numbers_dont_lie.entity.WeightEntry;
@@ -50,13 +51,17 @@ public class AnalyticsController {
         return ResponseEntity.badRequest().body(Map.of("error", "No weight available"));
       }
 
-      var bmi = HealthCalc.bmi(latestWeight, p.getHeightCm());
+  var bmi = HealthCalc.bmi(latestWeight, p.getHeightCm());
       double bmiScore = HealthCalc.bmiScoreComponent(bmi.classification);
       double activityScore = HealthCalc.activityScore(p.getActivityLevel());
-      // пока нет цели веса в профиле — используем profile.weightKg как «цель» для примера
-      double progressScore = HealthCalc.progressScore(latestWeight, p.getWeightKg());
+  // цель веса: используем profile.targetWeightKg если задано, иначе profile.weightKg
+  Double target = p.getTargetWeightKg() != null ? p.getTargetWeightKg() : p.getWeightKg();
+  double progressScore = HealthCalc.progressScore(latestWeight, target);
       double habitsScore = HealthCalc.habitsScore(p.getActivityLevel());
       double wellness = HealthCalc.wellness(bmiScore, activityScore, progressScore, habitsScore);
+
+      var initialWeight = (list.isEmpty() ? p.getWeightKg() : list.get(0).getWeightKg());
+      var gp = GoalProgress.progress(initialWeight, target, latestWeight);
 
       return ResponseEntity.ok(Map.of(
         "bmi", Map.of("value", bmi.bmi, "classification", bmi.classification),
@@ -70,7 +75,19 @@ public class AnalyticsController {
         "latestWeightKg", latestWeight,
         "heightCm", p.getHeightCm(),
         "activityLevel", p.getActivityLevel(),
-        "goal", p.getGoal()
+        "goal", Map.of(
+          "targetWeightKg", target,
+          "initialWeightKg", initialWeight,
+          "currentWeightKg", latestWeight,
+          "progress", Map.of(
+            "percent", gp.percent,
+            "coveredKg", gp.coveredKg,
+            "remainingKg", gp.remainingKg,
+            "milestones5pct", gp.milestones5,
+            "direction", (latestWeight != null && initialWeight != null && latestWeight.doubleValue() > initialWeight.doubleValue()) ? "away" : "towards",
+            "bravo", gp.percent != null && gp.percent >= 100 ? "goal_reached" : (gp.percent != null && gp.percent >= 50 ? "on_track" : "keep_going")
+          )
+        )
       ));
     } catch (IllegalStateException e) {
       return ResponseEntity.status(401).body(Map.of("error", e.getMessage()));

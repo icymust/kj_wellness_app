@@ -1,4 +1,7 @@
 import { useState } from "react";
+import WeightChart from "./components/WeightChart.jsx";
+import WellnessGauge from "./components/WellnessGauge.jsx";
+import GoalProgressBar from "./components/GoalProgressBar.jsx";
 import { api } from "./lib/api";
 
 export default function App() {
@@ -20,6 +23,7 @@ export default function App() {
     gender: "other",
     heightCm: "",
     weightKg: "",
+    targetWeightKg: "",
     activityLevel: "moderate",
     goal: "general_fitness",
   });
@@ -89,6 +93,7 @@ export default function App() {
         gender: res.profile?.gender ?? "other",
         heightCm: res.profile?.heightCm ?? "",
         weightKg: res.profile?.weightKg ?? "",
+        targetWeightKg: res.profile?.targetWeightKg ?? "",
         activityLevel: res.profile?.activityLevel ?? "moderate",
         goal: res.profile?.goal ?? "general_fitness",
       });
@@ -106,11 +111,15 @@ export default function App() {
         gender: profile.gender || null,
         heightCm: profile.heightCm ? Number(profile.heightCm) : null,
         weightKg: profile.weightKg ? Number(profile.weightKg) : null,
+        targetWeightKg: profile.targetWeightKg ? Number(profile.targetWeightKg) : null,
         activityLevel: profile.activityLevel || null,
         goal: profile.goal || null,
       };
       const res = await api.saveProfile(accessToken, payload);
       logMsg("Profile saved", res.profile);
+  // after saving profile, reload profile and weight history (seed may have been created)
+  await loadProfile();
+  await loadWeights();
     } catch (err) {
       logMsg("Save profile error:", { status: err.status, data: err.data });
     }
@@ -178,15 +187,37 @@ export default function App() {
             <li key={w.id}>{w.at} — {w.weightKg} kg</li>
           ))}</ul>
         </div>
+        <div style={{ marginTop: 12 }}>
+          <WeightChart
+            entries={weights}
+            targetWeightKg={summary?.goal?.targetWeightKg ?? profile?.targetWeightKg ?? null}
+            initialWeightKg={profile?.weightKg ?? null}
+          />
+        </div>
       </section>
 
       <section style={{ border:"1px solid #ddd", padding:16, borderRadius:12, marginTop:16 }}>
         <h2>Analytics</h2>
         <button onClick={loadSummary} disabled={!accessToken}>Load BMI & Wellness</button>
         {summary && (
-          <pre style={{ background:"#f7f7f7", padding:12, borderRadius:8, marginTop:8 }}>
-            {JSON.stringify(summary, null, 2)}
-          </pre>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 16, marginTop: 12 }}>
+                  <div>
+                    <WellnessGauge value={summary?.scores?.wellness ?? 0} />
+                    <div style={{ marginTop: 8 }}>
+                      <b>BMI:</b> {summary?.bmi?.value} ({summary?.bmi?.classification})
+                    </div>
+
+                    <div style={{ marginTop: 12 }}>
+                      <GoalProgressBar
+                        percent={summary?.goal?.progress?.percent ?? 0}
+                        remainingKg={summary?.goal?.progress?.remainingKg ?? null}
+                      />
+                    </div>
+                  </div>
+            <pre style={{ background: "#f7f7f7", padding: 12, borderRadius: 8 }}>
+              {JSON.stringify(summary, null, 2)}
+            </pre>
+          </div>
         )}
       </section>
 
@@ -206,6 +237,7 @@ export default function App() {
           </label>
           <label>Height (cm) <input value={profile.heightCm} onChange={(e)=>setProfile(p=>({...p, heightCm:e.target.value}))} /></label>
           <label>Weight (kg) <input value={profile.weightKg} onChange={(e)=>setProfile(p=>({...p, weightKg:e.target.value}))} /></label>
+          <label>Target Weight (kg) <input value={profile.targetWeightKg} onChange={(e)=>setProfile(p=>({...p, targetWeightKg:e.target.value}))} /></label>
           <label>Activity
             <select value={profile.activityLevel} onChange={(e)=>setProfile(p=>({...p, activityLevel:e.target.value}))}>
               <option value="low">low</option>
