@@ -5,8 +5,11 @@ import GoalProgressBar from "./components/GoalProgressBar.jsx";
 import ActivityWeekChart from "./components/ActivityWeekChart.jsx";
 import ActivityMonthChart from "./components/ActivityMonthChart.jsx";
 import { api } from "./lib/api";
+import OAuthCallback from "./OAuthCallback.jsx";
 
 export default function App() {
+  
+
   const [email, setEmail] = useState("test@example.com");
   const [password, setPassword] = useState("123456");
   const [verificationLink, setVerificationLink] = useState("");
@@ -39,6 +42,12 @@ export default function App() {
   const [monthData, setMonthData] = useState(null);
 
   const logMsg = (msg, obj) => setLog((l) => `${new Date().toLocaleTimeString()} ${msg}${obj ? " " + JSON.stringify(obj) : ""}\n` + l);
+
+  function oauthUrl(provider){
+    // Prefer explicit VITE_API_BASE_URL pointing to backend (e.g. http://localhost:5173)
+    const base = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_BASE || "http://localhost:5173";
+    return `${base}/oauth2/authorization/${provider}`;
+  }
 
   async function handleRegister(e) {
     e.preventDefault();
@@ -225,6 +234,11 @@ export default function App() {
     } catch(err){
       logMsg("Month summary error:", { status: err.status, data: err.data });
     }
+  }
+
+  // handle OAuth callback route after hooks are initialized
+  if (typeof window !== 'undefined' && window.location.pathname === '/oauth-callback') {
+    return <OAuthCallback onTokens={({ access, refresh }) => { setAccessToken(access); setRefreshToken(refresh); }} />;
   }
 
   return (
@@ -454,6 +468,10 @@ export default function App() {
 
       <section style={{ border: "1px solid #ddd", padding: 16, borderRadius: 12, marginTop: 16 }}>
         <h2>3) Login → Get Tokens</h2>
+        <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+          <button onClick={() => window.location.href = oauthUrl("google")}>Sign in with Google</button>
+          <button onClick={() => window.location.href = oauthUrl("github")}>Sign in with GitHub</button>
+        </div>
         <form onSubmit={handleLogin} style={{ display: "grid", gap: 8 }}>
           <button type="submit">Login</button>
         </form>

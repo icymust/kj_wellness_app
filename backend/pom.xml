@@ -57,6 +57,12 @@
 			<artifactId>spring-security-crypto</artifactId>
 		</dependency>
 
+		<!-- OAuth2 client for social login -->
+		<dependency>
+		  <groupId>org.springframework.boot</groupId>
+		  <artifactId>spring-boot-starter-oauth2-client</artifactId>
+		</dependency>
+
 		<!-- JSON Web Token (JJWT) -->
 		<dependency>
 			<groupId>io.jsonwebtoken</groupId>

@@ -1,5 +1,36 @@
+# Build artifacts
+backend/target
 target
+frontend/dist
+dist
+dist-ssr
+
+# Node / deps
+node_modules
+frontend/node_modules
+
+# Local env / secrets
+.env
+frontend/.env
+backend/.env
+.env.local
+.env.*.local
+
+# Git / IDE / OS
 .git
-.gitignore
+.vscode
+!.vscode/extensions.json
 .idea
 *.iml
+.DS_Store
+
+# Logs / temp
+*.log
+tmp
+*.tmp
+
+# Maven wrapper dists (optional)
+.mvn/wrapper/dists
+
+# Docker overrides
+docker-compose.override.yml
