@@ -4,10 +4,14 @@ async function request(path, { method = "GET", body, token } = {}) {
   const headers = { "Content-Type": "application/json" };
   if (token) headers.Authorization = `Bearer ${token}`;
 
+  // Debug: log outgoing request details to help diagnose network / CORS issues
+  console.debug("API request:", { url: `${BASE}${path}`, method, hasToken: !!token, body });
+
   const res = await fetch(`${BASE}${path}`, {
     method,
     headers,
     body: body ? JSON.stringify(body) : undefined,
+    // keep default mode; CORS must be allowed server-side
   });
 
   const text = await res.text();
@@ -43,4 +47,8 @@ export const api = {
   forgot: (email) => request("/auth/forgot", { method: "POST", body: { email } }),
   resetPwd: (token, password) => request("/auth/reset", { method: "POST", body: { token, password } }),
   devOutbox: () => request("/dev/outbox"),
+  // Privacy
+  privacyGet: (token) => request("/privacy/consent", { token }),
+  privacySet: (token, body) => request("/privacy/consent", { method: "PUT", token, body }),
+  privacyExport: (token) => request("/privacy/export", { token }),
 };

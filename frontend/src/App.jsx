@@ -41,6 +41,19 @@ export default function App() {
   const [period, setPeriod] = useState("week"); // 'week' | 'month'
   const [monthData, setMonthData] = useState(null);
 
+  // Privacy / export
+  const [consentForm, setConsentForm] = useState({
+    accepted: false,
+    version: "1.0",
+    allowAiUseProfile: false,
+    allowAiUseHistory: false,
+    allowAiUseHabits: false,
+    publicProfile: false,
+    publicStats: false,
+    emailProduct: false,
+    emailSummaries: false,
+  });
+
   const logMsg = (msg, obj) => setLog((l) => `${new Date().toLocaleTimeString()} ${msg}${obj ? " " + JSON.stringify(obj) : ""}\n` + l);
 
   function oauthUrl(provider){
@@ -167,7 +180,9 @@ export default function App() {
   await loadProfile();
   await loadWeights();
     } catch (err) {
-      logMsg("Save profile error:", { status: err.status, data: err.data });
+      console.error("Save profile error (full):", err);
+      logMsg("Save profile error:", { status: err?.status, data: err?.data, message: err?.message });
+      alert(err?.data?.error || err?.message || "Save failed");
     }
   }
 
@@ -236,6 +251,37 @@ export default function App() {
     }
   }
 
+  // Privacy helpers
+  async function loadConsent() {
+    try {
+      const res = await api.privacyGet(accessToken);
+      setConsentForm(res);
+      logMsg("Consent", res);
+    } catch (e) { logMsg("Consent load error", e); }
+  }
+
+  async function saveConsent(e) {
+    e.preventDefault();
+    try {
+      const res = await api.privacySet(accessToken, consentForm);
+      logMsg("Consent saved", res);
+      alert("Saved");
+    } catch (e) {
+      alert(e?.data?.error || "Save failed");
+    }
+  }
+
+  async function exportData() {
+    try {
+      const data = await api.privacyExport(accessToken);
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = "ndl-export.json"; a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) { console.error(e); alert(e?.message || "Export failed"); }
+  }
+
   // handle OAuth callback route after hooks are initialized
   if (typeof window !== 'undefined' && window.location.pathname === '/oauth-callback') {
     return <OAuthCallback onTokens={({ access, refresh }) => { setAccessToken(access); setRefreshToken(refresh); }} />;
@@ -263,6 +309,38 @@ export default function App() {
             <code style={{ wordBreak: "break-all" }}>{verificationLink}</code>
           </div>
         )}
+      </section>
+
+      <section style={{ border: "1px solid #ddd", padding: 16, borderRadius: 12, marginTop: 16 }}>
+        <h2>Privacy & Export</h2>
+        <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+          <button onClick={loadConsent} disabled={!accessToken}>Load consent</button>
+          <button onClick={exportData} disabled={!accessToken}>Export my data (JSON)</button>
+        </div>
+
+        <form onSubmit={saveConsent} style={{ display: "grid", gap: 8 }}>
+          <label>
+            <input type="checkbox" checked={consentForm.accepted} onChange={(e)=>setConsentForm(f=>({...f, accepted:e.target.checked}))} /> I accept the privacy policy
+          </label>
+          <label>
+            <input type="checkbox" checked={consentForm.allowAiUseProfile} onChange={(e)=>setConsentForm(f=>({...f, allowAiUseProfile:e.target.checked}))} /> Allow AI to use my profile
+          </label>
+          <label>
+            <input type="checkbox" checked={consentForm.allowAiUseHistory} onChange={(e)=>setConsentForm(f=>({...f, allowAiUseHistory:e.target.checked}))} /> Allow AI to use my history
+          </label>
+          <label>
+            <input type="checkbox" checked={consentForm.publicProfile} onChange={(e)=>setConsentForm(f=>({...f, publicProfile:e.target.checked}))} /> Make my profile public
+          </label>
+          <label>
+            <input type="checkbox" checked={consentForm.emailProduct} onChange={(e)=>setConsentForm(f=>({...f, emailProduct:e.target.checked}))} /> Receive product emails
+          </label>
+          <div>
+            <small>Version: {consentForm.version}</small>
+          </div>
+          <div>
+            <button type="submit" disabled={!accessToken}>Save consent</button>
+          </div>
+        </form>
       </section>
 
       <section style={{ border: "1px solid #ddd", padding: 16, borderRadius: 12, marginTop: 16 }}>
