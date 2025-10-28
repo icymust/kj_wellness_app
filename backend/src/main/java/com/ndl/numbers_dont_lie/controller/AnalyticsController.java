@@ -9,6 +9,7 @@ import com.ndl.numbers_dont_lie.repository.UserRepository;
 import com.ndl.numbers_dont_lie.repository.ProfileRepository;
 import com.ndl.numbers_dont_lie.repository.WeightEntryRepository;
 import com.ndl.numbers_dont_lie.service.JwtService;
+import com.ndl.numbers_dont_lie.service.ActivityService;
 import io.jsonwebtoken.JwtException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -22,9 +23,10 @@ public class AnalyticsController {
   private final UserRepository users;
   private final ProfileRepository profiles;
   private final WeightEntryRepository weights;
+  private final ActivityService activityService;
 
-  public AnalyticsController(JwtService jwt, UserRepository users, ProfileRepository profiles, WeightEntryRepository weights) {
-    this.jwt = jwt; this.users = users; this.profiles = profiles; this.weights = weights;
+  public AnalyticsController(JwtService jwt, UserRepository users, ProfileRepository profiles, WeightEntryRepository weights, ActivityService activityService) {
+    this.jwt = jwt; this.users = users; this.profiles = profiles; this.weights = weights; this.activityService = activityService;
   }
 
   private String emailFrom(String auth) {
@@ -53,12 +55,18 @@ public class AnalyticsController {
 
   var bmi = HealthCalc.bmi(latestWeight, p.getHeightCm());
       double bmiScore = HealthCalc.bmiScoreComponent(bmi.classification);
-      double activityScore = HealthCalc.activityScore(p.getActivityLevel());
+  // incorporate weekly activity summary as a booster
+  var week = activityService.weekSummary(email, java.time.LocalDate.now());
+  double profileActivity = HealthCalc.activityScore(p.getActivityLevel());
+  double weeklyBoost     = HealthCalc.weeklyActivityBooster(week.totalMinutes, week.daysActive);
+
+  // Берём "лучшее из двух": профиль или реальная неделя
+  double activityScore = Math.max(profileActivity, weeklyBoost);
   // цель веса: используем profile.targetWeightKg если задано, иначе profile.weightKg
   Double target = p.getTargetWeightKg() != null ? p.getTargetWeightKg() : p.getWeightKg();
   double progressScore = HealthCalc.progressScore(latestWeight, target);
-      double habitsScore = HealthCalc.habitsScore(p.getActivityLevel());
-      double wellness = HealthCalc.wellness(bmiScore, activityScore, progressScore, habitsScore);
+  double habitsScore = activityScore; // пока используем то же значение
+  double wellness = HealthCalc.wellness(bmiScore, activityScore, progressScore, habitsScore);
 
       var initialWeight = (list.isEmpty() ? p.getWeightKg() : list.get(0).getWeightKg());
       var gp = GoalProgress.progress(initialWeight, target, latestWeight);

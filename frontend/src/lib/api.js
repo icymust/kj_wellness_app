@@ -34,4 +34,13 @@ export const api = {
   request("/progress/weight", { method: "POST", token, body: { weightKg, at } }),
   weightList: (token) => request("/progress/weight", { token }),
   analyticsSummary: (token) => request("/analytics/summary", { token }),
+  activityAdd: (token, payload) =>
+    request("/progress/activity", { method: "POST", token, body: payload }),
+  activityWeek: (token, isoDate) =>
+    request(`/progress/activity/week${isoDate ? `?date=${isoDate}` : ""}`, { token }),
+  activityMonth: (token, year, month) =>
+    request(`/progress/activity/month?year=${year}&month=${month}`, { token }),
+  forgot: (email) => request("/auth/forgot", { method: "POST", body: { email } }),
+  resetPwd: (token, password) => request("/auth/reset", { method: "POST", body: { token, password } }),
+  devOutbox: () => request("/dev/outbox"),
 };

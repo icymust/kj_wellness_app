@@ -51,6 +51,14 @@ public class HealthCalc {
     return activityScore(activityLevel);
   }
 
+  public static double weeklyActivityBooster(int totalMinutes, int daysActive) {
+    // WHO ориентир: ≥150 мин/нед умеренной активности
+    if (totalMinutes >= 300 && daysActive >= 5) return 95; // отличная неделя
+    if (totalMinutes >= 150 && daysActive >= 3) return 85; // норма
+    if (totalMinutes >= 60  && daysActive >= 2) return 70; // неплохо
+    return 50; // слабовато
+  }
+
   public static double wellness(double bmiScore, double activity, double progress, double habits) {
     return round1(bmiScore * 0.3 + activity * 0.3 + progress * 0.2 + habits * 0.2);
   }

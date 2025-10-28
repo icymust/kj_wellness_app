@@ -2,6 +2,8 @@ import { useState } from "react";
 import WeightChart from "./components/WeightChart.jsx";
 import WellnessGauge from "./components/WellnessGauge.jsx";
 import GoalProgressBar from "./components/GoalProgressBar.jsx";
+import ActivityWeekChart from "./components/ActivityWeekChart.jsx";
+import ActivityMonthChart from "./components/ActivityMonthChart.jsx";
 import { api } from "./lib/api";
 
 export default function App() {
@@ -13,6 +15,9 @@ export default function App() {
   const [refreshToken, setRefreshToken] = useState("");
   const [me, setMe] = useState(null);
   const [log, setLog] = useState("");
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [resetToken, setResetToken] = useState("");
+  const [resetNewPwd, setResetNewPwd] = useState("");
   const [newWeight, setNewWeight] = useState("");
   const [weightAt, setWeightAt] = useState("");
   const [weights, setWeights] = useState([]);
@@ -27,6 +32,11 @@ export default function App() {
     activityLevel: "moderate",
     goal: "general_fitness",
   });
+
+  const [act, setAct] = useState({ type: "cardio", minutes: "", intensity: "moderate", at: "" });
+  const [week, setWeek] = useState(null);
+  const [period, setPeriod] = useState("week"); // 'week' | 'month'
+  const [monthData, setMonthData] = useState(null);
 
   const logMsg = (msg, obj) => setLog((l) => `${new Date().toLocaleTimeString()} ${msg}${obj ? " " + JSON.stringify(obj) : ""}\n` + l);
 
@@ -50,6 +60,33 @@ export default function App() {
       logMsg("Verified:", res.user);
     } catch (err) {
       logMsg("Verify error:", { status: err.status, data: err.data });
+    }
+  }
+
+  async function onForgot(e) {
+    e.preventDefault();
+    try {
+      const res = await api.forgot(forgotEmail);
+      logMsg("Forgot sent", res);
+      alert("If this email exists and is verified, we've sent a reset link.");
+      setForgotEmail("");
+    } catch (err) {
+      logMsg("Forgot error:", { status: err.status, data: err.data });
+      alert("Request accepted (we do not disclose existence).");
+    }
+  }
+
+  async function onReset(e) {
+    e.preventDefault();
+    try {
+      const res = await api.resetPwd(resetToken, resetNewPwd);
+      logMsg("Password reset ok", res);
+      alert("Password changed. You can log in with the new password.");
+      setResetToken(""); setResetNewPwd("");
+    } catch (err) {
+      logMsg("Reset error:", { status: err.status, data: err.data });
+      const msg = err?.data?.error || "Reset failed";
+      alert(msg);
     }
   }
 
@@ -148,6 +185,48 @@ export default function App() {
     }catch(err){ logMsg("Summary error:", {status:err.status, data:err.data}); }
   }
 
+  async function addActivity(e){ e.preventDefault();
+    try {
+      const payload = {
+        type: act.type,
+        minutes: Number(act.minutes),
+        intensity: act.intensity || null,
+        at: act.at || null,
+      };
+      const res = await api.activityAdd(accessToken, payload);
+      logMsg("Activity added", res.entry);
+      setAct({ type:"cardio", minutes:"", intensity:"moderate", at:"" });
+      await loadActivityWeek();
+    } catch(err) {
+      logMsg("Add activity error:", { status: err.status, data: err.data });
+    }
+  }
+
+  async function loadActivityWeek(dateStr){
+    try {
+      const res = await api.activityWeek(accessToken, dateStr || null);
+      setWeek(res.summary);
+      logMsg("Week summary", res.summary);
+    } catch(err){
+      logMsg("Week summary error:", { status: err.status, data: err.data });
+    }
+  }
+
+  async function loadActivityMonth(d = new Date()){
+    const y = d.getUTCFullYear();
+    const m = d.getUTCMonth() + 1;
+    try {
+      const res = await api.activityMonth(accessToken, y, m);
+      const by = res.byDayMinutes || {};
+      const total = Object.values(by).reduce((a,b)=>a+(b||0), 0);
+      const daysActive = Object.values(by).filter(v=>v>0).length;
+      setMonthData({ byDayMinutes: by, year: y, month: m, total, daysActive });
+      logMsg("Month summary", { year: y, month: m, total, daysActive, by });
+    } catch(err){
+      logMsg("Month summary error:", { status: err.status, data: err.data });
+    }
+  }
+
   return (
     <div style={{ maxWidth: 720, margin: "2rem auto", fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, sans-serif" }}>
       <h1>Numbers Don’t Lie — Auth Demo</h1>
@@ -169,6 +248,84 @@ export default function App() {
             <div>Verification link:</div>
             <code style={{ wordBreak: "break-all" }}>{verificationLink}</code>
           </div>
+        )}
+      </section>
+
+      <section style={{ border: "1px solid #ddd", padding: 16, borderRadius: 12, marginTop: 16 }}>
+        <h2>Activity</h2>
+        <form onSubmit={addActivity} style={{ display:"grid", gridTemplateColumns:"repeat(2,1fr)", gap:8 }}>
+          <label>Type
+            <select value={act.type} onChange={(e)=>setAct(a=>({...a, type:e.target.value}))}>
+              <option value="cardio">cardio</option>
+              <option value="strength">strength</option>
+              <option value="flexibility">flexibility</option>
+              <option value="sports">sports</option>
+              <option value="other">other</option>
+            </select>
+          </label>
+          <label>Minutes
+            <input required value={act.minutes} onChange={(e)=>setAct(a=>({...a, minutes:e.target.value}))}/>
+          </label>
+          <label>Intensity
+            <select value={act.intensity} onChange={(e)=>setAct(a=>({...a, intensity:e.target.value}))}>
+              <option value="low">low</option>
+              <option value="moderate">moderate</option>
+              <option value="high">high</option>
+            </select>
+          </label>
+          <label>Timestamp (ISO, optional)
+            <input placeholder="2025-10-22T18:00:00Z" value={act.at} onChange={(e)=>setAct(a=>({...a, at:e.target.value}))}/>
+          </label>
+          <div style={{ gridColumn:"1 / -1" }}>
+            <button type="submit" disabled={!accessToken || !act.minutes} style={{ width:"100%" }}>Add activity</button>
+          </div>
+        </form>
+
+        <div style={{ display:"flex", gap:8, marginTop:8, alignItems:"center" }}>
+          <label>
+            Period:&nbsp;
+            <select value={period} onChange={(e)=>setPeriod(e.target.value)}>
+              <option value="week">Week</option>
+              <option value="month">Month</option>
+            </select>
+          </label>
+
+          {period === "week" ? (
+            <button onClick={()=>loadActivityWeek()} disabled={!accessToken}>Load this week</button>
+          ) : (
+            <button onClick={()=>loadActivityMonth()} disabled={!accessToken}>Load this month</button>
+          )}
+        </div>
+
+        {period === "week" && week && (
+          <div style={{ marginTop: 12 }}>
+            <div style={{ marginBottom:8 }}>
+              <b>Week from:</b> {new Date(week.weekStartIso).toLocaleDateString()} ·
+              <b> sessions:</b> {week.sessions} ·
+              <b> total:</b> {week.totalMinutes} min ·
+              <b> days active:</b> {week.daysActive}
+            </div>
+            <ActivityWeekChart byWeekdayMinutes={week.byWeekdayMinutes}/>
+            <div style={{ marginTop:8 }}>
+              <b>By type (min):</b>{" "}
+              {Object.entries(week.byTypeMinutes || {}).map(([k,v])=>`${k}: ${v}`).join(" · ") || "—"}
+            </div>
+          </div>
+        )}
+
+        {period === "month" && monthData && (
+          <>
+            <div style={{ marginTop: 12 }}>
+              <b>Month:</b> {monthData.year}-{String(monthData.month).padStart(2, "0")} ·
+              <b> total:</b> {monthData.total} min ·
+              <b> days active:</b> {monthData.daysActive}
+            </div>
+            <ActivityMonthChart
+              byDayMinutes={monthData.byDayMinutes}
+              year={monthData.year}
+              month={monthData.month}
+            />
+          </>
         )}
       </section>
 
@@ -264,6 +421,35 @@ export default function App() {
           </label>
           <button onClick={handleVerify}>Verify</button>
         </div>
+      </section>
+
+      <section style={{ border:"1px solid #ddd", padding:16, borderRadius:12, marginTop:16 }}>
+        <h3>Forgot password</h3>
+        <form onSubmit={onForgot} style={{ display:"grid", gap:8, maxWidth:420 }}>
+          <label>Email
+            <input type="email" required value={forgotEmail}
+                   onChange={(e)=>setForgotEmail(e.target.value)} />
+          </label>
+          <button type="submit">Send reset link</button>
+          <small>Мы всегда отвечаем 200 и не раскрываем, существует ли аккаунт.</small>
+        </form>
+      </section>
+
+      <section style={{ border:"1px solid #ddd", padding:16, borderRadius:12, marginTop:12 }}>
+        <h3>Reset password</h3>
+        <form onSubmit={onReset} style={{ display:"grid", gap:8, maxWidth:420 }}>
+          <label>Token
+            <input required value={resetToken}
+                   placeholder="paste token from email link"
+                   onChange={(e)=>setResetToken(e.target.value)} />
+          </label>
+          <label>New password
+            <input type="password" required value={resetNewPwd}
+                   onChange={(e)=>setResetNewPwd(e.target.value)} />
+          </label>
+          <button type="submit">Reset</button>
+          <small>Токен одноразовый, действует ~30 минут.</small>
+        </form>
       </section>
 
       <section style={{ border: "1px solid #ddd", padding: 16, borderRadius: 12, marginTop: 16 }}>
