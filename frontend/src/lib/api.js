@@ -1,8 +1,13 @@
+import { getAccessToken, getRefreshToken, setTokens } from "./tokens";
+
 const BASE = import.meta.env.VITE_API_BASE || "http://localhost:5173";
 
-async function request(path, { method = "GET", body, token } = {}) {
-  const headers = { "Content-Type": "application/json" };
-  if (token) headers.Authorization = `Bearer ${token}`;
+async function request(path, { method = "GET", body, token, _retried } = {}) {
+  const headers = {};
+  // Only set JSON content-type when we actually send a body (avoids CORS preflight on simple GETs)
+  if (body != null && method !== "GET") headers["Content-Type"] = "application/json";
+  const access = token || getAccessToken();
+  if (access) headers.Authorization = `Bearer ${access}`;
 
   // Debug: log outgoing request details to help diagnose network / CORS issues
   console.debug("API request:", { url: `${BASE}${path}`, method, hasToken: !!token, body });
@@ -18,6 +23,28 @@ async function request(path, { method = "GET", body, token } = {}) {
   const data = text ? JSON.parse(text) : null;
 
   if (!res.ok) {
+    // If access token expired → try refresh once
+    if (res.status === 401 && !_retried) {
+      const refresh = getRefreshToken();
+      if (refresh) {
+        try {
+          const r = await fetch(`${BASE}/auth/refresh`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ refreshToken: refresh }),
+          });
+          const tText = await r.text();
+          const tData = tText ? JSON.parse(tText) : null;
+          if (r.ok && tData?.accessToken) {
+            setTokens(tData.accessToken, tData.refreshToken || refresh);
+            // retry original request with new access
+            return request(path, { method, body, token: tData.accessToken, _retried: true });
+          }
+        } catch {
+          // ignore and fall through to throw original error
+        }
+      }
+    }
     const err = new Error(data?.error || `HTTP ${res.status}`);
     err.status = res.status;
     err.data = data;
@@ -51,4 +78,7 @@ export const api = {
   privacyGet: (token) => request("/privacy/consent", { token }),
   privacySet: (token, body) => request("/privacy/consent", { method: "PUT", token, body }),
   privacyExport: (token) => request("/privacy/export", { token }),
+  // AI insights
+  aiLatest: (token, scope = "weekly") => request(`/ai/insights/latest?scope=${encodeURIComponent(scope)}`, { token }),
+  aiRegen: (token, scope = "weekly") => request(`/ai/insights/regenerate?scope=${encodeURIComponent(scope)}`, { method: "POST", token }),
 };

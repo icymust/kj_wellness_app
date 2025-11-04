@@ -5,6 +5,7 @@ import GoalProgressBar from "./components/GoalProgressBar.jsx";
 import ActivityWeekChart from "./components/ActivityWeekChart.jsx";
 import ActivityMonthChart from "./components/ActivityMonthChart.jsx";
 import { api } from "./lib/api";
+import { getAccessToken as getAT, getRefreshToken as getRT, setTokens as storeTokens } from "./lib/tokens";
 import OAuthCallback from "./OAuthCallback.jsx";
 
 export default function App() {
@@ -40,6 +41,10 @@ export default function App() {
   const [week, setWeek] = useState(null);
   const [period, setPeriod] = useState("week"); // 'week' | 'month'
   const [monthData, setMonthData] = useState(null);
+  // AI insights
+  const [aiScope, setAiScope] = useState("weekly");
+  const [ai, setAi] = useState(null);
+  const [aiLoading, setAiLoading] = useState(false);
 
   // Privacy / export
   const [consentForm, setConsentForm] = useState({
@@ -112,12 +117,31 @@ export default function App() {
     }
   }
 
+  // Initialize tokens from LocalStorage on mount
+  if (typeof window !== 'undefined') {
+    // set initial tokens from storage (one-time during render; lightweight)
+    if (!accessToken) {
+      const at = getAT();
+      const rt = getRT();
+      if (at) setAccessToken(at);
+      if (rt) setRefreshToken(rt);
+    }
+    // subscribe to token updates
+    window.addEventListener('ndl:toks', (ev) => {
+      const { access, refresh } = ev.detail || {};
+      if (access) setAccessToken(access);
+      if (refresh) setRefreshToken(refresh);
+    });
+  }
+
   async function handleLogin(e) {
     e.preventDefault();
     try {
       const res = await api.login(email, password);
       setAccessToken(res.accessToken);
       setRefreshToken(res.refreshToken);
+      // persist in LocalStorage so API layer can auto-refresh and retry
+      storeTokens(res.accessToken, res.refreshToken);
       logMsg("Logged in: tokens received");
     } catch (err) {
       logMsg("Login error:", { status: err.status, data: err.data });
@@ -134,10 +158,36 @@ export default function App() {
     }
   }
 
+  async function spamTest() {
+    if (!accessToken) {
+      alert("Please login first to get an access token.");
+      return;
+    }
+    let saw429 = false;
+    for (let i = 1; i <= 25; i++) {
+      try {
+        const res = await api.me(accessToken);
+        console.log(`${i}: OK`, res);
+        logMsg(`${i}: OK`);
+      } catch (err) {
+        console.warn(`${i}: ERROR`, err);
+        logMsg(`${i}: ERROR`, { status: err.status, data: err.data });
+        if (err.status === 429 && !saw429) {
+          saw429 = true;
+          const retry = err.data?.retryAfterSec || err.data?.retryAfter || 0;
+          alert(`Слишком много запросов, подождите ${retry} сек`);
+        }
+      }
+      // small delay to not completely flood network UI (optional)
+      await new Promise((r) => setTimeout(r, 100));
+    }
+  }
+
   async function handleRefresh() {
     try {
       const res = await api.refresh(refreshToken);
       setAccessToken(res.accessToken);
+      storeTokens(res.accessToken, res.refreshToken || refreshToken);
       logMsg("Access token refreshed");
     } catch (err) {
       logMsg("Refresh error:", { status: err.status, data: err.data });
@@ -207,6 +257,31 @@ export default function App() {
       setSummary(res);
       logMsg("Analytics summary", res);
     }catch(err){ logMsg("Summary error:", {status:err.status, data:err.data}); }
+  }
+
+  // AI insights functions
+  async function loadAiLatest() {
+    try {
+      setAiLoading(true);
+      const res = await api.aiLatest(accessToken, aiScope);
+      setAi(res);
+      logMsg("AI insights", res);
+    } catch (err) {
+      logMsg("AI error:", { status: err.status, data: err.data });
+      alert(err?.data?.error || err?.message || "Failed to load insights");
+    } finally { setAiLoading(false); }
+  }
+
+  async function regenAi() {
+    try {
+      setAiLoading(true);
+      const res = await api.aiRegen(accessToken, aiScope);
+      setAi(res);
+      logMsg("AI regenerated", res);
+    } catch (err) {
+      logMsg("AI regenerate error:", { status: err.status, data: err.data });
+      alert(err?.data?.error || err?.message || "Failed to regenerate");
+    } finally { setAiLoading(false); }
   }
 
   async function addActivity(e){ e.preventDefault();
@@ -470,6 +545,47 @@ export default function App() {
         )}
       </section>
 
+      <section style={{ border:"1px solid #ddd", padding:16, borderRadius:12, marginTop:16 }}>
+        <h2>AI Insights</h2>
+        <div style={{ display:"flex", gap:8, alignItems:"center", marginBottom:8 }}>
+          <label>
+            Scope:&nbsp;
+            <select value={aiScope} onChange={(e)=>setAiScope(e.target.value)}>
+              <option value="weekly">weekly</option>
+              <option value="monthly">monthly</option>
+            </select>
+          </label>
+          <button onClick={loadAiLatest} disabled={!accessToken || aiLoading}>Load latest</button>
+          <button onClick={regenAi} disabled={!accessToken || aiLoading}>Regenerate</button>
+        </div>
+        {ai && (
+          <div style={{ marginTop:8 }}>
+            <div style={{ color: ai.fromCache ? "#6a6" : "#666" }}>
+              {ai.fromCache ? "from cache" : "fresh"} · generated: {ai.generatedAt ? new Date(ai.generatedAt).toLocaleString() : "—"}
+            </div>
+            <div style={{ marginTop:8 }}>
+              <b>Summary:</b> {Object.entries(ai.summary || {}).map(([k,v])=>`${k}: ${v}`).join(" · ") || "—"}
+            </div>
+            <ul style={{ marginTop:8 }}>
+              {(ai.items || []).map((it, idx) => (
+                <li key={idx} style={{ marginBottom:8 }}>
+                  <span style={{
+                    padding: "2px 6px",
+                    borderRadius: 6,
+                    background: it.priority === 'high' ? '#fee' : it.priority === 'medium' ? '#ffe' : '#eef',
+                    border: '1px solid #ddd',
+                    marginRight: 8,
+                    fontSize: 12
+                  }}>{it.priority || 'low'}</span>
+                  <b>{it.title}</b>
+                  <div style={{ color: "#444", marginTop: 4 }}>{it.detail}</div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </section>
+
       <section style={{ border: "1px solid #ddd", padding: 16, borderRadius: 12, marginTop: 16 }}>
         <h2>Health Profile</h2>
         <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
@@ -564,6 +680,7 @@ export default function App() {
         <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
           <button onClick={handleRefresh} disabled={!refreshToken}>Refresh access</button>
           <button onClick={handleMe} disabled={!accessToken}>Call /protected/me</button>
+          <button onClick={spamTest} disabled={!accessToken}>Spam test (25)</button>
         </div>
         {me && (
           <pre style={{ background: "#f7f7f7", padding: 12, borderRadius: 8, marginTop: 8 }}>

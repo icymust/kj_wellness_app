@@ -28,7 +28,7 @@ server:
 app:
   jwt:
     secret: "change-this-dev-secret-change-this-dev-secret-32+chars"
-    access-ttl-min: 15     # истечение access-токена (мин)
+    access-ttl-min: 1      # истечение access-токена (мин) — сокращено для теста авто-рефреша
     refresh-ttl-days: 7    # истечение refresh-токена (дней)
 
 

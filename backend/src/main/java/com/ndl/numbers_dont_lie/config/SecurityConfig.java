@@ -13,7 +13,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class SecurityConfig {
 
   @Bean
-  SecurityFilterChain filterChain(HttpSecurity http, OAuth2SuccessHandler success, JwtAuthFilter jwtAuthFilter) throws Exception {
+  SecurityFilterChain filterChain(HttpSecurity http, OAuth2SuccessHandler success, JwtAuthFilter jwtAuthFilter, RateLimitFilter rateLimitFilter) throws Exception {
     http
       .csrf(csrf -> csrf.disable())
       .cors(c -> {})
@@ -27,8 +27,9 @@ public class SecurityConfig {
       .oauth2Login(o -> o
           .successHandler(success)
       );
-    // Add JWT auth filter before username/password processing so Bearer tokens are recognized
+    // Ensure JWT filter runs before rate limiter so AUTH_EMAIL is available (per-user rate limiting)
     http.addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
+    http.addFilterBefore(rateLimitFilter, UsernamePasswordAuthenticationFilter.class);
     return http.build();
   }
 }
