@@ -5,7 +5,7 @@ import GoalProgressBar from "./components/GoalProgressBar.jsx";
 import ActivityWeekChart from "./components/ActivityWeekChart.jsx";
 import ActivityMonthChart from "./components/ActivityMonthChart.jsx";
 import { api } from "./lib/api";
-import { getAccessToken as getAT, getRefreshToken as getRT, setTokens as storeTokens } from "./lib/tokens";
+import { getAccessToken as getAT, getRefreshToken as getRT, setTokens as storeTokens, clearTokens as dropTokens } from "./lib/tokens";
 import OAuthCallback from "./OAuthCallback.jsx";
 
 export default function App() {
@@ -45,6 +45,10 @@ export default function App() {
   const [aiScope, setAiScope] = useState("weekly");
   const [ai, setAi] = useState(null);
   const [aiLoading, setAiLoading] = useState(false);
+  // 2FA
+  const [need2fa, setNeed2fa] = useState(null); // { tempToken }
+  const [twofaCode, setTwofaCode] = useState("");
+  const [twofaSetup, setTwofaSetup] = useState({ qr: null, secretMasked: null, recovery: null });
 
   // Privacy / export
   const [consentForm, setConsentForm] = useState({
@@ -126,6 +130,13 @@ export default function App() {
       if (at) setAccessToken(at);
       if (rt) setRefreshToken(rt);
     }
+    // detect pending OAuth flow that requires 2FA (pre-2FA temp token saved by OAuthCallback)
+    try {
+      const pre2 = localStorage.getItem("pre2faTempToken");
+      if (pre2 && !need2fa) {
+        setNeed2fa({ tempToken: pre2 });
+      }
+  } catch (e) { void e; }
     // subscribe to token updates
     window.addEventListener('ndl:toks', (ev) => {
       const { access, refresh } = ev.detail || {};
@@ -138,13 +149,33 @@ export default function App() {
     e.preventDefault();
     try {
       const res = await api.login(email, password);
-      setAccessToken(res.accessToken);
-      setRefreshToken(res.refreshToken);
-      // persist in LocalStorage so API layer can auto-refresh and retry
-      storeTokens(res.accessToken, res.refreshToken);
-      logMsg("Logged in: tokens received");
+      if (res.need2fa && res.tempToken) {
+        setNeed2fa({ tempToken: res.tempToken });
+        logMsg("Login needs 2FA");
+      } else {
+        setAccessToken(res.accessToken);
+        setRefreshToken(res.refreshToken);
+        storeTokens(res.accessToken, res.refreshToken);
+        logMsg("Logged in: tokens received");
+      }
     } catch (err) {
       logMsg("Login error:", { status: err.status, data: err.data });
+    }
+  }
+
+  async function verify2fa() {
+    try {
+      if (!need2fa?.tempToken) return;
+      const res = await api.authVerify2fa(need2fa.tempToken, twofaCode);
+      setAccessToken(res.accessToken);
+      setRefreshToken(res.refreshToken);
+      storeTokens(res.accessToken, res.refreshToken);
+      setNeed2fa(null); setTwofaCode("");
+  try { localStorage.removeItem("pre2faTempToken"); } catch (e) { void e; }
+      logMsg("2FA verified");
+    } catch (err) {
+      logMsg("2FA verify error:", { status: err.status, data: err.data });
+      alert(err?.data?.error || "Invalid code");
     }
   }
 
@@ -192,6 +223,23 @@ export default function App() {
     } catch (err) {
       logMsg("Refresh error:", { status: err.status, data: err.data });
     }
+  }
+
+  function handleLogout() {
+    // clear tokens in storage and reset local UI state
+    dropTokens();
+    setAccessToken("");
+    setRefreshToken("");
+    setMe(null);
+    setSummary(null);
+    setWeights([]);
+    setWeek(null);
+    setMonthData(null);
+    setAi(null);
+    setNeed2fa(null);
+    setTwofaCode("");
+  try { localStorage.removeItem("pre2faTempToken"); } catch (e) { void e; }
+    logMsg("Logged out");
   }
 
   async function loadProfile() {
@@ -666,9 +714,22 @@ export default function App() {
           <button onClick={() => window.location.href = oauthUrl("google")}>Sign in with Google</button>
           <button onClick={() => window.location.href = oauthUrl("github")}>Sign in with GitHub</button>
         </div>
-        <form onSubmit={handleLogin} style={{ display: "grid", gap: 8 }}>
+        <form onSubmit={handleLogin} style={{ display: "grid", gap: 8, maxWidth: 420 }}>
+          <label>Email
+            <input type="email" required value={email} onChange={(e)=>setEmail(e.target.value)} />
+          </label>
+          <label>Password
+            <input type="password" required value={password} onChange={(e)=>setPassword(e.target.value)} />
+          </label>
           <button type="submit">Login</button>
         </form>
+        {need2fa && (
+          <div style={{ marginTop: 8, border: "1px dashed #ccc", padding: 8, borderRadius: 8 }}>
+            <div>Enter 6-digit code from your authenticator app or a recovery code:</div>
+            <input value={twofaCode} onChange={(e)=>setTwofaCode(e.target.value)} placeholder="123456 or RECOVERYCODE" />
+            <button onClick={verify2fa} disabled={!twofaCode}>Verify 2FA</button>
+          </div>
+        )}
         <div style={{ marginTop: 8 }}>
           <div>Access Token:</div>
           <code style={{ wordBreak: "break-all" }}>{accessToken || "—"}</code>
@@ -681,12 +742,60 @@ export default function App() {
           <button onClick={handleRefresh} disabled={!refreshToken}>Refresh access</button>
           <button onClick={handleMe} disabled={!accessToken}>Call /protected/me</button>
           <button onClick={spamTest} disabled={!accessToken}>Spam test (25)</button>
+          <button onClick={handleLogout} style={{ marginLeft: "auto" }}>Logout</button>
         </div>
         {me && (
           <pre style={{ background: "#f7f7f7", padding: 12, borderRadius: 8, marginTop: 8 }}>
             {JSON.stringify(me, null, 2)}
           </pre>
         )}
+      </section>
+
+      <section style={{ border:"1px solid #ddd", padding:16, borderRadius:12, marginTop:16 }}>
+        <h2>Security (2FA)</h2>
+        <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+          <button onClick={async ()=>{
+            try{
+              const r = await api.twofaEnroll(accessToken);
+              setTwofaSetup({ qr: r.qrPngBase64, secretMasked: r.secretMasked, recovery: null });
+            }catch(e){ alert(e?.data?.error || 'Enroll failed'); }
+          }} disabled={!accessToken}>Enable 2FA (enroll)</button>
+
+          {twofaSetup.qr && (
+            <div style={{ display:'flex', gap:12, alignItems:'center' }}>
+              <img alt="QR" src={`data:image/png;base64,${twofaSetup.qr}`} width={128} height={128} />
+              <div>
+                <div>Secret: {twofaSetup.secretMasked}</div>
+                <input value={twofaCode} onChange={(e)=>setTwofaCode(e.target.value)} placeholder="123456" maxLength={6} />
+                <button onClick={async ()=>{
+                  try{
+                    const v = await api.twofaVerifySetup(accessToken, twofaCode);
+                    setTwofaSetup(s=>({...s, recovery: v.recoveryCodes || []}));
+                    alert('2FA enabled');
+                  }catch(e){ alert(e?.data?.error || 'Verify failed'); }
+                }} disabled={!twofaCode}>Confirm setup</button>
+              </div>
+            </div>
+          )}
+
+          {twofaSetup.recovery && (
+            <div style={{ marginTop:8 }}>
+              <b>Recovery codes (save now):</b>
+              <ul>{twofaSetup.recovery.map((c,i)=>(<li key={i}><code>{c}</code></li>))}</ul>
+            </div>
+          )}
+
+          <div style={{ marginTop:8 }}>
+            <input value={twofaCode} onChange={(e)=>setTwofaCode(e.target.value)} placeholder="code or recovery" />
+            <button onClick={async ()=>{
+              try{
+                await api.twofaDisable(accessToken, twofaCode);
+                setTwofaSetup({ qr:null, secretMasked:null, recovery:null }); setTwofaCode('');
+                alert('2FA disabled');
+              }catch(e){ alert(e?.data?.error || 'Disable failed'); }
+            }} disabled={!accessToken || !twofaCode}>Disable 2FA</button>
+          </div>
+        </div>
       </section>
 
       <section style={{ border: "1px solid #ddd", padding: 16, borderRadius: 12, marginTop: 16 }}>

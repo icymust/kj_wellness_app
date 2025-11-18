@@ -28,8 +28,8 @@ public class AiInsightCache {
   @Column(name = "expires_at")
   private Instant expiresAt;
 
-  @Lob
-  @Column(name = "data_json", nullable = false)
+  // Use TEXT instead of CLOB to avoid PostgreSQL Large Object streaming in auto-commit mode
+  @Column(name = "data_json", nullable = false, columnDefinition = "TEXT")
   private String dataJson;
 
   public Long getId() { return id; }

@@ -54,9 +54,17 @@ public class OAuth2SuccessHandler implements AuthenticationSuccessHandler {
     user.setEmailVerified(true);
     users.save(user);
 
+    // Enforce 2FA challenge if enabled
+    if (user.isTwoFactorEnabled()) {
+      String temp = jwt.generatePre2faToken(user);
+      String redirect = frontendOrigin + "/oauth-callback#need2fa=1&tempToken=" + java.net.URLEncoder.encode(temp, java.nio.charset.StandardCharsets.UTF_8);
+      response.sendRedirect(redirect);
+      return;
+    }
+
+    // Otherwise issue tokens immediately
     String access = jwt.generateAccessToken(user);
     String refresh = jwt.generateRefreshToken(user);
-
     String redirect = frontendOrigin + "/oauth-callback#accessToken=" + access + "&refreshToken=" + refresh;
     response.sendRedirect(redirect);
   }

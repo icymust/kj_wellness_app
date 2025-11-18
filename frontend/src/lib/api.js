@@ -2,12 +2,16 @@ import { getAccessToken, getRefreshToken, setTokens } from "./tokens";
 
 const BASE = import.meta.env.VITE_API_BASE || "http://localhost:5173";
 
+let refreshInFlight = null;
+
 async function request(path, { method = "GET", body, token, _retried } = {}) {
   const headers = {};
   // Only set JSON content-type when we actually send a body (avoids CORS preflight on simple GETs)
   if (body != null && method !== "GET") headers["Content-Type"] = "application/json";
   const access = token || getAccessToken();
-  if (access) headers.Authorization = `Bearer ${access}`;
+  // Don't send Authorization for public auth endpoints to avoid confusing flows with stale tokens
+  const isAuthPublic = path.startsWith("/auth/");
+  if (access && !isAuthPublic) headers.Authorization = `Bearer ${access}`;
 
   // Debug: log outgoing request details to help diagnose network / CORS issues
   console.debug("API request:", { url: `${BASE}${path}`, method, hasToken: !!token, body });
@@ -24,24 +28,35 @@ async function request(path, { method = "GET", body, token, _retried } = {}) {
 
   if (!res.ok) {
     // If access token expired → try refresh once
-    if (res.status === 401 && !_retried) {
+    if (res.status === 401 && !_retried && !path.startsWith("/auth/")) {
       const refresh = getRefreshToken();
       if (refresh) {
         try {
-          const r = await fetch(`${BASE}/auth/refresh`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ refreshToken: refresh }),
-          });
-          const tText = await r.text();
-          const tData = tText ? JSON.parse(tText) : null;
-          if (r.ok && tData?.accessToken) {
-            setTokens(tData.accessToken, tData.refreshToken || refresh);
-            // retry original request with new access
-            return request(path, { method, body, token: tData.accessToken, _retried: true });
+          if (!refreshInFlight) {
+            refreshInFlight = (async () => {
+              const r = await fetch(`${BASE}/auth/refresh`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ refreshToken: refresh }),
+              });
+              const tText = await r.text();
+              const tData = tText ? JSON.parse(tText) : null;
+              if (r.ok && tData?.accessToken) {
+                setTokens(tData.accessToken, tData.refreshToken || refresh);
+                return tData;
+              }
+              throw new Error(tData?.error || `Refresh failed: ${r.status}`);
+            })();
           }
+          const tData = await refreshInFlight;
+          // retry original request with new access
+          return request(path, { method, body, token: tData.accessToken, _retried: true });
         } catch {
           // ignore and fall through to throw original error
+        } finally {
+          // reset only if we were the creator
+          // small timeout to coalesce burst of 401s
+          setTimeout(() => { refreshInFlight = null; }, 50);
         }
       }
     }
@@ -81,4 +96,9 @@ export const api = {
   // AI insights
   aiLatest: (token, scope = "weekly") => request(`/ai/insights/latest?scope=${encodeURIComponent(scope)}`, { token }),
   aiRegen: (token, scope = "weekly") => request(`/ai/insights/regenerate?scope=${encodeURIComponent(scope)}`, { method: "POST", token }),
+  // 2FA
+  twofaEnroll: (token) => request("/2fa/enroll", { method: "POST", token }),
+  twofaVerifySetup: (token, code) => request("/2fa/verify-setup", { method: "POST", token, body: { code } }),
+  twofaDisable: (token, codeOrRecovery) => request("/2fa/disable", { method: "POST", token, body: { codeOrRecovery } }),
+  authVerify2fa: (tempToken, code) => request("/auth/2fa/verify", { method: "POST", body: { tempToken, code } }),
 };

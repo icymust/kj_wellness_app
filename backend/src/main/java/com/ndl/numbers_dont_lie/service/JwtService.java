@@ -18,6 +18,7 @@ public class JwtService {
     private final SecretKey key;
     private final int accessTtlMin;
     private final int refreshTtlDays;
+    private final int pre2faTtlMin;
 
     public JwtService(org.springframework.core.env.Environment env) {
         String secret = env.getProperty("app.jwt.secret");
@@ -27,6 +28,7 @@ public class JwtService {
         this.key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
         this.accessTtlMin = Integer.parseInt(env.getProperty("app.jwt.access-ttl-min", "15"));
         this.refreshTtlDays = Integer.parseInt(env.getProperty("app.jwt.refresh-ttl-days", "7"));
+        this.pre2faTtlMin = Integer.parseInt(env.getProperty("app.jwt.pre2fa-ttl-min", "3"));
     }
 
     public String generateAccessToken(UserEntity user) {
@@ -57,6 +59,20 @@ public class JwtService {
                 .compact();
     }
 
+    public String generatePre2faToken(UserEntity user) {
+    Instant now = Instant.now();
+    Instant exp = now.plusSeconds(pre2faTtlMin * 60L);
+    return Jwts.builder()
+        .setSubject(user.getEmail())
+        .setIssuedAt(Date.from(now))
+        .setExpiration(Date.from(exp))
+        .addClaims(Map.of(
+            "typ", "pre2fa"
+        ))
+        .signWith(key, SignatureAlgorithm.HS256)
+        .compact();
+    }
+
     public Jws<Claims> parse(String jwt) {
         return Jwts.parserBuilder()
                 .setSigningKey(key)
@@ -76,5 +92,10 @@ public class JwtService {
     public boolean isRefreshToken(String jwt) {
         Object typ = parse(jwt).getBody().get("typ");
         return "refresh".equals(typ);
+    }
+
+    public boolean isPre2faToken(String jwt) {
+        Object typ = parse(jwt).getBody().get("typ");
+        return "pre2fa".equals(typ);
     }
 }

@@ -28,6 +28,12 @@ public class RateLimitFilter implements Filter {
   private static final int LIMIT = 20;
   private static final long WINDOW_SECONDS = 60L;
 
+  // endpoint-specific overrides
+  private static final Map<String,Integer> LIMITS = Map.of(
+    "/auth/2fa/verify", 5,
+    "/2fa/verify-setup", 5
+  );
+
   private final Map<String, Deque<Long>> buckets = new ConcurrentHashMap<>();
 
   private String clientKey(HttpServletRequest req) {
@@ -56,8 +62,9 @@ public class RateLimitFilter implements Filter {
       return;
     }
 
-    String key = clientKey(req);
-    Deque<Long> deque = buckets.computeIfAbsent(key, k -> new ArrayDeque<>());
+  String key = clientKey(req);
+  Deque<Long> deque = buckets.computeIfAbsent(key, k -> new ArrayDeque<>());
+  int limit = LIMITS.getOrDefault(req.getRequestURI(), LIMIT);
 
     long now = Instant.now().getEpochSecond();
     synchronized (deque) {
@@ -66,7 +73,7 @@ public class RateLimitFilter implements Filter {
         deque.pollFirst();
       }
 
-      if (deque.size() < LIMIT) {
+      if (deque.size() < limit) {
         deque.addLast(now);
         chain.doFilter(request, response);
         return;
@@ -78,7 +85,7 @@ public class RateLimitFilter implements Filter {
       res.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
       res.setContentType("application/json");
       res.setHeader("Retry-After", String.valueOf(retryAfter));
-      res.getWriter().write("{\"error\":\"rate_limited\",\"limitPerMinute\":"+LIMIT+",\"retryAfterSec\":"+retryAfter+"}");
+      res.getWriter().write("{\"error\":\"rate_limited\",\"limitPerMinute\":"+limit+",\"retryAfterSec\":"+retryAfter+"}");
     }
   }
 }
