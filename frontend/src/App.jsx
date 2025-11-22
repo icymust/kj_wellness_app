@@ -11,6 +11,7 @@ import Activity from "./pages/Activity";
 import Weight from "./pages/Weight";
 import Analytics from "./pages/Analytics";
 import AI from "./pages/AI";
+import Dashboard from "./pages/Dashboard";
 import Profile from "./pages/Profile";
 import Security from "./pages/Security";
 import Verify from "./pages/Verify";
@@ -32,8 +33,10 @@ function AppShell() {
   const location = useLocation();
 
   // minimal auth state
-  const [accessToken, setAccessToken] = useState(null);
-  const [refreshToken, setRefreshToken] = useState(null);
+  // Инициализируем сразу из localStorage, чтобы при первом рендере защищённых роутов
+  // не происходил мгновенный редирект на /login до useEffect.
+  const [accessToken, setAccessToken] = useState(() => getAccessToken() || null);
+  const [refreshToken, setRefreshToken] = useState(() => getRefreshToken() || null);
   const [me, setMe] = useState(null);
   // register/login form state
   const [email, setEmail] = useState("");
@@ -84,6 +87,27 @@ function AppShell() {
   const [aiScope, setAiScope] = useState("weekly");
   const [ai, setAi] = useState(null);
   const [aiLoading, setAiLoading] = useState(false);
+  // Rate limit global state (unix ms timestamp until which we should pause firing new dashboard-related requests)
+  const [rateLimitUntil, setRateLimitUntil] = useState(0);
+  // Unified dashboard loading + error state
+  const [dashboardLoading, setDashboardLoading] = useState(false);
+  const [dashboardError, setDashboardError] = useState(null);
+
+  // Central handler for 429 responses to avoid spamming console & network
+  function handleRateLimit(e, scope) {
+    const retryAfterHeader = e?.headers?.['retry-after'];
+    let delayMs = 8000; // default backoff
+    if (retryAfterHeader) {
+      const sec = parseInt(retryAfterHeader, 10);
+      if (!isNaN(sec)) delayMs = sec * 1000;
+    }
+    const until = Date.now() + delayMs;
+    setRateLimitUntil(prev => until > prev ? until : prev);
+    if (!window.__lastRateLimitLog || Date.now() - window.__lastRateLimitLog > 1500) {
+      console.warn(`Rate limited (${scope}) — delaying further requests for ${Math.round(delayMs/1000)}s`);
+      window.__lastRateLimitLog = Date.now();
+    }
+  }
   // Privacy
   const [consentForm, setConsentForm] = useState({
     accepted: false,
@@ -142,13 +166,7 @@ function AppShell() {
       if (t) setVerifyToken(t);
     }
   }, [location]);
-  // restore tokens from storage on mount
-  useEffect(() => {
-    const a = getAccessToken();
-    const r = getRefreshToken();
-    if (a) setAccessToken(a);
-    if (r) setRefreshToken(r);
-  }, []);
+  // (Больше не нужен повторный restore — уже взяли токены в начальном состоянии.)
   // restore pending OAuth 2FA state if present (need2fa + temp token persisted)
   useEffect(() => {
     if (!accessToken && !need2fa) {
@@ -320,10 +338,13 @@ function AppShell() {
   // Analytics handler
   const loadSummary = async () => {
     if (!accessToken) return;
+    if (rateLimitUntil && Date.now() < rateLimitUntil) return; // paused
     try {
       const r = await api.analyticsSummary(accessToken);
       setSummary(r);
-    } catch (e) { console.warn('loadSummary', e); }
+    } catch (e) {
+      if (e.status === 429) handleRateLimit(e, 'summary'); else console.warn('loadSummary', e);
+    }
   };
 
   // Activity handlers
@@ -340,28 +361,35 @@ function AppShell() {
   };
   const loadActivityWeek = async (isoDate) => {
     if (!accessToken) return;
+    if (rateLimitUntil && Date.now() < rateLimitUntil) return;
     try {
       const r = await api.activityWeek(accessToken, isoDate);
       setWeek(r.summary || r);
-    } catch (e) { console.warn('loadActivityWeek', e); }
+    } catch (e) {
+      if (e.status === 429) handleRateLimit(e, 'week'); else console.warn('loadActivityWeek', e);
+    }
   };
   const loadActivityMonth = async () => {
     if (!accessToken) return;
+    if (rateLimitUntil && Date.now() < rateLimitUntil) return;
     try {
       const now = new Date();
       const year = now.getFullYear();
       const month = now.getMonth() + 1;
       const r = await api.activityMonth(accessToken, year, month);
       setMonthData({ year, month, total: Object.values(r.byDayMinutes || {}).reduce((s,v)=>s+v,0), daysActive: Object.values(r.byDayMinutes || {}).filter(v=>v>0).length, byDayMinutes: r.byDayMinutes || {} });
-    } catch (e) { console.warn('loadActivityMonth', e); }
+    } catch (e) {
+      if (e.status === 429) handleRateLimit(e, 'month'); else console.warn('loadActivityMonth', e);
+    }
   };
 
   // AI handlers
   const loadAiLatest = async () => {
     if (!accessToken) return;
+    if (rateLimitUntil && Date.now() < rateLimitUntil) return;
     setAiLoading(true);
     try { const r = await api.aiLatest(accessToken, aiScope); setAi(r); }
-    catch(e){ console.warn('aiLatest', e); }
+    catch(e){ if (e.status === 429) handleRateLimit(e, 'ai'); else console.warn('aiLatest', e); }
     finally{ setAiLoading(false); }
   };
   const regenAi = async () => {
@@ -387,6 +415,31 @@ function AppShell() {
     if (!accessToken) return;
     try { const r = await api.privacyExport(accessToken); const blob = new Blob([JSON.stringify(r, null, 2)], { type: 'application/json' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'export.json'; a.click(); URL.revokeObjectURL(url); }
     catch(e){ console.warn('exportData', e); }
+  };
+
+  // Aggregated dashboard loader to simplify Dashboard.jsx logic
+  const loadDashboard = async (force = false) => {
+    if (!accessToken) return;
+    if (!force && rateLimitUntil && Date.now() < rateLimitUntil) return; // respect rate limit window unless forced
+    setDashboardError(null);
+    setDashboardLoading(true);
+    const tasks = [];
+    // Only push tasks that still need data (avoid redundant calls if already present)
+    if (!summary) tasks.push(loadSummary());
+    if (!week) tasks.push(loadActivityWeek());
+    if (!monthData) tasks.push(loadActivityMonth());
+    if (!ai) tasks.push(loadAiLatest());
+    if (!tasks.length) { setDashboardLoading(false); return; }
+    const results = await Promise.allSettled(tasks);
+    const errors = results.filter(r => r.status === 'rejected').map(r => r.reason);
+    if (errors.length) {
+      // If all failed and none were 429 (already handled), surface a generic error
+      const non429 = errors.filter(e => !(e && e.status === 429));
+      if (non429.length === errors.length) {
+        setDashboardError(non429[0]?.message || 'Не удалось загрузить данные дашборда');
+      }
+    }
+    setDashboardLoading(false);
   };
 
   // light OAuth URL helper
@@ -426,6 +479,10 @@ function AppShell() {
     loadSummary,
     // AI
     aiScope, setAiScope, loadAiLatest, regenAi, ai, aiLoading,
+  // rate limit status
+  rateLimitUntil,
+  // dashboard aggregate
+  dashboardLoading, dashboardError, loadDashboard,
     // privacy
     consentForm, setConsentForm, loadConsent, saveConsent, exportData,
   // export health
@@ -444,6 +501,7 @@ function AppShell() {
           <Link to="/weight">Weight</Link>
           <Link to="/analytics">Analytics</Link>
           <Link to="/ai">AI</Link>
+          <Link to="/dashboard">Dashboard</Link>
           <Link to="/profile">Profile</Link>
           <Link to="/security">Security</Link>
           <Link to="/privacy">Privacy</Link>
@@ -469,6 +527,7 @@ function AppShell() {
           <Route path="/weight" element={<Protected><Weight ctx={ctx} /></Protected>} />
           <Route path="/analytics" element={<Protected><Analytics ctx={ctx} /></Protected>} />
           <Route path="/ai" element={<Protected><AI ctx={ctx} /></Protected>} />
+          <Route path="/dashboard" element={<Protected><Dashboard ctx={ctx} /></Protected>} />
           <Route path="/profile" element={<Protected><Profile ctx={ctx} /></Protected>} />
           <Route path="/security" element={<Protected><Security ctx={ctx} /></Protected>} />
           <Route path="/auth/verify" element={<Verify ctx={ctx} />} />

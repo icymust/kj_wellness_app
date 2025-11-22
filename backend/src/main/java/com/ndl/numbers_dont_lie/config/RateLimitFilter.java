@@ -19,22 +19,30 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Simple in-memory rate limiter (no external dependency).
- * Allows 20 requests per 60 seconds per key (email if present, otherwise IP).
+ * Default & overrides are now configurable via application.yml (app.rate-limit.*).
  * Not suitable for multi-instance production — use Redis or a shared store there.
  */
 @Component
 public class RateLimitFilter implements Filter {
-
-  private static final int LIMIT = 20;
-  private static final long WINDOW_SECONDS = 60L;
-
-  // endpoint-specific overrides
-  private static final Map<String,Integer> LIMITS = Map.of(
-    "/auth/2fa/verify", 5,
-    "/2fa/verify-setup", 5
-  );
+  private final int defaultLimit;
+  private final long windowSeconds;
+  private final Map<String,Integer> overrides;
 
   private final Map<String, Deque<Long>> buckets = new ConcurrentHashMap<>();
+
+  public RateLimitFilter(
+      @org.springframework.beans.factory.annotation.Value("${app.rate-limit.default-per-minute:120}") int defaultLimit,
+      @org.springframework.beans.factory.annotation.Value("${app.rate-limit.window-seconds:60}") long windowSeconds,
+      @org.springframework.beans.factory.annotation.Value("${app.rate-limit.override.auth2faVerify:10}") int auth2faVerify,
+      @org.springframework.beans.factory.annotation.Value("${app.rate-limit.override.twofaVerifySetup:10}") int twofaVerifySetup
+  ) {
+    this.defaultLimit = defaultLimit;
+    this.windowSeconds = windowSeconds;
+    this.overrides = Map.of(
+        "/auth/2fa/verify", auth2faVerify,
+        "/2fa/verify-setup", twofaVerifySetup
+    );
+  }
 
   private String clientKey(HttpServletRequest req) {
     String email = (String) req.getAttribute("AUTH_EMAIL");
@@ -63,13 +71,13 @@ public class RateLimitFilter implements Filter {
     }
 
   String key = clientKey(req);
-  Deque<Long> deque = buckets.computeIfAbsent(key, k -> new ArrayDeque<>());
-  int limit = LIMITS.getOrDefault(req.getRequestURI(), LIMIT);
+    Deque<Long> deque = buckets.computeIfAbsent(key, k -> new ArrayDeque<>());
+    int limit = overrides.getOrDefault(req.getRequestURI(), defaultLimit);
 
     long now = Instant.now().getEpochSecond();
     synchronized (deque) {
       // remove old timestamps
-      while (!deque.isEmpty() && deque.peekFirst() <= now - WINDOW_SECONDS) {
+      while (!deque.isEmpty() && deque.peekFirst() <= now - windowSeconds) {
         deque.pollFirst();
       }
 
@@ -80,7 +88,7 @@ public class RateLimitFilter implements Filter {
       }
 
       long oldest = deque.peekFirst();
-      long retryAfter = Math.max(1, (oldest + WINDOW_SECONDS) - now);
+  long retryAfter = Math.max(1, (oldest + windowSeconds) - now);
 
       res.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
       res.setContentType("application/json");

@@ -5,68 +5,105 @@ const BASE = import.meta.env.VITE_API_BASE || "http://localhost:8080";
 
 let refreshInFlight = null;
 
-async function request(path, { method = "GET", body, token, _retried } = {}) {
+// Single-flight map to coalesce identical GETs; short-lived cache to reduce hammering endpoints
+const singleFlight = new Map();
+const shortCache = new Map(); // key -> { expiry, data }
+
+function buildKey(path, { method, body, token }) {
+  return `${method || 'GET'}:${path}|${token || ''}|${body ? JSON.stringify(body) : ''}`;
+}
+
+async function request(path, { method = "GET", body, token, _retried, _fromRetry } = {}) {
   const headers = {};
-  // Only set JSON content-type when we actually send a body (avoids CORS preflight on simple GETs)
   if (body != null && method !== "GET") headers["Content-Type"] = "application/json";
   const access = token || getAccessToken();
-  // Don't send Authorization for public auth endpoints to avoid confusing flows with stale tokens
   const isAuthPublic = path.startsWith("/auth/");
   if (access && !isAuthPublic) headers.Authorization = `Bearer ${access}`;
 
-  // Debug: log outgoing request details to help diagnose network / CORS issues
-  console.debug("API request:", { url: `${BASE}${path}`, method, hasToken: !!token, body });
+  const key = buildKey(path, { method, body, token: access });
 
-  const res = await fetch(`${BASE}${path}`, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-    // keep default mode; CORS must be allowed server-side
-  });
+  if (method === 'GET' && !_retried && !_fromRetry) {
+    const cached = shortCache.get(key);
+    if (cached && cached.expiry > Date.now()) {
+      return cached.data;
+    }
+  }
+  if (method === 'GET' && singleFlight.has(key)) {
+    return singleFlight.get(key);
+  }
 
-  const text = await res.text();
-  const data = text ? JSON.parse(text) : null;
+  const promise = (async () => {
+    const res = await fetch(`${BASE}${path}`, {
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const text = await res.text();
+    let data = null;
+    try { data = text ? JSON.parse(text) : null; } catch { data = null; }
 
-  if (!res.ok) {
-    // If access token expired → try refresh once
-    if (res.status === 401 && !_retried && !path.startsWith("/auth/")) {
-      const refresh = getRefreshToken();
-      if (refresh) {
-        try {
-          if (!refreshInFlight) {
-            refreshInFlight = (async () => {
-              const r = await fetch(`${BASE}/auth/refresh`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ refreshToken: refresh }),
-              });
-              const tText = await r.text();
-              const tData = tText ? JSON.parse(tText) : null;
-              if (r.ok && tData?.accessToken) {
-                setTokens(tData.accessToken, tData.refreshToken || refresh);
-                return tData;
-              }
-              throw new Error(tData?.error || `Refresh failed: ${r.status}`);
-            })();
+    if (!res.ok) {
+      if (res.status === 401 && !_retried && !path.startsWith("/auth/")) {
+        const refresh = getRefreshToken();
+        if (refresh) {
+          try {
+            if (!refreshInFlight) {
+              refreshInFlight = (async () => {
+                const r = await fetch(`${BASE}/auth/refresh`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ refreshToken: refresh }),
+                });
+                const tText = await r.text();
+                const tData = tText ? JSON.parse(tText) : null;
+                if (r.ok && tData?.accessToken) {
+                  setTokens(tData.accessToken, tData.refreshToken || refresh);
+                  return tData;
+                }
+                throw new Error(tData?.error || `Refresh failed: ${r.status}`);
+              })();
+            }
+            const tData = await refreshInFlight;
+            return request(path, { method, body, token: tData.accessToken, _retried: true });
+          } catch {
+            // fall through
+          } finally {
+            setTimeout(() => { refreshInFlight = null; }, 50);
           }
-          const tData = await refreshInFlight;
-          // retry original request with new access
-          return request(path, { method, body, token: tData.accessToken, _retried: true });
-        } catch {
-          // ignore and fall through to throw original error
-        } finally {
-          // reset only if we were the creator
-          // small timeout to coalesce burst of 401s
-          setTimeout(() => { refreshInFlight = null; }, 50);
         }
       }
+      if (res.status === 429 && !_fromRetry) {
+        const retryAfterHeader = res.headers.get('retry-after');
+        const retrySec = retryAfterHeader ? parseInt(retryAfterHeader, 10) : NaN;
+        // Enforce minimum 60s wait; if server suggests longer, respect it.
+        let delayMs = 60000;
+        if (!isNaN(retrySec)) {
+          delayMs = Math.max(retrySec * 1000, 60000);
+        }
+        return new Promise((resolve, reject) => {
+          setTimeout(() => {
+            request(path, { method, body, token: access, _fromRetry: true })
+              .then(resolve)
+              .catch(reject);
+          }, delayMs);
+        });
+      }
+      const err = new Error(data?.error || `HTTP ${res.status}`);
+      err.status = res.status;
+      const hObj = {}; res.headers.forEach((v,k)=>{ hObj[k.toLowerCase()] = v; });
+      err.headers = hObj;
+      err.data = data;
+      throw err;
     }
-    const err = new Error(data?.error || `HTTP ${res.status}`);
-    err.status = res.status;
-    err.data = data;
-    throw err;
-  }
-  return data;
+    if (method === 'GET') {
+      // Extend cache TTL to 30s to reduce request frequency & chance of hitting rate limits
+      shortCache.set(key, { expiry: Date.now() + 30000, data });
+    }
+    return data;
+  })();
+
+  if (method === 'GET') singleFlight.set(key, promise);
+  try { return await promise; } finally { if (method === 'GET') singleFlight.delete(key); }
 }
 
 export const api = {

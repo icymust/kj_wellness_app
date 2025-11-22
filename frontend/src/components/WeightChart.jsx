@@ -70,7 +70,7 @@ export default function WeightChart({ entries = [], targetWeightKg = null, initi
 
   return (
     <div style={{ width: "100%", height: 320 }}>
-      <ResponsiveContainer>
+      <ResponsiveContainer width="100%" height="100%">
         <LineChart data={data} margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis
