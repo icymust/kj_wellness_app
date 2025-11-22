@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 
 export default function Profile({ ctx }) {
-  const { loadProfile, profile, saveProfile } = ctx;
+  const { loadProfile, profile, saveProfile, profileError, profileSuccess, profileSaving } = ctx;
   const [form, setForm] = useState({ age: '', gender: 'male', heightCm: '', weightKg: '', targetWeightKg: '', activityLevel: 'moderate', goal: 'general_fitness' });
   const [dirty, setDirty] = useState(false);
   const [status, setStatus] = useState(null);
@@ -64,7 +64,10 @@ export default function Profile({ ctx }) {
       <div style={{ display:'flex', gap:8, marginBottom:12 }}>
         <button type="button" onClick={handleReload} disabled={loading}>{loading ? 'Загрузка...' : 'Обновить с сервера'}</button>
       </div>
-      {status && <div style={{ marginBottom:12, color: status==='Сохранено' ? '#070' : '#b00' }}>{status}</div>}
+  {/* Inline messages: priority — explicit profileError/profileSuccess from global; fallback to local status */}
+  {profileError && <div style={{ marginBottom:12, color:'#b00' }}>{profileError}</div>}
+  {profileSuccess && <div style={{ marginBottom:12, color:'#070' }}>{profileSuccess}</div>}
+  {!profileError && !profileSuccess && status && <div style={{ marginBottom:12, color: status==='Сохранено' ? '#070' : '#b00' }}>{status}</div>}
       <form onSubmit={handleSave} style={{ display: 'grid', gap: 8, maxWidth: 420 }}>
         <label>Возраст
           <input inputMode="numeric" pattern="[0-9]*" value={form.age} onChange={(e)=>onChange('age', e.target.value.replace(/[^0-9]/g,''))} />
@@ -100,7 +103,7 @@ export default function Profile({ ctx }) {
           </select>
         </label>
         <div style={{ display:'flex', gap:8, marginTop:4 }}>
-          <button type="submit" disabled={!dirty || saving}>{saving ? 'Сохранение...' : 'Сохранить'}</button>
+          <button type="submit" disabled={!dirty || saving || profileSaving}>{(saving || profileSaving) ? 'Сохранение...' : 'Сохранить'}</button>
           <button type="button" onClick={() => { setDirty(false); setStatus(null); setForm({ age: '', gender: 'male', heightCm: '', weightKg: '', targetWeightKg: '', activityLevel: 'moderate', goal: 'general_fitness' }); }}>Сбросить</button>
         </div>
       </form>

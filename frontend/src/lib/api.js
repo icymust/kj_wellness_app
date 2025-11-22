@@ -94,6 +94,7 @@ export const api = {
   privacyGet: (token) => request("/privacy/consent", { token }),
   privacySet: (token, body) => request("/privacy/consent", { method: "PUT", token, body }),
   privacyExport: (token) => request("/privacy/export", { token }),
+  exportHealth: (token) => request("/export/health", { token }),
   // AI insights
   aiLatest: (token, scope = "weekly") => request(`/ai/insights/latest?scope=${encodeURIComponent(scope)}`, { token }),
   aiRegen: (token, scope = "weekly") => request(`/ai/insights/regenerate?scope=${encodeURIComponent(scope)}`, { method: "POST", token }),

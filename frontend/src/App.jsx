@@ -66,6 +66,9 @@ function AppShell() {
     activityLevel: "moderate",
     goal: "general_fitness",
   });
+  const [profileError, setProfileError] = useState(null);
+  const [profileSuccess, setProfileSuccess] = useState(null);
+  const [profileSaving, setProfileSaving] = useState(false);
   // Weight
   const [newWeight, setNewWeight] = useState("");
   const [weightAt, setWeightAt] = useState("");
@@ -245,6 +248,9 @@ function AppShell() {
   };
   const saveProfile = async (eOrPayload) => {
     if (!accessToken) return;
+    profileError && setProfileError(null);
+    profileSuccess && setProfileSuccess(null);
+    setProfileSaving(true);
     let src;
     if (eOrPayload && typeof eOrPayload.preventDefault === 'function') {
       eOrPayload.preventDefault();
@@ -253,11 +259,11 @@ function AppShell() {
       src = eOrPayload || profile;
     }
     const payload = {
-      age: src.age ? Number(src.age) : null,
+      age: src.age !== '' && src.age != null ? Number(src.age) : null,
       gender: src.gender || null,
-      heightCm: src.heightCm ? Number(src.heightCm) : null,
-      weightKg: src.weightKg ? Number(src.weightKg) : null,
-      targetWeightKg: src.targetWeightKg ? Number(src.targetWeightKg) : null,
+      heightCm: src.heightCm !== '' && src.heightCm != null ? Number(src.heightCm) : null,
+      weightKg: src.weightKg !== '' && src.weightKg != null ? Number(src.weightKg) : null,
+      targetWeightKg: src.targetWeightKg !== '' && src.targetWeightKg != null ? Number(src.targetWeightKg) : null,
       activityLevel: src.activityLevel || null,
       goal: src.goal || null,
     };
@@ -265,8 +271,19 @@ function AppShell() {
       const r = await api.saveProfile(accessToken, payload);
       const saved = r.profile || payload;
       setProfile(saved);
+      setProfileSuccess('Profile saved');
       return saved;
-    } catch (e) { console.warn('saveProfile', e); throw e; }
+    } catch (e) {
+      console.warn('saveProfile', e);
+      if (e.status === 400 && e.data?.error) {
+        setProfileError(e.data.error);
+      } else {
+        setProfileError('Failed to save profile');
+      }
+      throw e;
+    } finally {
+      setProfileSaving(false);
+    }
   };
 
   // Weight handlers
@@ -400,7 +417,7 @@ function AppShell() {
     // 2FA setup page
     twofaSetup, setTwofaSetup,
     // profile
-    profile, setProfile, loadProfile, saveProfile,
+  profile, setProfile, loadProfile, saveProfile, profileError, profileSuccess, profileSaving,
     // weight
     newWeight, setNewWeight, weightAt, setWeightAt, addWeight, loadWeights, weights, summary,
     // activity
@@ -411,6 +428,8 @@ function AppShell() {
     aiScope, setAiScope, loadAiLatest, regenAi, ai, aiLoading,
     // privacy
     consentForm, setConsentForm, loadConsent, saveConsent, exportData,
+  // export health
+  exportHealth: (tokenArg) => api.exportHealth(tokenArg || accessToken),
     // helpers
     go: (path) => navigate(path), oauthUrl, api, tempToken,
   };

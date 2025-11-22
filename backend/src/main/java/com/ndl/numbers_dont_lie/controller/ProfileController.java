@@ -49,6 +49,23 @@ public class ProfileController {
                                   @RequestBody ProfileUpsertDto dto) {
     try {
       String email = emailFromAuth(auth);
+      // Дополнительная простая валидация "обязательных" положительных значений для корректного BMI / логики профиля
+      // (расширяет существующие проверки диапазона внутри ProfileService)
+      StringBuilder errs = new StringBuilder();
+      if (dto.heightCm != null && dto.heightCm <= 0) {
+        errs.append("Height must be greater than 0");
+      }
+      if (dto.weightKg != null && dto.weightKg <= 0) {
+        if (errs.length() > 0) errs.append(". ");
+        errs.append("Weight must be greater than 0");
+      }
+      if (dto.age != null && dto.age < 0) {
+        if (errs.length() > 0) errs.append(". ");
+        errs.append("Age cannot be negative");
+      }
+      if (errs.length() > 0) {
+        return ResponseEntity.badRequest().body(Map.of("error", errs.toString()));
+      }
       var p = service.upsert(email, dto);
       return ResponseEntity.ok(Map.of("profile", p));
     } catch (IllegalArgumentException e) {
