@@ -1,6 +1,7 @@
 import { getAccessToken, getRefreshToken, setTokens } from "./tokens";
 
-const BASE = import.meta.env.VITE_API_BASE || "http://localhost:5173";
+// Backend base URL. Set VITE_API_BASE in .env to override. Default points to Spring Boot backend on 8080.
+const BASE = import.meta.env.VITE_API_BASE || "http://localhost:8080";
 
 let refreshInFlight = null;
 

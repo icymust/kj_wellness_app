@@ -1,807 +1,465 @@
-import { useState } from "react";
-import WeightChart from "./components/WeightChart.jsx";
-import WellnessGauge from "./components/WellnessGauge.jsx";
-import GoalProgressBar from "./components/GoalProgressBar.jsx";
-import ActivityWeekChart from "./components/ActivityWeekChart.jsx";
-import ActivityMonthChart from "./components/ActivityMonthChart.jsx";
+import React, { useState, useEffect } from "react";
+import { BrowserRouter as Router, Routes, Route, Navigate, Link, useNavigate, useLocation } from "react-router-dom";
 import { api } from "./lib/api";
-import { getAccessToken as getAT, getRefreshToken as getRT, setTokens as storeTokens, clearTokens as dropTokens } from "./lib/tokens";
-import OAuthCallback from "./OAuthCallback.jsx";
+import { setTokens, clearTokens, getAccessToken, getRefreshToken } from "./lib/tokens";
+import OAuthCallback from "./OAuthCallback";
+import Home from "./pages/Home";
+import Register from "./pages/Register";
+import Login from "./pages/Login";
+import Privacy from "./pages/Privacy";
+import Activity from "./pages/Activity";
+import Weight from "./pages/Weight";
+import Analytics from "./pages/Analytics";
+import AI from "./pages/AI";
+import Profile from "./pages/Profile";
+import Security from "./pages/Security";
+import Verify from "./pages/Verify";
+import Forgot from "./pages/Forgot";
+import Reset from "./pages/Reset";
+import Log from "./pages/Log";
 
-export default function App() {
-  
+// Root component wraps router so inner shell can use hooks
+export default function App(){
+  return (
+    <Router>
+      <AppShell />
+    </Router>
+  );
+}
 
-  const [email, setEmail] = useState("test@example.com");
-  const [password, setPassword] = useState("123456");
-  const [verificationLink, setVerificationLink] = useState("");
-  const [verifyToken, setVerifyToken] = useState("");
-  const [accessToken, setAccessToken] = useState("");
-  const [refreshToken, setRefreshToken] = useState("");
+function AppShell() {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // minimal auth state
+  const [accessToken, setAccessToken] = useState(null);
+  const [refreshToken, setRefreshToken] = useState(null);
   const [me, setMe] = useState(null);
-  const [log, setLog] = useState("");
-  const [forgotEmail, setForgotEmail] = useState("");
-  const [resetToken, setResetToken] = useState("");
-  const [resetNewPwd, setResetNewPwd] = useState("");
-  const [newWeight, setNewWeight] = useState("");
-  const [weightAt, setWeightAt] = useState("");
-  const [weights, setWeights] = useState([]);
-  const [summary, setSummary] = useState(null);
-
+  // register/login form state
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [verificationLink, setVerificationLink] = useState(null);
+  const [registerError, setRegisterError] = useState(null);
+  const [registerLoading, setRegisterLoading] = useState(false);
+  // email verification flow
+  const [verifyToken, setVerifyToken] = useState("");
+  const [verifyStatus, setVerifyStatus] = useState(null);
+  const [verifyError, setVerifyError] = useState(null);
+  const [verifyLoading, setVerifyLoading] = useState(false);
+  // login & 2FA state
+  const [loginError, setLoginError] = useState(null);
+  const [loginLoading, setLoginLoading] = useState(false);
+  const [need2fa, setNeed2fa] = useState(false);
+  const [tempToken, setTempToken] = useState(null);
+  const [twofaCode, setTwofaCode] = useState("");
+  const [twofaError, setTwofaError] = useState(null);
+  const [twofaLoading, setTwofaLoading] = useState(false);
+  // 2FA setup page state
+  const [twofaSetup, setTwofaSetup] = useState({ qr:null, secretMasked:null, recovery:null });
+  // Profile
   const [profile, setProfile] = useState({
     age: "",
-    gender: "other",
+    gender: "male",
     heightCm: "",
     weightKg: "",
     targetWeightKg: "",
     activityLevel: "moderate",
     goal: "general_fitness",
   });
-
+  // Weight
+  const [newWeight, setNewWeight] = useState("");
+  const [weightAt, setWeightAt] = useState("");
+  const [weights, setWeights] = useState([]);
+  // Analytics
+  const [summary, setSummary] = useState(null);
+  // Activity
   const [act, setAct] = useState({ type: "cardio", minutes: "", intensity: "moderate", at: "" });
+  const [period, setPeriod] = useState("week");
   const [week, setWeek] = useState(null);
-  const [period, setPeriod] = useState("week"); // 'week' | 'month'
   const [monthData, setMonthData] = useState(null);
-  // AI insights
+  // AI
   const [aiScope, setAiScope] = useState("weekly");
   const [ai, setAi] = useState(null);
   const [aiLoading, setAiLoading] = useState(false);
-  // 2FA
-  const [need2fa, setNeed2fa] = useState(null); // { tempToken }
-  const [twofaCode, setTwofaCode] = useState("");
-  const [twofaSetup, setTwofaSetup] = useState({ qr: null, secretMasked: null, recovery: null });
-
-  // Privacy / export
+  // Privacy
   const [consentForm, setConsentForm] = useState({
     accepted: false,
-    version: "1.0",
+    version: 1,
     allowAiUseProfile: false,
     allowAiUseHistory: false,
-    allowAiUseHabits: false,
     publicProfile: false,
-    publicStats: false,
     emailProduct: false,
-    emailSummaries: false,
   });
 
-  const logMsg = (msg, obj) => setLog((l) => `${new Date().toLocaleTimeString()} ${msg}${obj ? " " + JSON.stringify(obj) : ""}\n` + l);
+  // small helpers / placeholders so pages can call them without crashing
+  const handleRegister = async (e) => {
+    e?.preventDefault?.();
+    setRegisterError(null);
+    setVerificationLink(null);
+    setVerifyStatus(null);
+    if (!email || !password || password.length < 6) {
+      setRegisterError("Пароль должен быть не менее 6 символов");
+      return;
+    }
+    setRegisterLoading(true);
+    try {
+      const res = await api.register(email, password);
+      setVerificationLink(res.verificationLink || null);
+      if (res.verificationLink) {
+        setVerifyStatus("Пользователь создан. Перейдите по ссылке для подтверждения почты.");
+      } else {
+        setVerifyStatus("Пользователь создан. Ссылка для подтверждения в логах сервера.");
+      }
+    } catch (err) {
+      setRegisterError(err?.data?.error || err.message);
+    } finally {
+      setRegisterLoading(false);
+    }
+  };
+  const handleVerify = async () => {
+    if (!verifyToken) return;
+    setVerifyError(null);
+    setVerifyStatus(null);
+    setVerifyLoading(true);
+    try {
+      const r = await api.verify(verifyToken);
+      setVerifyStatus(r.message || "Email verified");
+    } catch (err) {
+      setVerifyError(err?.data?.error || err.message);
+    } finally {
+      setVerifyLoading(false);
+    }
+  };
 
+  // Parse /auth/verify?token on mount when route matches
+  useEffect(() => {
+    if (location.pathname === '/auth/verify') {
+      const params = new URLSearchParams(location.search);
+      const t = params.get('token');
+      if (t) setVerifyToken(t);
+    }
+  }, [location]);
+  // restore tokens from storage on mount
+  useEffect(() => {
+    const a = getAccessToken();
+    const r = getRefreshToken();
+    if (a) setAccessToken(a);
+    if (r) setRefreshToken(r);
+  }, []);
+  // restore pending OAuth 2FA state if present (need2fa + temp token persisted)
+  useEffect(() => {
+    if (!accessToken && !need2fa) {
+      const pre = localStorage.getItem('pre2faTempToken');
+      const flag = localStorage.getItem('pre2faFlag');
+      if (pre && flag === '1') {
+        setTempToken(pre);
+        setNeed2fa(true);
+      }
+    }
+  }, [accessToken, need2fa]);
+
+  const handleLogin = async (e) => {
+    e?.preventDefault?.();
+    setLoginError(null);
+    setNeed2fa(false); setTempToken(null); setTwofaCode("");
+    setLoginLoading(true);
+    try {
+      const res = await api.login(email, password);
+      if (res.need2fa) {
+        setNeed2fa(true);
+        setTempToken(res.tempToken);
+      } else if (res.accessToken) {
+        setAccessToken(res.accessToken);
+        setRefreshToken(res.refreshToken || null);
+        setTokens(res.accessToken, res.refreshToken || null);
+        navigate('/profile'); // redirect after login
+      } else {
+        setLoginError('Неизвестный ответ сервера');
+      }
+    } catch (err) {
+      setLoginError(err?.data?.error || err.message);
+    } finally {
+      setLoginLoading(false);
+    }
+  };
+
+  const verify2fa = async () => {
+    if (!twofaCode || !tempToken) return;
+    setTwofaError(null); setTwofaLoading(true);
+    try {
+      const r = await api.authVerify2fa(tempToken, twofaCode);
+      if (r.accessToken) {
+        setAccessToken(r.accessToken);
+        setRefreshToken(r.refreshToken || null);
+        setTokens(r.accessToken, r.refreshToken || null);
+        setNeed2fa(false); setTempToken(null); setTwofaCode("");
+        localStorage.removeItem('pre2faTempToken');
+        localStorage.removeItem('pre2faFlag');
+        navigate('/profile');
+      } else {
+        setTwofaError('Ответ без токена');
+      }
+    } catch (err) {
+      setTwofaError(err?.data?.error || err.message);
+    } finally {
+      setTwofaLoading(false);
+    }
+  };
+
+  const handleLogout = () => {
+    clearTokens();
+    setAccessToken(null); setRefreshToken(null); setMe(null);
+  };
+
+  const handleRefresh = async () => {
+    if (!refreshToken) return;
+    try {
+      const r = await api.refresh(refreshToken);
+      if (r.accessToken) {
+        setAccessToken(r.accessToken);
+        setTokens(r.accessToken, refreshToken);
+      }
+    } catch (err) {
+      console.warn('Refresh failed', err);
+      handleLogout();
+    }
+  };
+
+  const handleMe = async () => {
+    if (!accessToken) return;
+    try {
+      const r = await api.me(accessToken);
+      setMe(r.user || r);
+    } catch (err) {
+      console.warn('me failed', err);
+    }
+  };
+
+  // Profile handlers
+  const loadProfile = async () => {
+    if (!accessToken) return;
+    try {
+      const r = await api.getProfile(accessToken);
+      setProfile(r.profile || r || {});
+    } catch (e) { console.warn('loadProfile', e); }
+  };
+  const saveProfile = async (eOrPayload) => {
+    if (!accessToken) return;
+    let src;
+    if (eOrPayload && typeof eOrPayload.preventDefault === 'function') {
+      eOrPayload.preventDefault();
+      src = profile;
+    } else {
+      src = eOrPayload || profile;
+    }
+    const payload = {
+      age: src.age ? Number(src.age) : null,
+      gender: src.gender || null,
+      heightCm: src.heightCm ? Number(src.heightCm) : null,
+      weightKg: src.weightKg ? Number(src.weightKg) : null,
+      targetWeightKg: src.targetWeightKg ? Number(src.targetWeightKg) : null,
+      activityLevel: src.activityLevel || null,
+      goal: src.goal || null,
+    };
+    try {
+      const r = await api.saveProfile(accessToken, payload);
+      const saved = r.profile || payload;
+      setProfile(saved);
+      return saved;
+    } catch (e) { console.warn('saveProfile', e); throw e; }
+  };
+
+  // Weight handlers
+  const addWeight = async (payloadOrEvent) => {
+    if (!accessToken) return;
+    // Support both old form (event-based using global state) and new payload form
+    let weightVal = null;
+    let atVal = null;
+    if (payloadOrEvent && typeof payloadOrEvent.preventDefault === 'function') {
+      payloadOrEvent.preventDefault();
+      weightVal = newWeight ? Number(newWeight) : null;
+      atVal = weightAt || null;
+    } else if (payloadOrEvent) {
+      weightVal = payloadOrEvent.weight != null ? Number(payloadOrEvent.weight) : (newWeight ? Number(newWeight) : null);
+      atVal = payloadOrEvent.at || weightAt || null;
+    } else {
+      weightVal = newWeight ? Number(newWeight) : null;
+      atVal = weightAt || null;
+    }
+    try {
+      await api.weightAdd(accessToken, weightVal, atVal);
+      setNewWeight(""); setWeightAt("");
+      await loadWeights();
+    } catch (e) { console.warn('addWeight', e); }
+  };
+  const loadWeights = async () => {
+    if (!accessToken) return;
+    try {
+      const r = await api.weightList(accessToken);
+      setWeights(Array.isArray(r.entries) ? r.entries : (Array.isArray(r) ? r : []));
+    } catch (e) { console.warn('loadWeights', e); }
+  };
+
+  // Analytics handler
+  const loadSummary = async () => {
+    if (!accessToken) return;
+    try {
+      const r = await api.analyticsSummary(accessToken);
+      setSummary(r);
+    } catch (e) { console.warn('loadSummary', e); }
+  };
+
+  // Activity handlers
+  const addActivity = async (payload) => {
+    if (!accessToken || !payload) return;
+    try {
+      await api.activityAdd(accessToken, {
+        type: payload.type,
+        minutes: Number(payload.minutes),
+        intensity: payload.intensity,
+        at: payload.at || null,
+      });
+    } catch (e1) { console.warn('addActivity', e1); }
+  };
+  const loadActivityWeek = async (isoDate) => {
+    if (!accessToken) return;
+    try {
+      const r = await api.activityWeek(accessToken, isoDate);
+      setWeek(r.summary || r);
+    } catch (e) { console.warn('loadActivityWeek', e); }
+  };
+  const loadActivityMonth = async () => {
+    if (!accessToken) return;
+    try {
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = now.getMonth() + 1;
+      const r = await api.activityMonth(accessToken, year, month);
+      setMonthData({ year, month, total: Object.values(r.byDayMinutes || {}).reduce((s,v)=>s+v,0), daysActive: Object.values(r.byDayMinutes || {}).filter(v=>v>0).length, byDayMinutes: r.byDayMinutes || {} });
+    } catch (e) { console.warn('loadActivityMonth', e); }
+  };
+
+  // AI handlers
+  const loadAiLatest = async () => {
+    if (!accessToken) return;
+    setAiLoading(true);
+    try { const r = await api.aiLatest(accessToken, aiScope); setAi(r); }
+    catch(e){ console.warn('aiLatest', e); }
+    finally{ setAiLoading(false); }
+  };
+  const regenAi = async () => {
+    if (!accessToken) return;
+    setAiLoading(true);
+    try { const r = await api.aiRegen(accessToken, aiScope); setAi(r); }
+    catch(e){ console.warn('aiRegen', e); }
+    finally{ setAiLoading(false); }
+  };
+
+  // Privacy handlers
+  const loadConsent = async () => {
+    if (!accessToken) return;
+    try { const r = await api.privacyGet(accessToken); setConsentForm(f=>({ ...f, ...r })); }
+    catch(e){ console.warn('loadConsent', e); }
+  };
+  const saveConsent = async (e) => {
+    e?.preventDefault?.(); if (!accessToken) return;
+    try { await api.privacySet(accessToken, consentForm); }
+    catch(e){ console.warn('saveConsent', e); }
+  };
+  const exportData = async () => {
+    if (!accessToken) return;
+    try { const r = await api.privacyExport(accessToken); const blob = new Blob([JSON.stringify(r, null, 2)], { type: 'application/json' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'export.json'; a.click(); URL.revokeObjectURL(url); }
+    catch(e){ console.warn('exportData', e); }
+  };
+
+  // light OAuth URL helper
   function oauthUrl(provider){
-    // Prefer explicit VITE_API_BASE_URL pointing to backend (e.g. http://localhost:5173)
-    const base = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_BASE || "http://localhost:5173";
+    const base = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_BASE || "";
     return `${base}/oauth2/authorization/${provider}`;
   }
 
-  async function handleRegister(e) {
-    e.preventDefault();
-    try {
-      const res = await api.register(email, password);
-      setVerificationLink(res.verificationLink || "");
-      const tokenFromLink = res.verificationLink?.split("token=")[1] || "";
-      setVerifyToken(tokenFromLink);
-      logMsg("Registered:", res.user);
-    } catch (err) {
-      logMsg("Register error:", { status: err.status, data: err.data });
-    }
-  }
+  // Protected route wrapper
+  const Protected = ({ children }) => {
+    if (!accessToken) return <Navigate to="/login" replace />;
+    return children;
+  };
 
-  async function handleVerify(e) {
-    e.preventDefault();
-    try {
-      const res = await api.verify(verifyToken);
-      logMsg("Verified:", res.user);
-    } catch (err) {
-      logMsg("Verify error:", { status: err.status, data: err.data });
-    }
-  }
-
-  async function onForgot(e) {
-    e.preventDefault();
-    try {
-      const res = await api.forgot(forgotEmail);
-      logMsg("Forgot sent", res);
-      alert("If this email exists and is verified, we've sent a reset link.");
-      setForgotEmail("");
-    } catch (err) {
-      logMsg("Forgot error:", { status: err.status, data: err.data });
-      alert("Request accepted (we do not disclose existence).");
-    }
-  }
-
-  async function onReset(e) {
-    e.preventDefault();
-    try {
-      const res = await api.resetPwd(resetToken, resetNewPwd);
-      logMsg("Password reset ok", res);
-      alert("Password changed. You can log in with the new password.");
-      setResetToken(""); setResetNewPwd("");
-    } catch (err) {
-      logMsg("Reset error:", { status: err.status, data: err.data });
-      const msg = err?.data?.error || "Reset failed";
-      alert(msg);
-    }
-  }
-
-  // Initialize tokens from LocalStorage on mount
-  if (typeof window !== 'undefined') {
-    // set initial tokens from storage (one-time during render; lightweight)
-    if (!accessToken) {
-      const at = getAT();
-      const rt = getRT();
-      if (at) setAccessToken(at);
-      if (rt) setRefreshToken(rt);
-    }
-    // detect pending OAuth flow that requires 2FA (pre-2FA temp token saved by OAuthCallback)
-    try {
-      const pre2 = localStorage.getItem("pre2faTempToken");
-      if (pre2 && !need2fa) {
-        setNeed2fa({ tempToken: pre2 });
-      }
-  } catch (e) { void e; }
-    // subscribe to token updates
-    window.addEventListener('ndl:toks', (ev) => {
-      const { access, refresh } = ev.detail || {};
-      if (access) setAccessToken(access);
-      if (refresh) setRefreshToken(refresh);
-    });
-  }
-
-  async function handleLogin(e) {
-    e.preventDefault();
-    try {
-      const res = await api.login(email, password);
-      if (res.need2fa && res.tempToken) {
-        setNeed2fa({ tempToken: res.tempToken });
-        logMsg("Login needs 2FA");
-      } else {
-        setAccessToken(res.accessToken);
-        setRefreshToken(res.refreshToken);
-        storeTokens(res.accessToken, res.refreshToken);
-        logMsg("Logged in: tokens received");
-      }
-    } catch (err) {
-      logMsg("Login error:", { status: err.status, data: err.data });
-    }
-  }
-
-  async function verify2fa() {
-    try {
-      if (!need2fa?.tempToken) return;
-      const res = await api.authVerify2fa(need2fa.tempToken, twofaCode);
-      setAccessToken(res.accessToken);
-      setRefreshToken(res.refreshToken);
-      storeTokens(res.accessToken, res.refreshToken);
-      setNeed2fa(null); setTwofaCode("");
-  try { localStorage.removeItem("pre2faTempToken"); } catch (e) { void e; }
-      logMsg("2FA verified");
-    } catch (err) {
-      logMsg("2FA verify error:", { status: err.status, data: err.data });
-      alert(err?.data?.error || "Invalid code");
-    }
-  }
-
-  async function handleMe() {
-    try {
-      const res = await api.me(accessToken);
-      setMe(res);
-      logMsg("Protected /me:", res);
-    } catch (err) {
-      logMsg("Me error:", { status: err.status, data: err.data });
-    }
-  }
-
-  async function spamTest() {
-    if (!accessToken) {
-      alert("Please login first to get an access token.");
-      return;
-    }
-    let saw429 = false;
-    for (let i = 1; i <= 25; i++) {
-      try {
-        const res = await api.me(accessToken);
-        console.log(`${i}: OK`, res);
-        logMsg(`${i}: OK`);
-      } catch (err) {
-        console.warn(`${i}: ERROR`, err);
-        logMsg(`${i}: ERROR`, { status: err.status, data: err.data });
-        if (err.status === 429 && !saw429) {
-          saw429 = true;
-          const retry = err.data?.retryAfterSec || err.data?.retryAfter || 0;
-          alert(`Слишком много запросов, подождите ${retry} сек`);
-        }
-      }
-      // small delay to not completely flood network UI (optional)
-      await new Promise((r) => setTimeout(r, 100));
-    }
-  }
-
-  async function handleRefresh() {
-    try {
-      const res = await api.refresh(refreshToken);
-      setAccessToken(res.accessToken);
-      storeTokens(res.accessToken, res.refreshToken || refreshToken);
-      logMsg("Access token refreshed");
-    } catch (err) {
-      logMsg("Refresh error:", { status: err.status, data: err.data });
-    }
-  }
-
-  function handleLogout() {
-    // clear tokens in storage and reset local UI state
-    dropTokens();
-    setAccessToken("");
-    setRefreshToken("");
-    setMe(null);
-    setSummary(null);
-    setWeights([]);
-    setWeek(null);
-    setMonthData(null);
-    setAi(null);
-    setNeed2fa(null);
-    setTwofaCode("");
-  try { localStorage.removeItem("pre2faTempToken"); } catch (e) { void e; }
-    logMsg("Logged out");
-  }
-
-  async function loadProfile() {
-    try {
-      const res = await api.getProfile(accessToken);
-      setProfile({
-        age: res.profile?.age ?? "",
-        gender: res.profile?.gender ?? "other",
-        heightCm: res.profile?.heightCm ?? "",
-        weightKg: res.profile?.weightKg ?? "",
-        targetWeightKg: res.profile?.targetWeightKg ?? "",
-        activityLevel: res.profile?.activityLevel ?? "moderate",
-        goal: res.profile?.goal ?? "general_fitness",
-      });
-      logMsg("Profile loaded", res.profile);
-    } catch (err) {
-      logMsg("Load profile error:", { status: err.status, data: err.data });
-    }
-  }
-
-  async function saveProfile(e) {
-    e?.preventDefault?.();
-    try {
-      const payload = {
-        age: profile.age ? Number(profile.age) : null,
-        gender: profile.gender || null,
-        heightCm: profile.heightCm ? Number(profile.heightCm) : null,
-        weightKg: profile.weightKg ? Number(profile.weightKg) : null,
-        targetWeightKg: profile.targetWeightKg ? Number(profile.targetWeightKg) : null,
-        activityLevel: profile.activityLevel || null,
-        goal: profile.goal || null,
-      };
-      const res = await api.saveProfile(accessToken, payload);
-      logMsg("Profile saved", res.profile);
-  // after saving profile, reload profile and weight history (seed may have been created)
-  await loadProfile();
-  await loadWeights();
-    } catch (err) {
-      console.error("Save profile error (full):", err);
-      logMsg("Save profile error:", { status: err?.status, data: err?.data, message: err?.message });
-      alert(err?.data?.error || err?.message || "Save failed");
-    }
-  }
-
-  async function addWeight(e){ e.preventDefault();
-  try{
-    const res = await api.weightAdd(accessToken, Number(newWeight), weightAt || null);
-    logMsg("Weight added", res.entry);
-    setNewWeight(""); setWeightAt("");
-    await loadWeights();
-  }catch(err){ logMsg("Weight add error:", {status:err.status, data:err.data}); }
-  }
-  async function loadWeights(){
-    try{
-      const res = await api.weightList(accessToken);
-      setWeights(res.entries || []);
-      logMsg("Weight list loaded", (res.entries||[]).length);
-    }catch(err){ logMsg("Weight list error:", {status:err.status, data:err.data}); }
-  }
-  async function loadSummary(){
-    try{
-      const res = await api.analyticsSummary(accessToken);
-      setSummary(res);
-      logMsg("Analytics summary", res);
-    }catch(err){ logMsg("Summary error:", {status:err.status, data:err.data}); }
-  }
-
-  // AI insights functions
-  async function loadAiLatest() {
-    try {
-      setAiLoading(true);
-      const res = await api.aiLatest(accessToken, aiScope);
-      setAi(res);
-      logMsg("AI insights", res);
-    } catch (err) {
-      logMsg("AI error:", { status: err.status, data: err.data });
-      alert(err?.data?.error || err?.message || "Failed to load insights");
-    } finally { setAiLoading(false); }
-  }
-
-  async function regenAi() {
-    try {
-      setAiLoading(true);
-      const res = await api.aiRegen(accessToken, aiScope);
-      setAi(res);
-      logMsg("AI regenerated", res);
-    } catch (err) {
-      logMsg("AI regenerate error:", { status: err.status, data: err.data });
-      alert(err?.data?.error || err?.message || "Failed to regenerate");
-    } finally { setAiLoading(false); }
-  }
-
-  async function addActivity(e){ e.preventDefault();
-    try {
-      const payload = {
-        type: act.type,
-        minutes: Number(act.minutes),
-        intensity: act.intensity || null,
-        at: act.at || null,
-      };
-      const res = await api.activityAdd(accessToken, payload);
-      logMsg("Activity added", res.entry);
-      setAct({ type:"cardio", minutes:"", intensity:"moderate", at:"" });
-      await loadActivityWeek();
-    } catch(err) {
-      logMsg("Add activity error:", { status: err.status, data: err.data });
-    }
-  }
-
-  async function loadActivityWeek(dateStr){
-    try {
-      const res = await api.activityWeek(accessToken, dateStr || null);
-      setWeek(res.summary);
-      logMsg("Week summary", res.summary);
-    } catch(err){
-      logMsg("Week summary error:", { status: err.status, data: err.data });
-    }
-  }
-
-  async function loadActivityMonth(d = new Date()){
-    const y = d.getUTCFullYear();
-    const m = d.getUTCMonth() + 1;
-    try {
-      const res = await api.activityMonth(accessToken, y, m);
-      const by = res.byDayMinutes || {};
-      const total = Object.values(by).reduce((a,b)=>a+(b||0), 0);
-      const daysActive = Object.values(by).filter(v=>v>0).length;
-      setMonthData({ byDayMinutes: by, year: y, month: m, total, daysActive });
-      logMsg("Month summary", { year: y, month: m, total, daysActive, by });
-    } catch(err){
-      logMsg("Month summary error:", { status: err.status, data: err.data });
-    }
-  }
-
-  // Privacy helpers
-  async function loadConsent() {
-    try {
-      const res = await api.privacyGet(accessToken);
-      setConsentForm(res);
-      logMsg("Consent", res);
-    } catch (e) { logMsg("Consent load error", e); }
-  }
-
-  async function saveConsent(e) {
-    e.preventDefault();
-    try {
-      const res = await api.privacySet(accessToken, consentForm);
-      logMsg("Consent saved", res);
-      alert("Saved");
-    } catch (e) {
-      alert(e?.data?.error || "Save failed");
-    }
-  }
-
-  async function exportData() {
-    try {
-      const data = await api.privacyExport(accessToken);
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url; a.download = "ndl-export.json"; a.click();
-      URL.revokeObjectURL(url);
-    } catch (e) { console.error(e); alert(e?.message || "Export failed"); }
-  }
-
-  // handle OAuth callback route after hooks are initialized
-  if (typeof window !== 'undefined' && window.location.pathname === '/oauth-callback') {
-    return <OAuthCallback onTokens={({ access, refresh }) => { setAccessToken(access); setRefreshToken(refresh); }} />;
-  }
-
+  // context passed to pages (minimal set)
+  const ctx = {
+    // auth & tokens
+    accessToken, refreshToken, me,
+    // registration
+    email, setEmail, password, setPassword,
+    verificationLink, registerError, registerLoading, handleRegister, verifyStatus,
+    // email verification page
+    verifyToken, setVerifyToken, handleVerify, verifyError, verifyLoading,
+    // login & 2FA during login
+    handleLogin, loginError, loginLoading, need2fa, twofaCode, setTwofaCode, verify2fa, twofaError, twofaLoading,
+    // token ops
+    handleRefresh, handleLogout, handleMe,
+    // 2FA setup page
+    twofaSetup, setTwofaSetup,
+    // profile
+    profile, setProfile, loadProfile, saveProfile,
+    // weight
+    newWeight, setNewWeight, weightAt, setWeightAt, addWeight, loadWeights, weights, summary,
+    // activity
+    act, setAct, addActivity, period, setPeriod, loadActivityWeek, loadActivityMonth, week, monthData,
+    // analytics
+    loadSummary,
+    // AI
+    aiScope, setAiScope, loadAiLatest, regenAi, ai, aiLoading,
+    // privacy
+    consentForm, setConsentForm, loadConsent, saveConsent, exportData,
+    // helpers
+    go: (path) => navigate(path), oauthUrl, api, tempToken,
+  };
   return (
-    <div style={{ maxWidth: 720, margin: "2rem auto", fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, sans-serif" }}>
-      <h1>Numbers Don’t Lie — Auth Demo</h1>
-      <p style={{ color: "#555" }}>Backend: {import.meta.env.VITE_API_BASE}</p>
-
-      <section style={{ border: "1px solid #ddd", padding: 16, borderRadius: 12, marginTop: 16 }}>
-        <h2>1) Register</h2>
-        <form onSubmit={handleRegister} style={{ display: "grid", gap: 8 }}>
-          <label>Email
-            <input value={email} onChange={(e) => setEmail(e.target.value)} required style={{ width: "100%" }} />
-          </label>
-          <label>Password (min 6)
-            <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" required style={{ width: "100%" }} />
-          </label>
-          <button type="submit">Register</button>
-        </form>
-        {verificationLink && (
-          <div style={{ marginTop: 8 }}>
-            <div>Verification link:</div>
-            <code style={{ wordBreak: "break-all" }}>{verificationLink}</code>
-          </div>
-        )}
-      </section>
-
-      <section style={{ border: "1px solid #ddd", padding: 16, borderRadius: 12, marginTop: 16 }}>
-        <h2>Privacy & Export</h2>
-        <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-          <button onClick={loadConsent} disabled={!accessToken}>Load consent</button>
-          <button onClick={exportData} disabled={!accessToken}>Export my data (JSON)</button>
-        </div>
-
-        <form onSubmit={saveConsent} style={{ display: "grid", gap: 8 }}>
-          <label>
-            <input type="checkbox" checked={consentForm.accepted} onChange={(e)=>setConsentForm(f=>({...f, accepted:e.target.checked}))} /> I accept the privacy policy
-          </label>
-          <label>
-            <input type="checkbox" checked={consentForm.allowAiUseProfile} onChange={(e)=>setConsentForm(f=>({...f, allowAiUseProfile:e.target.checked}))} /> Allow AI to use my profile
-          </label>
-          <label>
-            <input type="checkbox" checked={consentForm.allowAiUseHistory} onChange={(e)=>setConsentForm(f=>({...f, allowAiUseHistory:e.target.checked}))} /> Allow AI to use my history
-          </label>
-          <label>
-            <input type="checkbox" checked={consentForm.publicProfile} onChange={(e)=>setConsentForm(f=>({...f, publicProfile:e.target.checked}))} /> Make my profile public
-          </label>
-          <label>
-            <input type="checkbox" checked={consentForm.emailProduct} onChange={(e)=>setConsentForm(f=>({...f, emailProduct:e.target.checked}))} /> Receive product emails
-          </label>
-          <div>
-            <small>Version: {consentForm.version}</small>
-          </div>
-          <div>
-            <button type="submit" disabled={!accessToken}>Save consent</button>
-          </div>
-        </form>
-      </section>
-
-      <section style={{ border: "1px solid #ddd", padding: 16, borderRadius: 12, marginTop: 16 }}>
-        <h2>Activity</h2>
-        <form onSubmit={addActivity} style={{ display:"grid", gridTemplateColumns:"repeat(2,1fr)", gap:8 }}>
-          <label>Type
-            <select value={act.type} onChange={(e)=>setAct(a=>({...a, type:e.target.value}))}>
-              <option value="cardio">cardio</option>
-              <option value="strength">strength</option>
-              <option value="flexibility">flexibility</option>
-              <option value="sports">sports</option>
-              <option value="other">other</option>
-            </select>
-          </label>
-          <label>Minutes
-            <input required value={act.minutes} onChange={(e)=>setAct(a=>({...a, minutes:e.target.value}))}/>
-          </label>
-          <label>Intensity
-            <select value={act.intensity} onChange={(e)=>setAct(a=>({...a, intensity:e.target.value}))}>
-              <option value="low">low</option>
-              <option value="moderate">moderate</option>
-              <option value="high">high</option>
-            </select>
-          </label>
-          <label>Timestamp (ISO, optional)
-            <input placeholder="2025-10-22T18:00:00Z" value={act.at} onChange={(e)=>setAct(a=>({...a, at:e.target.value}))}/>
-          </label>
-          <div style={{ gridColumn:"1 / -1" }}>
-            <button type="submit" disabled={!accessToken || !act.minutes} style={{ width:"100%" }}>Add activity</button>
-          </div>
-        </form>
-
-        <div style={{ display:"flex", gap:8, marginTop:8, alignItems:"center" }}>
-          <label>
-            Period:&nbsp;
-            <select value={period} onChange={(e)=>setPeriod(e.target.value)}>
-              <option value="week">Week</option>
-              <option value="month">Month</option>
-            </select>
-          </label>
-
-          {period === "week" ? (
-            <button onClick={()=>loadActivityWeek()} disabled={!accessToken}>Load this week</button>
+    <div style={{ padding: 16, fontFamily: 'Arial, sans-serif' }}>
+      <header style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+        <h1 style={{ margin: 0, fontSize: 18 }}>Numbers-Don't-Lie — Demo</h1>
+        <nav style={{ marginLeft: 12, display: 'flex', gap: 8 }}>
+          <Link to="/">Home</Link>
+          <Link to="/register">Register</Link>
+          <Link to="/activity">Activity</Link>
+          <Link to="/weight">Weight</Link>
+          <Link to="/analytics">Analytics</Link>
+          <Link to="/ai">AI</Link>
+          <Link to="/profile">Profile</Link>
+          <Link to="/security">Security</Link>
+          <Link to="/privacy">Privacy</Link>
+        </nav>
+        <div style={{ marginLeft: 'auto' }}>
+          {accessToken ? (
+            <>
+              <span style={{ marginRight: 8 }}>Signed in</span>
+              <button onClick={handleLogout}>Logout</button>
+            </>
           ) : (
-            <button onClick={()=>loadActivityMonth()} disabled={!accessToken}>Load this month</button>
+            <Link to="/login">Login</Link>
           )}
         </div>
-
-        {period === "week" && week && (
-          <div style={{ marginTop: 12 }}>
-            <div style={{ marginBottom:8 }}>
-              <b>Week from:</b> {new Date(week.weekStartIso).toLocaleDateString()} ·
-              <b> sessions:</b> {week.sessions} ·
-              <b> total:</b> {week.totalMinutes} min ·
-              <b> days active:</b> {week.daysActive}
-            </div>
-            <ActivityWeekChart byWeekdayMinutes={week.byWeekdayMinutes}/>
-            <div style={{ marginTop:8 }}>
-              <b>By type (min):</b>{" "}
-              {Object.entries(week.byTypeMinutes || {}).map(([k,v])=>`${k}: ${v}`).join(" · ") || "—"}
-            </div>
-          </div>
-        )}
-
-        {period === "month" && monthData && (
-          <>
-            <div style={{ marginTop: 12 }}>
-              <b>Month:</b> {monthData.year}-{String(monthData.month).padStart(2, "0")} ·
-              <b> total:</b> {monthData.total} min ·
-              <b> days active:</b> {monthData.daysActive}
-            </div>
-            <ActivityMonthChart
-              byDayMinutes={monthData.byDayMinutes}
-              year={monthData.year}
-              month={monthData.month}
-            />
-          </>
-        )}
-      </section>
-
-      <section style={{ border:"1px solid #ddd", padding:16, borderRadius:12, marginTop:16 }}>
-        <h2>Weight Progress</h2>
-        <form onSubmit={addWeight} style={{ display:"grid", gap:8 }}>
-          <label>Weight (kg) <input value={newWeight} onChange={e=>setNewWeight(e.target.value)} required /></label>
-          <label>Timestamp (ISO, optional) <input placeholder="2025-10-15T21:10:00Z" value={weightAt} onChange={e=>setWeightAt(e.target.value)} /></label>
-          <small>Если пусто — сохранится текущий timestamp. Повтор того же timestamp вернёт 409.</small>
-          <button type="submit" disabled={!accessToken}>Add</button>
-        </form>
-
-        <div style={{ marginTop:8 }}>
-          <button onClick={loadWeights} disabled={!accessToken}>Load history</button>
-          <ul>{weights.map(w=>(
-            <li key={w.id}>{w.at} — {w.weightKg} kg</li>
-          ))}</ul>
-        </div>
-        <div style={{ marginTop: 12 }}>
-          <WeightChart
-            entries={weights}
-            targetWeightKg={summary?.goal?.targetWeightKg ?? profile?.targetWeightKg ?? null}
-            initialWeightKg={profile?.weightKg ?? null}
-          />
-        </div>
-      </section>
-
-      <section style={{ border:"1px solid #ddd", padding:16, borderRadius:12, marginTop:16 }}>
-        <h2>Analytics</h2>
-        <button onClick={loadSummary} disabled={!accessToken}>Load BMI & Wellness</button>
-        {summary && (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 16, marginTop: 12 }}>
-                  <div>
-                    <WellnessGauge value={summary?.scores?.wellness ?? 0} />
-                    <div style={{ marginTop: 8 }}>
-                      <b>BMI:</b> {summary?.bmi?.value} ({summary?.bmi?.classification})
-                    </div>
-
-                    <div style={{ marginTop: 12 }}>
-                      <GoalProgressBar
-                        percent={summary?.goal?.progress?.percent ?? 0}
-                        remainingKg={summary?.goal?.progress?.remainingKg ?? null}
-                      />
-                    </div>
-                  </div>
-            <pre style={{ background: "#f7f7f7", padding: 12, borderRadius: 8 }}>
-              {JSON.stringify(summary, null, 2)}
-            </pre>
-          </div>
-        )}
-      </section>
-
-      <section style={{ border:"1px solid #ddd", padding:16, borderRadius:12, marginTop:16 }}>
-        <h2>AI Insights</h2>
-        <div style={{ display:"flex", gap:8, alignItems:"center", marginBottom:8 }}>
-          <label>
-            Scope:&nbsp;
-            <select value={aiScope} onChange={(e)=>setAiScope(e.target.value)}>
-              <option value="weekly">weekly</option>
-              <option value="monthly">monthly</option>
-            </select>
-          </label>
-          <button onClick={loadAiLatest} disabled={!accessToken || aiLoading}>Load latest</button>
-          <button onClick={regenAi} disabled={!accessToken || aiLoading}>Regenerate</button>
-        </div>
-        {ai && (
-          <div style={{ marginTop:8 }}>
-            <div style={{ color: ai.fromCache ? "#6a6" : "#666" }}>
-              {ai.fromCache ? "from cache" : "fresh"} · generated: {ai.generatedAt ? new Date(ai.generatedAt).toLocaleString() : "—"}
-            </div>
-            <div style={{ marginTop:8 }}>
-              <b>Summary:</b> {Object.entries(ai.summary || {}).map(([k,v])=>`${k}: ${v}`).join(" · ") || "—"}
-            </div>
-            <ul style={{ marginTop:8 }}>
-              {(ai.items || []).map((it, idx) => (
-                <li key={idx} style={{ marginBottom:8 }}>
-                  <span style={{
-                    padding: "2px 6px",
-                    borderRadius: 6,
-                    background: it.priority === 'high' ? '#fee' : it.priority === 'medium' ? '#ffe' : '#eef',
-                    border: '1px solid #ddd',
-                    marginRight: 8,
-                    fontSize: 12
-                  }}>{it.priority || 'low'}</span>
-                  <b>{it.title}</b>
-                  <div style={{ color: "#444", marginTop: 4 }}>{it.detail}</div>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </section>
-
-      <section style={{ border: "1px solid #ddd", padding: 16, borderRadius: 12, marginTop: 16 }}>
-        <h2>Health Profile</h2>
-        <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-          <button onClick={loadProfile} disabled={!accessToken}>Load profile</button>
-        </div>
-        <form onSubmit={saveProfile} style={{ display: "grid", gap: 8 }}>
-          <label>Age <input value={profile.age} onChange={(e)=>setProfile(p=>({...p, age:e.target.value}))} /></label>
-          <label>Gender
-            <select value={profile.gender} onChange={(e)=>setProfile(p=>({...p, gender:e.target.value}))}>
-              <option value="male">male</option>
-              <option value="female">female</option>
-              <option value="other">other</option>
-            </select>
-          </label>
-          <label>Height (cm) <input value={profile.heightCm} onChange={(e)=>setProfile(p=>({...p, heightCm:e.target.value}))} /></label>
-          <label>Weight (kg) <input value={profile.weightKg} onChange={(e)=>setProfile(p=>({...p, weightKg:e.target.value}))} /></label>
-          <label>Target Weight (kg) <input value={profile.targetWeightKg} onChange={(e)=>setProfile(p=>({...p, targetWeightKg:e.target.value}))} /></label>
-          <label>Activity
-            <select value={profile.activityLevel} onChange={(e)=>setProfile(p=>({...p, activityLevel:e.target.value}))}>
-              <option value="low">low</option>
-              <option value="moderate">moderate</option>
-              <option value="high">high</option>
-            </select>
-          </label>
-          <label>Goal
-            <select value={profile.goal} onChange={(e)=>setProfile(p=>({...p, goal:e.target.value}))}>
-              <option value="weight_loss">weight_loss</option>
-              <option value="muscle_gain">muscle_gain</option>
-              <option value="general_fitness">general_fitness</option>
-            </select>
-          </label>
-          <button type="submit" disabled={!accessToken}>Save</button>
-        </form>
-      </section>
-
-      <section style={{ border: "1px solid #ddd", padding: 16, borderRadius: 12, marginTop: 16 }}>
-        <h2>2) Verify Email</h2>
-        <div style={{ display: "grid", gap: 8 }}>
-          <label>Token
-            <input value={verifyToken} onChange={(e) => setVerifyToken(e.target.value)} style={{ width: "100%" }} />
-          </label>
-          <button onClick={handleVerify}>Verify</button>
-        </div>
-      </section>
-
-      <section style={{ border:"1px solid #ddd", padding:16, borderRadius:12, marginTop:16 }}>
-        <h3>Forgot password</h3>
-        <form onSubmit={onForgot} style={{ display:"grid", gap:8, maxWidth:420 }}>
-          <label>Email
-            <input type="email" required value={forgotEmail}
-                   onChange={(e)=>setForgotEmail(e.target.value)} />
-          </label>
-          <button type="submit">Send reset link</button>
-          <small>Мы всегда отвечаем 200 и не раскрываем, существует ли аккаунт.</small>
-        </form>
-      </section>
-
-      <section style={{ border:"1px solid #ddd", padding:16, borderRadius:12, marginTop:12 }}>
-        <h3>Reset password</h3>
-        <form onSubmit={onReset} style={{ display:"grid", gap:8, maxWidth:420 }}>
-          <label>Token
-            <input required value={resetToken}
-                   placeholder="paste token from email link"
-                   onChange={(e)=>setResetToken(e.target.value)} />
-          </label>
-          <label>New password
-            <input type="password" required value={resetNewPwd}
-                   onChange={(e)=>setResetNewPwd(e.target.value)} />
-          </label>
-          <button type="submit">Reset</button>
-          <small>Токен одноразовый, действует ~30 минут.</small>
-        </form>
-      </section>
-
-      <section style={{ border: "1px solid #ddd", padding: 16, borderRadius: 12, marginTop: 16 }}>
-        <h2>3) Login → Get Tokens</h2>
-        <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-          <button onClick={() => window.location.href = oauthUrl("google")}>Sign in with Google</button>
-          <button onClick={() => window.location.href = oauthUrl("github")}>Sign in with GitHub</button>
-        </div>
-        <form onSubmit={handleLogin} style={{ display: "grid", gap: 8, maxWidth: 420 }}>
-          <label>Email
-            <input type="email" required value={email} onChange={(e)=>setEmail(e.target.value)} />
-          </label>
-          <label>Password
-            <input type="password" required value={password} onChange={(e)=>setPassword(e.target.value)} />
-          </label>
-          <button type="submit">Login</button>
-        </form>
-        {need2fa && (
-          <div style={{ marginTop: 8, border: "1px dashed #ccc", padding: 8, borderRadius: 8 }}>
-            <div>Enter 6-digit code from your authenticator app or a recovery code:</div>
-            <input value={twofaCode} onChange={(e)=>setTwofaCode(e.target.value)} placeholder="123456 or RECOVERYCODE" />
-            <button onClick={verify2fa} disabled={!twofaCode}>Verify 2FA</button>
-          </div>
-        )}
-        <div style={{ marginTop: 8 }}>
-          <div>Access Token:</div>
-          <code style={{ wordBreak: "break-all" }}>{accessToken || "—"}</code>
-        </div>
-        <div style={{ marginTop: 8 }}>
-          <div>Refresh Token:</div>
-          <code style={{ wordBreak: "break-all" }}>{refreshToken || "—"}</code>
-        </div>
-        <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-          <button onClick={handleRefresh} disabled={!refreshToken}>Refresh access</button>
-          <button onClick={handleMe} disabled={!accessToken}>Call /protected/me</button>
-          <button onClick={spamTest} disabled={!accessToken}>Spam test (25)</button>
-          <button onClick={handleLogout} style={{ marginLeft: "auto" }}>Logout</button>
-        </div>
-        {me && (
-          <pre style={{ background: "#f7f7f7", padding: 12, borderRadius: 8, marginTop: 8 }}>
-            {JSON.stringify(me, null, 2)}
-          </pre>
-        )}
-      </section>
-
-      <section style={{ border:"1px solid #ddd", padding:16, borderRadius:12, marginTop:16 }}>
-        <h2>Security (2FA)</h2>
-        <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-          <button onClick={async ()=>{
-            try{
-              const r = await api.twofaEnroll(accessToken);
-              setTwofaSetup({ qr: r.qrPngBase64, secretMasked: r.secretMasked, recovery: null });
-            }catch(e){ alert(e?.data?.error || 'Enroll failed'); }
-          }} disabled={!accessToken}>Enable 2FA (enroll)</button>
-
-          {twofaSetup.qr && (
-            <div style={{ display:'flex', gap:12, alignItems:'center' }}>
-              <img alt="QR" src={`data:image/png;base64,${twofaSetup.qr}`} width={128} height={128} />
-              <div>
-                <div>Secret: {twofaSetup.secretMasked}</div>
-                <input value={twofaCode} onChange={(e)=>setTwofaCode(e.target.value)} placeholder="123456" maxLength={6} />
-                <button onClick={async ()=>{
-                  try{
-                    const v = await api.twofaVerifySetup(accessToken, twofaCode);
-                    setTwofaSetup(s=>({...s, recovery: v.recoveryCodes || []}));
-                    alert('2FA enabled');
-                  }catch(e){ alert(e?.data?.error || 'Verify failed'); }
-                }} disabled={!twofaCode}>Confirm setup</button>
-              </div>
-            </div>
-          )}
-
-          {twofaSetup.recovery && (
-            <div style={{ marginTop:8 }}>
-              <b>Recovery codes (save now):</b>
-              <ul>{twofaSetup.recovery.map((c,i)=>(<li key={i}><code>{c}</code></li>))}</ul>
-            </div>
-          )}
-
-          <div style={{ marginTop:8 }}>
-            <input value={twofaCode} onChange={(e)=>setTwofaCode(e.target.value)} placeholder="code or recovery" />
-            <button onClick={async ()=>{
-              try{
-                await api.twofaDisable(accessToken, twofaCode);
-                setTwofaSetup({ qr:null, secretMasked:null, recovery:null }); setTwofaCode('');
-                alert('2FA disabled');
-              }catch(e){ alert(e?.data?.error || 'Disable failed'); }
-            }} disabled={!accessToken || !twofaCode}>Disable 2FA</button>
-          </div>
-        </div>
-      </section>
-
-      <section style={{ border: "1px solid #ddd", padding: 16, borderRadius: 12, marginTop: 16 }}>
-        <h3>Log</h3>
-        <textarea readOnly rows={10} style={{ width: "100%", fontFamily: "monospace" }} value={log} />
-      </section>
+      </header>
+      <main style={{ marginTop: 16 }}>
+        <Routes>
+          <Route path="/" element={<Home ctx={ctx} />} />
+          <Route path="/register" element={<Register ctx={ctx} />} />
+          <Route path="/login" element={<Login ctx={ctx} />} />
+          <Route path="/privacy" element={<Privacy ctx={ctx} />} />
+          <Route path="/activity" element={<Protected><Activity ctx={ctx} /></Protected>} />
+          <Route path="/weight" element={<Protected><Weight ctx={ctx} /></Protected>} />
+          <Route path="/analytics" element={<Protected><Analytics ctx={ctx} /></Protected>} />
+          <Route path="/ai" element={<Protected><AI ctx={ctx} /></Protected>} />
+          <Route path="/profile" element={<Protected><Profile ctx={ctx} /></Protected>} />
+          <Route path="/security" element={<Protected><Security ctx={ctx} /></Protected>} />
+          <Route path="/auth/verify" element={<Verify ctx={ctx} />} />
+          <Route path="/forgot" element={<Forgot ctx={ctx} />} />
+          <Route path="/reset" element={<Reset ctx={ctx} />} />
+          <Route path="/log" element={<Log ctx={ctx} />} />
+          <Route path="/oauth-callback" element={<OAuthCallback onTokens={({ access, refresh }) => { setAccessToken(access); setRefreshToken(refresh); setTokens(access, refresh); navigate('/profile'); }} />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </main>
     </div>
   );
 }

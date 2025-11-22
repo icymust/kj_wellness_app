@@ -4,6 +4,7 @@ import com.ndl.numbers_dont_lie.entity.PasswordResetToken;
 import com.ndl.numbers_dont_lie.entity.UserEntity;
 import com.ndl.numbers_dont_lie.repository.PasswordResetTokenRepository;
 import com.ndl.numbers_dont_lie.repository.UserRepository;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.bcrypt.BCrypt;
 import org.springframework.stereotype.Service;
 
@@ -16,6 +17,11 @@ public class PasswordResetService {
   private final UserRepository users;
   private final PasswordResetTokenRepository tokens;
 
+  // Base URL of the frontend used to compose password reset links.
+  // Can be overridden via environment variable APP_FRONTEND_BASE_URL or property app.frontend.base-url
+  @Value("${app.frontend.base-url:${APP_FRONTEND_BASE_URL:http://localhost:8080}}")
+  private String frontendBaseUrl;
+
   public PasswordResetService(UserRepository users, PasswordResetTokenRepository tokens) {
     this.users = users; this.tokens = tokens;
   }
@@ -27,8 +33,8 @@ public class PasswordResetService {
       t.setToken(UUID.randomUUID().toString());
       t.setExpiresAt(Instant.now().plus(Duration.ofMinutes(30)));
       tokens.save(t);
-      // emulate sending email by logging
-      System.out.println("[MAIL] Reset link: http://localhost:8080/auth/reset?token=" + t.getToken());
+      String link = String.format("%s/reset?token=%s", frontendBaseUrl.replaceAll("/+$", ""), t.getToken());
+      System.out.println("[MAIL] Reset link: " + link);
     });
   }
 

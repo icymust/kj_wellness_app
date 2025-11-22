@@ -10,19 +10,23 @@ export default function OAuthCallback({ onTokens }) {
     const tempToken = params.get("tempToken");
     const error = params.get("error");
 
+    let redirect = "/";
     if (error) {
       alert("OAuth error: " + error);
+      redirect = "/login";
     } else if (access && refresh) {
-      onTokens?.({ access, refresh });
       localStorage.setItem("accessToken", access);
       localStorage.setItem("refreshToken", refresh);
+      onTokens?.({ access, refresh });
       alert("OAuth login success");
+      redirect = "/profile";
     } else if (need2fa === "1" && tempToken) {
-      // Store temporary pre-2FA token and let the main app show the 2FA verify box
       localStorage.setItem("pre2faTempToken", tempToken);
+      localStorage.setItem("pre2faFlag", "1");
       alert("Two-factor authentication required — please enter your code.");
+      redirect = "/login";
     }
-    window.location.replace("/");
-  }, []);
+    window.location.replace(redirect);
+  }, [onTokens]);
   return <div style={{padding:16}}>Finishing OAuth login…</div>;
 }
