@@ -1,58 +1,121 @@
-# Read Me First
-The following was discovered as part of building this project:
 
-* The original package name 'com.ndl.numbers-dont-lie' is invalid and this project uses 'com.ndl.numbers_dont_lie' instead.
+## Environment setup (.env)
 
-# Getting Started
+Create a `.env` file in the project root (next to `docker-compose.yml`). Do NOT commit it.
 
-### Reference Documentation
-For further reference, please consider the following sections:
-
-* [Official Apache Maven documentation](https://maven.apache.org/guides/index.html)
-* [Spring Boot Maven Plugin Reference Guide](https://docs.spring.io/spring-boot/3.5.6/maven-plugin)
-* [Create an OCI image](https://docs.spring.io/spring-boot/3.5.6/maven-plugin/build-image.html)
-* [Spring Web](https://docs.spring.io/spring-boot/3.5.6/reference/web/servlet.html)
-
-### Guides
-The following guides illustrate how to use some features concretely:
-
-* [Building a RESTful Web Service](https://spring.io/guides/gs/rest-service/)
-* [Serving Web Content with Spring MVC](https://spring.io/guides/gs/serving-web-content/)
-* [Building REST services with Spring](https://spring.io/guides/tutorials/rest/)
-
-### Maven Parent overrides
-
-Due to Maven's design, elements are inherited from the parent POM to the project POM.
-While most of the inheritance is fine, it also inherits unwanted elements like `<license>` and `<developers>` from the parent.
-To prevent this, the project POM contains empty overrides for these elements.
-If you manually switch to a different parent and actually want the inheritance, you need to remove those overrides.
-
-## Rate Limiting Configuration
-
-The application uses a simple in-memory per-user/IP sliding window limiter (`RateLimitFilter`). It is not cluster-safe; for production use a distributed store (Redis / Bucket4j with external persistence).
-
-Configuration (in `application.yml` under `app.rate-limit`):
+Template (see `.env.example`):
 
 ```
+GITHUB_CLIENT_ID=
+GITHUB_CLIENT_SECRET=
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+
+# Frontend origin used for OAuth redirects (dev with docker-compose)
+FRONTEND_ORIGIN=http://localhost:8080
+
+# JWT signing secret (>=32 secure characters)
+JWT_SECRET=
+```
+
+Generate a secure secret (macOS / Linux):
+
+```bash
+openssl rand -base64 48 | tr -d '\n'
+```
+
+Put the result into `JWT_SECRET`. Rotate when moving to production.
+
+## Obtaining OAuth credentials
+
+GitHub (OAuth Apps):  https://github.com/settings/developers  → New OAuth App
+- Homepage URL: `http://localhost:8080`
+- Authorization callback URL: `http://localhost:5173/login/oauth2/code/github` (backend port)
+
+Google Cloud Console: https://console.cloud.google.com/auth/clients/
+- Create OAuth Client ID (Web application)
+- Authorized JavaScript origins: `http://localhost:8080`
+- Authorized redirect URIs: `http://localhost:5173/login/oauth2/code/google`
+
+Copy Client ID / Client Secret values into `.env`.
+
+## .env and docker-compose linkage
+
+`docker-compose.yml` passes environment variables into the `app` service (backend). Example block:
+
+```yaml
+  environment:
+    SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/ndl
+    SPRING_DATASOURCE_USERNAME: postgres
+    SPRING_DATASOURCE_PASSWORD: postgres
+    SERVER_PORT: 5173
+    GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+    GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+    GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+    GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+    FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-}
+    JWT_SECRET: ${JWT_SECRET:-changeme-dev}
+```
+
+The backend reads the secret via `app.jwt.secret` (`application.yml`). For dynamic usage ensure it references `${JWT_SECRET}` (already configured).
+
+## Frontend base URL property
+
+In `application.yml` you can define:
+
+```yaml
 app:
-	rate-limit:
-		default-per-minute: 120   # Base requests per minute for any key (email if authenticated else IP)
-		window-seconds: 60        # Window length in seconds
-		override:
-			auth2faVerify: 10       # /auth/2fa/verify endpoint stricter limit
-			twofaVerifySetup: 10    # /2fa/verify-setup endpoint stricter limit
+  frontend:
+    base-url: ${FRONTEND_ORIGIN:http://localhost:8080}
 ```
 
-On exceeding the limit a `429` JSON response is returned:
+Useful for generating links (redirects, CORS). Document in README when deploying.
 
-```json
-{"error":"rate_limited","limitPerMinute":120,"retryAfterSec":<seconds>}
+## pgAdmin: login & database creation
+
+Service available at: http://localhost:5050
+
+Credentials (from docker-compose):
+- Email: `admin@example.com`
+- Password: `admin`
+
+Steps:
+1. Open http://localhost:5050 and log in.
+2. Click "Add New Server".
+3. General → Name: `ndl-local`.
+4. Connection:
+   - Host: `db` (Docker service name for Postgres)
+   - Port: `5432`
+   - Maintenance DB: `postgres`
+   - Username: `postgres`
+   - Password: `postgres`
+   - Save Password: On
+5. Save. Server appears in the list.
+6. If database `ndl` is missing: expand server → Databases → Create Database → Name: `ndl` → Owner: `postgres` → Save.
+
+Verification:
+Expand `ndl` → Schemas → public → Tables (created automatically by JPA on app start).
+
+## Fast development cycle
+
+Run with Docker:
+```bash
+docker compose up --build
 ```
 
-The front-end waits at least 60 seconds before retrying after a 429.
+Frontend: http://localhost:8080
+Backend API: http://localhost:5173
 
-Scaling suggestions:
-1. Replace the filter with a Redis-backed token bucket.
-2. Externalize limits to config service or environment variables.
-3. Separate user vs IP vs global buckets if needed.
+Stop:
+```bash
+docker compose down
+```
 
+## Health / Export
+
+Use endpoint `/export/health` (requires auth) to download full data. Frontend button "Download health data" saves `export.json` containing profile, weights, activities, consent.
+
+---
+OAuth registration links:
+https://github.com/settings/developers
+https://console.cloud.google.com/auth/clients/
