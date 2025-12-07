@@ -123,18 +123,18 @@ export default function Dashboard({ ctx }) {
       <h1 style={{ margin:0 }}>Dashboard</h1>
       {isRateLimited && (
         <div style={{ fontSize:13, background:'#fff3e0', padding:12, border:'1px solid #ffc107', borderRadius:8 }}>
-          Превышен лимит запросов. Обновим данные через {Math.ceil((rateLimitUntil - Date.now())/1000)}s.
+          Rate limit exceeded. We will refresh data in {Math.ceil((rateLimitUntil - Date.now())/1000)}s.
         </div>
       )}
       {(!isRateLimited && dashboardLoading && !hasData) ? (
         <div style={{ display:'grid', gap:12, padding:16, border:'1px solid #eee', borderRadius:8, background:'#fafafa' }}>
-          <div style={{ fontSize:13, opacity:0.7 }}>Загружаем данные…</div>
+          <div style={{ fontSize:13, opacity:0.7 }}>Loading data…</div>
           <SkeletonBlock lines={4} />
         </div>
       ) : null}
       {dashboardError && !hasData && !dashboardLoading && !isRateLimited && (
         <div style={{ fontSize:13, background:'#fdecea', padding:12, border:'1px solid #f44336', borderRadius:8 }}>
-          Ошибка загрузки: {dashboardError}
+          Load error: {dashboardError}
         </div>
       )}
       <DashboardComparison summary={summary} week={week} monthData={monthData} ai={comparisonAi} />

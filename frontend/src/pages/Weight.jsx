@@ -47,7 +47,7 @@ export default function Weight({ ctx }) {
             onChange={(e)=>onChange('at', e.target.value)}
           />
         </label>
-        <small>Если пусто — возьмётся текущее время. Повтор того же timestamp вернёт 409.</small>
+        <small>If empty, the current time will be used.</small>
         <div style={{ display:'flex', gap:8 }}>
           <button type="submit" disabled={!form.weight}>Add</button>
           <button type="button" onClick={loadWeights}>Refresh history</button>

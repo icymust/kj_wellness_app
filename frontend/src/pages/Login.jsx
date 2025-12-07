@@ -3,7 +3,7 @@ export default function Login({ ctx }) {
   const forgotNav = () => { window.location.href = '/forgot'; };
   return (
     <section style={{ border: "1px solid #ddd", padding: 16, borderRadius: 12, marginTop: 16 }}>
-      <h2>3) Login → Get Tokens</h2>
+      <h2>Login → Get Tokens</h2>
       <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
         <button onClick={() => window.location.href = oauthUrl("google")}>Sign in with Google</button>
         <button onClick={() => window.location.href = oauthUrl("github")}>Sign in with GitHub</button>
@@ -16,14 +16,14 @@ export default function Login({ ctx }) {
           <input type="password" required value={password} onChange={(e)=>setPassword(e.target.value)} />
         </label>
         <button type="submit" disabled={loginLoading}>{loginLoading ? 'Вход...' : 'Login'}</button>
-        <button type="button" onClick={forgotNav} style={{ background:'none', border:'none', color:'#06c', textDecoration:'underline', padding:0, textAlign:'left', cursor:'pointer' }}>Забыли пароль?</button>
+  <button type="button" onClick={forgotNav} style={{ background:'none', border:'none', color:'#06c', textDecoration:'underline', padding:0, textAlign:'left', cursor:'pointer' }}>Forgot password?</button>
       </form>
       {loginError && <div style={{ marginTop:8, color:'#b00' }}>{loginError}</div>}
       {need2fa && (
         <div style={{ marginTop: 8, border: "1px dashed #ccc", padding: 8, borderRadius: 8 }}>
           <div>Enter 6-digit code from your authenticator app or a recovery code:</div>
           <input value={twofaCode} onChange={(e)=>setTwofaCode(e.target.value)} placeholder="123456 or RECOVERYCODE" />
-          <button onClick={verify2fa} disabled={!twofaCode || twofaLoading}>{twofaLoading ? 'Проверка...' : 'Verify 2FA'}</button>
+          <button onClick={verify2fa} disabled={!twofaCode || twofaLoading}>{twofaLoading ? 'Verification...' : 'Verify 2FA'}</button>
           {twofaError && <div style={{ marginTop:4, color:'#b00' }}>{twofaError}</div>}
         </div>
       )}

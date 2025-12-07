@@ -125,7 +125,7 @@ function AppShell() {
     setVerificationLink(null);
     setVerifyStatus(null);
     if (!email || !password || password.length < 6) {
-      setRegisterError("Пароль должен быть не менее 6 символов");
+  setRegisterError("Password must be at least 6 characters");
       return;
     }
     setRegisterLoading(true);
@@ -133,9 +133,9 @@ function AppShell() {
       const res = await api.register(email, password);
       setVerificationLink(res.verificationLink || null);
       if (res.verificationLink) {
-        setVerifyStatus("Пользователь создан. Перейдите по ссылке для подтверждения почты.");
+  setVerifyStatus("User created. Please follow the verification link sent to your email.");
       } else {
-        setVerifyStatus("Пользователь создан. Ссылка для подтверждения в логах сервера.");
+  setVerifyStatus("User created. Verification link is available in server logs.");
       }
     } catch (err) {
       setRegisterError(err?.data?.error || err.message);
@@ -195,7 +195,7 @@ function AppShell() {
         setTokens(res.accessToken, res.refreshToken || null);
         navigate('/profile'); // redirect after login
       } else {
-        setLoginError('Неизвестный ответ сервера');
+  setLoginError('Unknown server response');
       }
     } catch (err) {
       setLoginError(err?.data?.error || err.message);
@@ -218,7 +218,7 @@ function AppShell() {
         localStorage.removeItem('pre2faFlag');
         navigate('/profile');
       } else {
-        setTwofaError('Ответ без токена');
+  setTwofaError('Response missing token');
       }
     } catch (err) {
       setTwofaError(err?.data?.error || err.message);
@@ -241,7 +241,7 @@ function AppShell() {
         setTokens(r.accessToken, refreshToken);
       }
     } catch (err) {
-      console.warn('Refresh failed', err);
+  console.warn('Refresh failed', err);
       handleLogout();
     }
   };
@@ -252,7 +252,7 @@ function AppShell() {
       const r = await api.me(accessToken);
       setMe(r.user || r);
     } catch (err) {
-      console.warn('me failed', err);
+  console.warn('me failed', err);
     }
   };
 
@@ -292,11 +292,11 @@ function AppShell() {
       setProfileSuccess('Profile saved');
       return saved;
     } catch (e) {
-      console.warn('saveProfile', e);
+  console.warn('saveProfile', e);
       if (e.status === 400 && e.data?.error) {
         setProfileError(e.data.error);
       } else {
-        setProfileError('Failed to save profile');
+  setProfileError('Failed to save profile');
       }
       throw e;
     } finally {
@@ -493,7 +493,7 @@ function AppShell() {
   return (
     <div style={{ padding: 16, fontFamily: 'Arial, sans-serif' }}>
       <header style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-        <h1 style={{ margin: 0, fontSize: 18 }}>Numbers-Don't-Lie — Demo</h1>
+        <h1 style={{ margin: 0, fontSize: 18 }}>Numbers-Don't-Lie</h1>
         <nav style={{ marginLeft: 12, display: 'flex', gap: 8 }}>
           <Link to="/">Home</Link>
           <Link to="/register">Register</Link>

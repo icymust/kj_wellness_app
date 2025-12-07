@@ -95,14 +95,14 @@ public class AiInsightsService {
     if (aiDisabled || !(canUseProfile || canUseHistory || canUseHabits)) {
       // Safe defaults: generic tips
       items.add(new AiInsightItemDto(
-        "Еженедельная активность",
-        "Старайтесь набирать не менее 150 минут умеренной активности в неделю и двигаться хотя бы 3 дня из 7.",
+        "Weekly activity",
+        "Aim for at least 150 minutes of moderate activity per week and move at least 3 days out of 7.",
         "medium",
         List.of("generic","activity")
       ));
       items.add(new AiInsightItemDto(
-        "Баланс питания",
-        "Сбалансируйте рацион: больше овощей, клетчатки и воды; избегайте лишнего сахара и ультра-переработанных продуктов.",
+        "Nutrition balance",
+        "Balance your diet: more vegetables, fiber and water; avoid excess sugar and ultra-processed foods.",
         "low",
         List.of("generic","nutrition")
       ));
@@ -124,23 +124,23 @@ public class AiInsightsService {
       var bmi = HealthCalc.bmi(latestWeight, heightCm);
       switch (bmi.classification) {
         case "underweight" -> items.add(new AiInsightItemDto(
-          "Недовес",
-          "Ваш BMI ниже нормы. Обсудите с врачом, как безопасно набрать вес и скорректировать питание.",
+          "Underweight",
+          "Your BMI is below normal. Discuss with a doctor how to gain weight safely and adjust nutrition.",
           "medium",
           List.of("bmi","underweight")));
         case "overweight" -> items.add(new AiInsightItemDto(
-          "Избыточный вес",
-          "Цельтесь в умеренный дефицит калорий и больше активности. 0.25–0.5 кг в неделю — реалистичный темп.",
+          "Overweight",
+          "Aim for a modest calorie deficit and more activity. 0.25–0.5 kg per week is a realistic pace.",
           "high",
           List.of("bmi","overweight")));
         case "obese" -> items.add(new AiInsightItemDto(
-          "Высокий BMI",
-          "Рекомендуем консультацию со специалистом и постепенные изменения: шаговая активность, сила, контроль калорий.",
+          "High BMI",
+          "We recommend consulting a specialist and gradual changes: walking, strength work, and calorie control.",
           "high",
           List.of("bmi","obese")));
         default -> items.add(new AiInsightItemDto(
-          "Нормальный BMI",
-          "Поддерживайте текущий вес за счёт регулярной активности и сбалансированного питания.",
+          "Normal BMI",
+          "Maintain your current weight through regular activity and balanced nutrition.",
           "low",
           List.of("bmi","normal")));
       }
@@ -152,21 +152,21 @@ public class AiInsightsService {
         var week = activityService.weekSummary(email, LocalDate.now());
         if (week.totalMinutes < 150) {
           items.add(new AiInsightItemDto(
-            "Нарастить активность",
-            "Добавьте 1–2 короткие прогулки или сессию на 20–30 минут, чтобы выйти на 150+ минут/нед.",
+            "Increase activity",
+            "Add 1–2 short walks or a 20–30 minute session to reach 150+ minutes/week.",
             week.totalMinutes < 90 ? "high" : "medium",
             List.of("activity","weekly")));
         } else {
           items.add(new AiInsightItemDto(
-            "Отличная неделя",
-            "Вы выполняете рекомендации ВОЗ по активности. Продолжайте в том же духе!",
+            "Great week",
+            "You are meeting WHO activity recommendations. Keep it up!",
             "low",
             List.of("activity","weekly")));
         }
         if (week.daysActive < 3) {
           items.add(new AiInsightItemDto(
-            "Дни активности",
-            "Старайтесь двигаться хотя бы 3 дня из 7 — небольшие регулярные сессии дают большой эффект.",
+            "Active days",
+            "Try to move at least 3 days out of 7 — small regular sessions have a big impact.",
             "medium",
             List.of("activity","frequency")));
         }
@@ -177,15 +177,15 @@ public class AiInsightsService {
         long activeDays = byDay.values().stream().filter(v -> v > 0).count();
         if (total < 600) { // < 10 hours per month
           items.add(new AiInsightItemDto(
-            "Мало суммарной активности",
-            "Подумайте о планировании 3×30 мин в неделю — это ~6 часов в месяц и заметный вклад в здоровье.",
+            "Low total activity",
+            "Consider planning 3×30 min weekly — that’s ~6 hours per month and a noticeable health benefit.",
             "medium",
             List.of("activity","monthly")));
         }
         if (activeDays < 12) {
           items.add(new AiInsightItemDto(
-            "Нерегулярность",
-            "Увеличьте число активных дней: даже 10–15 минут в будни помогут сформировать устойчивую привычку.",
+            "Irregularity",
+            "Increase the number of active days: even 10–15 minutes on weekdays help build a sustainable habit.",
             "low",
             List.of("activity","consistency")));
         }
@@ -199,20 +199,20 @@ public class AiInsightsService {
         double diff = Math.abs(latestWeight - target);
         if (diff <= 1.0) {
           items.add(new AiInsightItemDto(
-            "Вы близки к цели",
-            "Осталось совсем немного — продолжайте поддерживать режим и плавно выходите на поддержание.",
+            "Close to your goal",
+            "You’re almost there — keep your routine and gradually transition to maintenance.",
             "low",
             List.of("goal","progress")));
         } else if (diff <= 3.0) {
           items.add(new AiInsightItemDto(
-            "Хороший прогресс",
-            "Вы на расстоянии 1–3 кг от цели. Сфокусируйтесь на сне и регулярных шагах, чтобы закрепить успех.",
+            "Good progress",
+            "You are 1–3 kg from your goal. Focus on sleep and regular steps to cement success.",
             "medium",
             List.of("goal","progress")));
         } else {
           items.add(new AiInsightItemDto(
-            "Держим курс",
-            "Большая цель требует времени. Разбейте её на этапы по 2–3 кг и отмечайте малые победы.",
+            "Stay the course",
+            "Big goals take time. Break them into 2–3 kg stages and celebrate small wins.",
             "low",
             List.of("goal","progress")));
         }

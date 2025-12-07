@@ -39,7 +39,7 @@ export default function Security({ ctx }) {
       <h2>Security (2FA)</h2>
       {!twofaEnabled && (
         <div style={{ marginBottom: 12 }}>
-          <button onClick={startEnroll} disabled={!accessToken}>Включить 2FA</button>
+          <button onClick={startEnroll} disabled={!accessToken}>Disable 2FA</button>
         </div>
       )}
       {!twofaEnabled && twofaSetup.qr && (
@@ -48,14 +48,14 @@ export default function Security({ ctx }) {
           <div>
             <div>Secret: {twofaSetup.secretMasked}</div>
             <input value={enrollCode} onChange={(e) => setEnrollCode(e.target.value)} placeholder="123456" maxLength={6} />
-            <button onClick={confirmEnroll} disabled={!enrollCode}>Подтвердить</button>
+            <button onClick={confirmEnroll} disabled={!enrollCode}>Confirm</button>
           </div>
         </div>
       )}
       {twofaEnabled && (
         <div style={{ marginBottom: 12 }}>
           <input value={disableCode} onChange={(e) => setDisableCode(e.target.value)} placeholder="code or recovery" />
-          <button onClick={disable} disabled={!accessToken || !disableCode}>Отключить 2FA</button>
+          <button onClick={disable} disabled={!accessToken || !disableCode}>Disable 2FA</button>
         </div>
       )}
       {twofaSetup.recovery && (

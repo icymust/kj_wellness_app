@@ -60,7 +60,7 @@ export default function WeightChart({ entries = [], targetWeightKg = null, initi
   }, [entries, targetWeightKg, initialWeightKg]);
 
   if (!data.length) {
-    return <div style={{ padding: 12, border: "1px solid #eee", borderRadius: 8 }}>Нет данных веса</div>;
+    return <div style={{ padding: 12, border: "1px solid #eee", borderRadius: 8 }}>No weight data</div>;
   }
 
   // границы оси Y c небольшим отступом
