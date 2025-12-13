@@ -1,3 +1,4 @@
+import '../styles/Privacy.css';
 export default function Privacy({ ctx }) {
   const { loadConsent, exportData, exportHealth, saveConsent, consentForm, setConsentForm, accessToken } = ctx;
   return (

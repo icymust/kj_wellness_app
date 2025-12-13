@@ -1,0 +1,42 @@
+.dashboard-wrap {
+  display: grid;
+  gap: 24px;
+  padding: 16px;
+}
+.rate-limit {
+  font-size: 13px;
+  background: #fff3e0;
+  padding: 12px;
+  border: 1px solid #ffc107;
+  border-radius: 8px;
+}
+.skeleton {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  background: #fafafa;
+}
+.skeleton-note {
+  font-size: 13px;
+  opacity: 0.7;
+}
+.error-box {
+  font-size: 13px;
+  background: #fdecea;
+  padding: 12px;
+  border: 1px solid #f44336;
+  border-radius: 8px;
+}
+.comparison-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  align-items: start;
+}
+.card {
+  padding: 12px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+}

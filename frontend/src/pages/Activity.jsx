@@ -1,3 +1,4 @@
+import '../styles/Activity.css';
 import React, { useRef, useState, useMemo } from "react";
 import ActivityWeekChart from "../components/ActivityWeekChart.jsx";
 import ActivityMonthChart from "../components/ActivityMonthChart.jsx";

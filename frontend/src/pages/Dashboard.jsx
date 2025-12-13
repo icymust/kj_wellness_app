@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import '../styles/Dashboard.css';
 
 // Простой скелетон для предотвращения "дёрганья" текста загрузки.
 function SkeletonBlock({ lines = 3, height = 14 }) {
@@ -49,8 +50,8 @@ function DashboardComparison({ summary, week, monthData, ai }) {
   }
 
   return (
-    <section style={{ display:'grid', gap:16, gridTemplateColumns:'repeat(auto-fit,minmax(320px,1fr))', alignItems:'start' }}>
-      <div style={{ padding:12, border:'1px solid #ddd', borderRadius:8 }}>
+    <section className="comparison-grid">
+      <div className="card">
         <h2 style={{ marginTop:0 }}>Comparison view</h2>
         <div style={{ display:'grid', gap:12, marginTop:8 }}>
           <div>
@@ -79,7 +80,7 @@ function DashboardComparison({ summary, week, monthData, ai }) {
           </div>
         </div>
       </div>
-      <div style={{ padding:12, border:'1px solid #ddd', borderRadius:8 }}>
+      <div className="card">
         <h3 style={{ marginTop:0 }}>AI recommendations</h3>
         {ai?.items?.length ? (
           <ul style={{ listStyle:'none', padding:0, margin:0, marginTop:8 }}>
@@ -119,21 +120,21 @@ export default function Dashboard({ ctx }) {
   const comparisonAi = ai;
 
   return (
-    <div style={{ display:'grid', gap:24, padding:16 }}>
+    <div className="dashboard-wrap">
       <h1 style={{ margin:0 }}>Dashboard</h1>
       {isRateLimited && (
-        <div style={{ fontSize:13, background:'#fff3e0', padding:12, border:'1px solid #ffc107', borderRadius:8 }}>
+        <div className="rate-limit">
           Rate limit exceeded. We will refresh data in {Math.ceil((rateLimitUntil - Date.now())/1000)}s.
         </div>
       )}
       {(!isRateLimited && dashboardLoading && !hasData) ? (
-        <div style={{ display:'grid', gap:12, padding:16, border:'1px solid #eee', borderRadius:8, background:'#fafafa' }}>
-          <div style={{ fontSize:13, opacity:0.7 }}>Loading data…</div>
+        <div className="skeleton">
+          <div className="skeleton-note">Loading data…</div>
           <SkeletonBlock lines={4} />
         </div>
       ) : null}
       {dashboardError && !hasData && !dashboardLoading && !isRateLimited && (
-        <div style={{ fontSize:13, background:'#fdecea', padding:12, border:'1px solid #f44336', borderRadius:8 }}>
+        <div className="error-box">
           Load error: {dashboardError}
         </div>
       )}

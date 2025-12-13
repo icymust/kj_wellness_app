@@ -1,3 +1,4 @@
+import '../styles/Login.css';
 export default function Login({ ctx }) {
   const { oauthUrl, email, setEmail, password, setPassword, handleLogin, loginError, loginLoading, need2fa, twofaCode, setTwofaCode, verify2fa, twofaError, twofaLoading, accessToken, refreshToken, handleRefresh, handleMe, handleLogout, me } = ctx;
   const forgotNav = () => { window.location.href = '/forgot'; };
@@ -15,7 +16,7 @@ export default function Login({ ctx }) {
         <label>Password
           <input type="password" required value={password} onChange={(e)=>setPassword(e.target.value)} />
         </label>
-        <button type="submit" disabled={loginLoading}>{loginLoading ? 'Вход...' : 'Login'}</button>
+  <button type="submit" disabled={loginLoading}>{loginLoading ? 'Signing in...' : 'Login'}</button>
   <button type="button" onClick={forgotNav} style={{ background:'none', border:'none', color:'#06c', textDecoration:'underline', padding:0, textAlign:'left', cursor:'pointer' }}>Forgot password?</button>
       </form>
       {loginError && <div style={{ marginTop:8, color:'#b00' }}>{loginError}</div>}

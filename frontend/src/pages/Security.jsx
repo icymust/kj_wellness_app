@@ -1,67 +1,137 @@
-import React, { useState, useMemo } from 'react';
+import "../styles/Security.css";
+import React, { useState } from "react";
 
 export default function Security({ ctx }) {
-  const { twofaSetup, setTwofaSetup, api, accessToken, me } = ctx;
-  const [enrollCode, setEnrollCode] = useState('');
-  const [disableCode, setDisableCode] = useState('');
+  const { api, accessToken, me, setMe } = ctx;
 
-  // Determine active status: prefer server flag if present, fallback to presence of recovery codes previously fetched
-  const twofaEnabled = useMemo(() => {
-    if (me && typeof me.twofaEnabled === 'boolean') return me.twofaEnabled;
-    return Array.isArray(twofaSetup.recovery) && twofaSetup.recovery.length > 0;
-  }, [me, twofaSetup.recovery]);
+  const [twofaSetup, setTwofaSetup] = useState({
+    qr: null,
+    secretMasked: null,
+    recovery: null,
+  });
+
+  const [enrollCode, setEnrollCode] = useState("");
+  // Disable flow removed per requirements: only optional enable & verify 2FA
+  const [loading, setLoading] = useState(false);
+
+  const twofaEnabled = !!me?.twofaEnabled;
 
   const startEnroll = async () => {
     try {
+      setLoading(true);
       const r = await api.twofaEnroll(accessToken);
-      setTwofaSetup({ qr: r.qrPngBase64, secretMasked: r.secretMasked, recovery: null });
-      setEnrollCode('');
-    } catch (e) { alert(e?.data?.error || 'Enroll failed'); }
-  };
-  const confirmEnroll = async () => {
-    try {
-      const v = await api.twofaVerifySetup(accessToken, enrollCode);
-      setTwofaSetup(s => ({ ...s, recovery: v.recoveryCodes || [] }));
-      alert('2FA enabled');
-    } catch (e) { alert(e?.data?.error || 'Verify failed'); }
-  };
-  const disable = async () => {
-    try {
-      await api.twofaDisable(accessToken, disableCode);
-      setTwofaSetup({ qr: null, secretMasked: null, recovery: null });
-      setEnrollCode(''); setDisableCode('');
-      alert('2FA disabled');
-    } catch (e) { alert(e?.data?.error || 'Disable failed'); }
+      setTwofaSetup({
+        qr: r.qrPngBase64,
+        secretMasked: r.secretMasked,
+        recovery: null,
+      });
+      setEnrollCode("");
+    } catch (e) {
+      console.error("Enroll failed", e?.data?.error || e);
+    } finally {
+      setLoading(false);
+    }
   };
 
+  const confirmEnroll = async () => {
+    try {
+      setLoading(true);
+      const v = await api.twofaVerifySetup(accessToken, enrollCode);
+
+      // Keep QR visible permanently as requested; only update recovery codes
+      setTwofaSetup(s => ({
+        qr: s.qr,
+        secretMasked: s.secretMasked,
+        recovery: v.recoveryCodes || [],
+      }));
+
+      setMe(m => ({ ...m, twofaEnabled: true }));
+      setEnrollCode("");
+
+      alert("2FA enabled");
+    } catch (e) {
+      // Suppress error alert per request; log for debugging
+      console.error("Verify failed", e?.data?.error || e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // No auto-enroll: QR should appear only during first enable flow
+
+  // Disable flow intentionally omitted
+
   return (
-    <section style={{ border: '1px solid #ddd', padding: 16, borderRadius: 12, marginTop: 16 }}>
+    <section
+      style={{
+        border: "1px solid #ddd",
+        padding: 16,
+        borderRadius: 12,
+        marginTop: 16,
+      }}
+    >
       <h2>Security (2FA)</h2>
-      {!twofaEnabled && (
+
+      {!twofaEnabled && !twofaSetup.qr && (
         <div style={{ marginBottom: 12 }}>
-          <button onClick={startEnroll} disabled={!accessToken}>Disable 2FA</button>
+          <button
+            onClick={startEnroll}
+            disabled={!accessToken || loading}
+          >
+            2FA
+          </button>
         </div>
       )}
+
       {!twofaEnabled && twofaSetup.qr && (
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 12 }}>
-          <img alt="QR" src={`data:image/png;base64,${twofaSetup.qr}`} width={128} height={128} />
+        <div
+          style={{
+            display: "flex",
+            gap: 12,
+            alignItems: "center",
+            marginBottom: 12,
+          }}
+        >
+          <img
+            alt="QR"
+            src={`data:image/png;base64,${twofaSetup.qr}`}
+            width={128}
+            height={128}
+          />
+
           <div>
-            <div>Secret: {twofaSetup.secretMasked}</div>
-            <input value={enrollCode} onChange={(e) => setEnrollCode(e.target.value)} placeholder="123456" maxLength={6} />
-            <button onClick={confirmEnroll} disabled={!enrollCode}>Confirm</button>
+            <div style={{ marginBottom: 6 }}>
+              Secret: {twofaSetup.secretMasked}
+            </div>
+
+            <input
+              value={enrollCode}
+              onChange={e => setEnrollCode(e.target.value)}
+              placeholder="123456"
+              maxLength={6}
+              style={{ marginRight: 8 }}
+            />
+
+            <button
+              onClick={confirmEnroll}
+              disabled={loading || enrollCode.length !== 6}
+            >
+              Confirm
+            </button>
           </div>
         </div>
       )}
-      {twofaEnabled && (
-        <div style={{ marginBottom: 12 }}>
-          <input value={disableCode} onChange={(e) => setDisableCode(e.target.value)} placeholder="code or recovery" />
-          <button onClick={disable} disabled={!accessToken || !disableCode}>Disable 2FA</button>
-        </div>
-      )}
+
       {twofaSetup.recovery && (
-        <div style={{ marginTop: 8 }}>
-          <b>Recovery codes (save now):</b>
-          <ul>{twofaSetup.recovery.map((c, i) => (<li key={i}><code>{c}</code></li>))}</ul>
+        <div style={{ marginTop: 12 }}>
+          <b>Recovery codes. Save them now:</b>
+          <ul>
+            {twofaSetup.recovery.map((c, i) => (
+              <li key={i}>
+                <code>{c}</code>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
     </section>

@@ -1,9 +1,10 @@
+import '../styles/Weight.css';
 import React, { useState, useRef, useMemo } from "react";
 import WeightChart from "../components/WeightChart.jsx";
 
 export default function Weight({ ctx }) {
   const { addWeight, loadWeights, weights, summary, profile } = ctx;
-  // Локальное состояние формы — не трогаем глобальные стейты при наборе
+  // Local form state — do not touch global states while typing
   const [form, setForm] = useState({ weight: "", at: "" });
   const weightRef = useRef(null);
   const onChange = (field, value) => setForm(f => ({ ...f, [field]: value }));

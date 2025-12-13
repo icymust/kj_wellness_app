@@ -1,0 +1,11 @@
+.home-section {
+  border: 1px solid #ddd;
+  padding: 16px;
+  border-radius: 12px;
+}
+.home-section h2 {
+  margin-top: 0;
+}
+.home-section p {
+  margin: 8px 0;
+}

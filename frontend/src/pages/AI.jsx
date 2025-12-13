@@ -1,3 +1,4 @@
+import '../styles/AI.css';
 export default function AI({ ctx }) {
   const { aiScope, setAiScope, loadAiLatest, regenAi, ai, aiLoading } = ctx;
   return (

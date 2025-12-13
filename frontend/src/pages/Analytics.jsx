@@ -1,3 +1,4 @@
+import '../styles/Analytics.css';
 import WellnessGauge from "../components/WellnessGauge.jsx";
 import GoalProgressBar from "../components/GoalProgressBar.jsx";
 

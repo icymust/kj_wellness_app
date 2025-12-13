@@ -1,3 +1,4 @@
+import '../styles/Verify.css';
 export default function Verify({ ctx }) {
   const { verifyToken, setVerifyToken, handleVerify, verifyError, verifyStatus, verifyLoading } = ctx;
   return (

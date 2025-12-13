@@ -1,6 +1,8 @@
+import '../styles/Home.css';
+
 export default function Home() {
   return (
-    <section style={{ border: "1px solid #ddd", padding: 16, borderRadius: 12 }}>
+    <section className="home-section">
       <h2>Welcome</h2>
       <p>
         Numbers Don't Lie is a wellness tracker that helps you monitor weight, activity, BMI and goals.

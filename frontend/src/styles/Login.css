@@ -1,0 +1,10 @@
+.page-login { padding: 16px; }
+.link-inline {
+  background: none;
+  border: none;
+  color: #06c;
+  text-decoration: underline;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+}

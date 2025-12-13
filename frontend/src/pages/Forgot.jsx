@@ -1,3 +1,4 @@
+import '../styles/Forgot.css';
 import React, { useState } from 'react';
 
 export default function Forgot({ ctx }) {

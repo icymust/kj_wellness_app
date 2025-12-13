@@ -1,3 +1,4 @@
+import '../styles/Log.css';
 export default function Log({ ctx }) {
   const { log } = ctx;
   return (

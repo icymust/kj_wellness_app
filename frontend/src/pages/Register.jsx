@@ -1,3 +1,4 @@
+import '../styles/Register.css';
 export default function Register({ ctx }) {
   const { email, setEmail, password, setPassword, handleRegister, verificationLink, registerError, registerLoading, verifyStatus } = ctx;
   return (
@@ -10,7 +11,7 @@ export default function Register({ ctx }) {
         <label>Password (min 6)
           <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" required style={{ width: "100%" }} />
         </label>
-        <button type="submit" disabled={registerLoading}>{registerLoading ? "Регистрация..." : "Register"}</button>
+  <button type="submit" disabled={registerLoading}>{registerLoading ? "Registering..." : "Register"}</button>
       </form>
       {registerError && (
         <div style={{ marginTop: 8, color: "#b00" }}>{registerError}</div>
