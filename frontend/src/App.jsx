@@ -117,6 +117,7 @@ function AppShell() {
     publicProfile: false,
     emailProduct: false,
   });
+  const [consentLoaded, setConsentLoaded] = useState(false);
 
   // small helpers / placeholders so pages can call them without crashing
   const handleRegister = async (e) => {
@@ -403,7 +404,7 @@ function AppShell() {
   // Privacy handlers
   const loadConsent = async () => {
     if (!accessToken) return;
-    try { const r = await api.privacyGet(accessToken); setConsentForm(f=>({ ...f, ...r })); }
+    try { const r = await api.privacyGet(accessToken); setConsentForm(f=>({ ...f, ...r })); setConsentLoaded(true); }
     catch(e){ console.warn('loadConsent', e); }
   };
   const saveConsent = async (e) => {
@@ -411,6 +412,23 @@ function AppShell() {
     try { await api.privacySet(accessToken, consentForm); }
     catch(e){ console.warn('saveConsent', e); }
   };
+
+  // After authentication, ensure consent is fetched and enforce redirect when any required consent is missing
+  useEffect(() => {
+    if (!accessToken) {
+      setConsentLoaded(false);
+      return;
+    }
+    // fetch consent on token change
+    loadConsent().then(() => {
+      // Enforce strict model: all three required consents must be enabled
+      const allRequiredOk = !!consentForm.accepted && !!consentForm.allowAiUseProfile && !!consentForm.allowAiUseHistory;
+      if (consentLoaded === true && !allRequiredOk && location.pathname !== '/privacy') {
+        navigate('/privacy', { replace: true });
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accessToken]);
   const exportData = async () => {
     if (!accessToken) return;
     try { const r = await api.privacyExport(accessToken); const blob = new Blob([JSON.stringify(r, null, 2)], { type: 'application/json' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'export.json'; a.click(); URL.revokeObjectURL(url); }
@@ -451,6 +469,11 @@ function AppShell() {
   // Protected route wrapper
   const Protected = ({ children }) => {
     if (!accessToken) return <Navigate to="/login" replace />;
+    // Enforce strict model: all three required consents must be enabled for protected routes
+    const allRequiredOk = !!consentForm.accepted && !!consentForm.allowAiUseProfile && !!consentForm.allowAiUseHistory;
+    if (consentLoaded && !allRequiredOk && location.pathname !== '/privacy') {
+      return <Navigate to="/privacy" replace />;
+    }
     return children;
   };
 

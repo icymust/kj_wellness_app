@@ -4,6 +4,9 @@ export default function Privacy({ ctx }) {
   return (
     <section style={{ border: "1px solid #ddd", padding: 16, borderRadius: 12, marginTop: 16 }}>
       <h2>Privacy & Export</h2>
+      <p style={{ marginTop: 8, color: '#444' }}>
+        To use the platform, all consents are required. Without them, we cannot provide health analytics or personalized insights.
+      </p>
       <>
         <div style={{ display: "flex", flexWrap:'wrap', gap: 8, marginBottom: 8 }}>
           <button onClick={loadConsent} disabled={!accessToken}>Load consent</button>
@@ -21,22 +24,56 @@ export default function Privacy({ ctx }) {
           }} disabled={!accessToken}>Download health data</button>
         </div>
 
-        <form onSubmit={saveConsent} style={{ display: "grid", gap: 8 }}>
-          <label>
-            <input type="checkbox" checked={consentForm.accepted} onChange={(e)=>setConsentForm(f=>({...f, accepted:e.target.checked}))} /> I accept the privacy policy
-          </label>
-          <label>
-            <input type="checkbox" checked={consentForm.allowAiUseProfile} onChange={(e)=>setConsentForm(f=>({...f, allowAiUseProfile:e.target.checked}))} /> Allow AI to use my profile
-          </label>
-          <label>
-            <input type="checkbox" checked={consentForm.allowAiUseHistory} onChange={(e)=>setConsentForm(f=>({...f, allowAiUseHistory:e.target.checked}))} /> Allow AI to use my history
-          </label>
-          <label>
-            <input type="checkbox" checked={consentForm.publicProfile} onChange={(e)=>setConsentForm(f=>({...f, publicProfile:e.target.checked}))} /> Make my profile public
-          </label>
-          <label>
-            <input type="checkbox" checked={consentForm.emailProduct} onChange={(e)=>setConsentForm(f=>({...f, emailProduct:e.target.checked}))} /> Receive product emails
-          </label>
+        <form onSubmit={saveConsent} style={{ display: "grid", gap: 12 }}>
+          <fieldset style={{ border: '1px solid #eee', borderRadius: 8, padding: 12 }}>
+            <legend>Required consents (all must be enabled)</legend>
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+              <div style={{ flex: '1 1 260px', border: '1px solid #f0f0f0', borderRadius: 8, padding: 12 }}>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={!!consentForm.accepted}
+                    onChange={(e)=>setConsentForm(f=>({...f, accepted:e.target.checked}))}
+                  />{' '}
+                  I accept the privacy policy
+                </label>
+                <small style={{ color: '#666', display: 'block', marginTop: 6 }}>
+                  We collect basic health data such as height, weight, activity level and goals to calculate BMI, wellness scores and progress charts.
+                </small>
+              </div>
+
+              <div style={{ flex: '1 1 260px', border: '1px solid #f0f0f0', borderRadius: 8, padding: 12 }}>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={!!consentForm.allowAiUseProfile}
+                    onChange={(e)=>setConsentForm(f=>({...f, allowAiUseProfile:e.target.checked}))}
+                  />{' '}
+                  Use my info for AI preferences
+                </label>
+                <small style={{ color: '#666', display: 'block', marginTop: 6 }}>
+                  Your profile data will be used to generate personalized health insights and recommendations.
+                </small>
+              </div>
+
+              <div style={{ flex: '1 1 260px', border: '1px solid #f0f0f0', borderRadius: 8, padding: 12 }}>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={!!consentForm.allowAiUseHistory}
+                    onChange={(e)=>setConsentForm(f=>({...f, allowAiUseHistory:e.target.checked}))}
+                  />{' '}
+                  Allow to use my health history
+                </label>
+                <small style={{ color: '#666', display: 'block', marginTop: 6 }}>
+                  Your weight and activity history will be analyzed to track progress and generate weekly and monthly summaries.
+                </small>
+              </div>
+            </div>
+          </fieldset>
+
+          
+
           <div>
             <small>Version: {consentForm.version}</small>
           </div>
