@@ -16,14 +16,15 @@ import java.util.UUID;
 public class PasswordResetService {
   private final UserRepository users;
   private final PasswordResetTokenRepository tokens;
+  private final EmailService emailService;
 
   // Base URL of the frontend used to compose password reset links.
   // Can be overridden via environment variable APP_FRONTEND_BASE_URL or property app.frontend.base-url
   @Value("${app.frontend.base-url:${APP_FRONTEND_BASE_URL:http://localhost:8080}}")
   private String frontendBaseUrl;
 
-  public PasswordResetService(UserRepository users, PasswordResetTokenRepository tokens) {
-    this.users = users; this.tokens = tokens;
+  public PasswordResetService(UserRepository users, PasswordResetTokenRepository tokens, EmailService emailService) {
+    this.users = users; this.tokens = tokens; this.emailService = emailService;
   }
 
   public void requestReset(String email) {
@@ -33,8 +34,11 @@ public class PasswordResetService {
       t.setToken(UUID.randomUUID().toString());
       t.setExpiresAt(Instant.now().plus(Duration.ofMinutes(30)));
       tokens.save(t);
-      String link = String.format("%s/reset?token=%s", frontendBaseUrl.replaceAll("/+$", ""), t.getToken());
-      System.out.println("[MAIL] Reset link: " + link);
+  String base = frontendBaseUrl.replaceAll("/+\\z", "");
+  String link = String.format("%s/reset?token=%s", base, t.getToken());
+      String subject = "Password reset";
+      String text = "Click the link to reset your password: " + link + "\n\nIf you did not request this, ignore this email.";
+      emailService.sendSimpleEmail(user.getEmail(), subject, text);
     });
   }
 

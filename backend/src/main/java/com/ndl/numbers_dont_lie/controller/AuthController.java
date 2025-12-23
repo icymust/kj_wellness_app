@@ -10,6 +10,7 @@ import com.ndl.numbers_dont_lie.dto.TokensResponse;
 import com.ndl.numbers_dont_lie.service.JwtService;
 import com.ndl.numbers_dont_lie.service.TwoFactorService;
 import com.ndl.numbers_dont_lie.service.PasswordResetService;
+import com.ndl.numbers_dont_lie.service.EmailService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -28,6 +29,7 @@ public class AuthController {
     private final TwoFactorService twoFactorService;
     private final UserRepository userRepository;
     private final PasswordResetService passwordResetService;
+    private final EmailService emailService;
 
     
 
@@ -51,8 +53,9 @@ public class AuthController {
             String token = UUID.randomUUID().toString();
             store.getVerificationTokens().put(token, email);
 
-            String verifyUrl = "http://localhost:5173/auth/verify?token=" + token;
-            System.out.println("[MAIL-EMULATOR] Send verify link to " + email + ": " + verifyUrl);
+            String base = System.getenv().getOrDefault("FRONTEND_ORIGIN", "http://localhost:5173").replaceAll("/+\\z", "");
+            String verifyUrl = base + "/auth/verify?token=" + token;
+            emailService.sendSimpleEmail(email, "Verify your email", "Click to verify: " + verifyUrl);
 
             return ResponseEntity.status(201).body(Map.of(
                 "message", "User registered successfully. Check console for verification link.",
@@ -82,13 +85,14 @@ public class AuthController {
         }
     }
 
-    public AuthController(AuthStore store, AuthService authService, JwtService jwt, TwoFactorService twoFactorService, UserRepository userRepository, PasswordResetService passwordResetService) {
+    public AuthController(AuthStore store, AuthService authService, JwtService jwt, TwoFactorService twoFactorService, UserRepository userRepository, PasswordResetService passwordResetService, EmailService emailService) {
         this.store = store;
         this.authService = authService;
         this.jwt = jwt;
         this.twoFactorService = twoFactorService;
         this.userRepository = userRepository;
         this.passwordResetService = passwordResetService;
+        this.emailService = emailService;
     }
 
     @PostMapping("/login")
