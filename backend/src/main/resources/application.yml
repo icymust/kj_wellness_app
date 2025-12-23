@@ -41,11 +41,11 @@ server:
 app:
   jwt:
     secret: ${JWT_SECRET:change-this-dev-secret-change-this-dev-secret-32+chars}
-    access-ttl-min: 1      # истечение access-токена (мин) — сокращено для теста авто-рефреша
-    refresh-ttl-days: 7    # истечение refresh-токена (дней)
+    access-ttl-min: 1 
+    refresh-ttl-days: 7  
   rate-limit:
-    default-per-minute: 120   # базовый лимит запросов в минуту на пользователя/IP
-    window-seconds: 60         # длительность окна
+    default-per-minute: 120 
+    window-seconds: 60 
     override:
       auth2faVerify: 10        # /auth/2fa/verify
       twofaVerifySetup: 10     # /2fa/verify-setup

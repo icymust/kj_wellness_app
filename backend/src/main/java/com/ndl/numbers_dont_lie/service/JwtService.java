@@ -39,7 +39,7 @@ public class JwtService {
                 .setIssuedAt(Date.from(now))
                 .setExpiration(Date.from(exp))
                 .addClaims(Map.of(
-                        "typ", "access"   // тип токена
+                        "typ", "access" 
                 ))
                 .signWith(key, SignatureAlgorithm.HS256)
                 .compact();
@@ -53,7 +53,7 @@ public class JwtService {
                 .setIssuedAt(Date.from(now))
                 .setExpiration(Date.from(exp))
                 .addClaims(Map.of(
-                        "typ", "refresh"  // тип токена
+                        "typ", "refresh" 
                 ))
                 .signWith(key, SignatureAlgorithm.HS256)
                 .compact();

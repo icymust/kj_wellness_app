@@ -18,7 +18,6 @@ public class HealthCalc {
   }
 
   public static double bmiScoreComponent(String classification) {
-    // 0..100 — лучше в центре
     return switch (classification) {
       case "normal" -> 100;
       case "underweight", "overweight" -> 60;
@@ -38,7 +37,6 @@ public class HealthCalc {
 
   public static double progressScore(double latestWeightKg, Double targetWeightKg) {
     if (targetWeightKg == null) return 50;
-    // чем ближе к цели — тем выше; простая эвристика
     double diff = Math.abs(latestWeightKg - targetWeightKg);
     if (diff < 1) return 95;
     if (diff < 3) return 80;
@@ -47,16 +45,14 @@ public class HealthCalc {
   }
 
   public static double habitsScore(String activityLevel) {
-    // пока используем активность как прокси привычек
     return activityScore(activityLevel);
   }
 
   public static double weeklyActivityBooster(int totalMinutes, int daysActive) {
-    // WHO ориентир: ≥150 мин/нед умеренной активности
-    if (totalMinutes >= 300 && daysActive >= 5) return 95; // отличная неделя
-    if (totalMinutes >= 150 && daysActive >= 3) return 85; // норма
-    if (totalMinutes >= 60  && daysActive >= 2) return 70; // неплохо
-    return 50; // слабовато
+    if (totalMinutes >= 300 && daysActive >= 5) return 95;
+    if (totalMinutes >= 150 && daysActive >= 3) return 85;
+    if (totalMinutes >= 60  && daysActive >= 2) return 70;
+    return 50;
   }
 
   public static double wellness(double bmiScore, double activity, double progress, double habits) {
