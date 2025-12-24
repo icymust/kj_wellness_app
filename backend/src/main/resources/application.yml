@@ -51,5 +51,7 @@ app:
       twofaVerifySetup: 10     # /2fa/verify-setup
   frontend:
     base-url: ${FRONTEND_ORIGIN:http://localhost:8080}
+  ai:
+    enabled: ${AI_ENABLED:true}    # If false, service returns cached recommendations only
 
 
