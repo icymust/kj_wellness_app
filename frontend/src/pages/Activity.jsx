@@ -7,15 +7,23 @@ export default function Activity({ ctx }) {
   const { addActivity, period, setPeriod, loadActivityWeek, loadActivityMonth, week, monthData } = ctx;
   const minutesRef = useRef(null);
   const [form, setForm] = useState({ type: 'cardio', minutes: '', intensity: 'moderate', at: '' });
+  const [error, setError] = useState(null);
   const onChange = (field, value) => setForm(f => ({ ...f, [field]: value }));
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.minutes) return;
-    await addActivity(form);
-    // refresh only current period
-    if (period === 'week') await loadActivityWeek(); else if (period === 'month') await loadActivityMonth();
-    setForm(f => ({ ...f, minutes: '', at: '' }));
-    minutesRef.current?.focus();
+    try {
+      setError(null);
+      await addActivity(form);
+      // refresh only current period
+      if (period === 'week') await loadActivityWeek(); else if (period === 'month') await loadActivityMonth();
+      setForm(f => ({ ...f, minutes: '', at: '' }));
+      minutesRef.current?.focus();
+    } catch (e2) {
+      // Поведение как на Weight: обрабатываем ошибку добавления (например, дубликат метки времени)
+      const msg = (e2 && (e2.message || e2.error)) ? String(e2.message || e2.error) : 'Failed to add activity';
+      setError(msg);
+    }
   };
   // memoized charts prevent remount on form change
   const weekChart = useMemo(() => week ? <ActivityWeekChart byWeekdayMinutes={week.byWeekdayMinutes} /> : null, [week]);
@@ -51,6 +59,9 @@ export default function Activity({ ctx }) {
                 <button type="submit" disabled={!form.minutes} style={{ width:"100%" }}>Add activity</button>
           </div>
         </form>
+        {error && (
+          <div style={{ color:'#b3261e', fontSize:12, marginTop:8 }}>{error}</div>
+        )}
 
         <div style={{ display:"flex", gap:8, marginTop:8, alignItems:"center" }}>
           <label>
