@@ -14,6 +14,12 @@ GOOGLE_CLIENT_SECRET=
 # Frontend origin used for OAuth redirects (dev with docker-compose)
 FRONTEND_ORIGIN=http://localhost:8080
 
+# Mail (SMTP) — use Mailtrap.io sandbox credentials
+MAIL_HOST=
+MAIL_PORT=
+MAIL_USERNAME=
+MAIL_PASSWORD=
+
 # JWT signing secret (>=32 secure characters)
 JWT_SECRET=
 ```
@@ -39,6 +45,19 @@ Google Cloud Console: https://console.cloud.google.com/auth/clients/
 
 Copy Client ID / Client Secret values into `.env`.
 
+## Mail setup (Mailtrap.io)
+
+We use Mailtrap for local/dev email delivery (sandbox).
+
+- Create an account/inbox: https://mailtrap.io/
+- Open SMTP credentials for your inbox and copy:
+  - Host (e.g. `smtp.mailtrap.io`)
+  - Port (e.g. `2525`)
+  - Username
+  - Password
+- Put them into the root `.env` as `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`.
+- Restart with Docker to pass variables into backend.
+
 ## .env and docker-compose linkage
 
 `docker-compose.yml` passes environment variables into the `app` service (backend). Example block:
@@ -54,6 +73,10 @@ Copy Client ID / Client Secret values into `.env`.
     GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
     GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
     FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-}
+    MAIL_HOST: ${MAIL_HOST:-}
+    MAIL_PORT: ${MAIL_PORT:-}
+    MAIL_USERNAME: ${MAIL_USERNAME:-}
+    MAIL_PASSWORD: ${MAIL_PASSWORD:-}
     JWT_SECRET: ${JWT_SECRET:-changeme-dev}
 ```
 
@@ -70,6 +93,8 @@ app:
 ```
 
 Useful for generating links (redirects, CORS). Document in README when deploying.
+
+Note: The separate `frontend/.env` file was removed; configure `FRONTEND_ORIGIN` via the root `.env`.
 
 ## pgAdmin: login & database creation
 

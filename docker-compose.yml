@@ -64,14 +64,9 @@ services:
     depends_on:
       - app
     environment:
-      # Frontend (served on host 8080) calls backend via host-mapped port
       VITE_API_BASE: http://localhost:5173
     ports:
       - "8080:8080"
-    # Если хочешь hot-reload при правке файлов из IDE — раскомментируй:
-    # volumes:
-    #   - ./ndl-frontend:/app
-    #   - /app/node_modules
 
 volumes:
   pgdata:
