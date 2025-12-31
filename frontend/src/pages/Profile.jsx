@@ -2,7 +2,7 @@ import '../styles/Profile.css';
 import React, { useState, useEffect } from 'react';
 
 export default function Profile({ ctx }) {
-  const { loadProfile, profile, saveProfile, profileError, profileSuccess, profileSaving } = ctx;
+  const { loadProfile, profile, saveProfile, profileError, profileSuccess, profileSaving, loadWeights, weights } = ctx;
   const [form, setForm] = useState({ age: '', gender: 'male', heightCm: '', weightKg: '', targetWeightKg: '', activityLevel: 'moderate', goal: 'general_fitness' });
   const [dirty, setDirty] = useState(false);
   const [status, setStatus] = useState(null);
@@ -34,7 +34,39 @@ export default function Profile({ ctx }) {
 
   const handleReload = async () => {
     setLoading(true); setStatus(null);
-    try { await loadProfile(); } finally { setLoading(false); setDirty(false); }
+    try {
+      // load latest profile from server
+      const savedProfile = await loadProfile();
+      // also try to refresh weights history and prefer the most recent weight
+      // Assumption: loadWeights() returns the loaded weights array (or at least updates `weights` in ctx).
+      let loadedWeights = [];
+      try {
+        const res = await loadWeights();
+        if (Array.isArray(res)) loadedWeights = res;
+        else loadedWeights = weights || [];
+      } catch (e) {
+        // if loadWeights fails or doesn't return, fall back to current `weights` from ctx
+        loadedWeights = weights || [];
+      }
+
+      if (loadedWeights && loadedWeights.length) {
+        // find the latest entry by timestamp
+        const latest = [...loadedWeights].sort((a, b) => new Date(b.at) - new Date(a.at))[0];
+        if (latest && latest.weightKg !== undefined) {
+          // reflect the latest weight in the local form (keep other fields from server)
+          setForm(f => ({
+            ...f,
+            age: savedProfile?.age ?? f.age,
+            gender: savedProfile?.gender ?? f.gender,
+            heightCm: savedProfile?.heightCm ?? f.heightCm,
+            weightKg: latest.weightKg ?? (savedProfile?.weightKg ?? f.weightKg),
+            targetWeightKg: savedProfile?.targetWeightKg ?? f.targetWeightKg,
+            activityLevel: savedProfile?.activityLevel ?? f.activityLevel,
+            goal: savedProfile?.goal ?? f.goal
+          }));
+        }
+      }
+    } finally { setLoading(false); setDirty(false); }
   };
 
   const handleSave = async (e) => {
