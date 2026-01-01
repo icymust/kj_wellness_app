@@ -323,7 +323,13 @@ function AppShell() {
       atVal = weightAt || null;
     }
     try {
-      await api.weightAdd(accessToken, weightVal, atVal);
+      const body = { weightKg: weightVal, at: atVal };
+      // forward optional dietary arrays if provided in the payload
+      if (payloadOrEvent && typeof payloadOrEvent === 'object') {
+        if (Array.isArray(payloadOrEvent.dietaryPreferences)) body.dietaryPreferences = payloadOrEvent.dietaryPreferences;
+        if (Array.isArray(payloadOrEvent.dietaryRestrictions)) body.dietaryRestrictions = payloadOrEvent.dietaryRestrictions;
+      }
+      await api.weightAdd(accessToken, body);
       setNewWeight(""); setWeightAt("");
       await loadWeights();
     } catch (e) { console.warn('addWeight', e); }
@@ -413,6 +419,18 @@ function AppShell() {
     catch(e){ console.warn('saveConsent', e); }
   };
 
+  // Dietary meta handlers (per-user, stored separately so saving does not alter weight history)
+  const loadDietary = async () => {
+    if (!accessToken) return { dietaryPreferences: [], dietaryRestrictions: [] };
+    try { const r = await api.weightMetaGet(accessToken); return r || { dietaryPreferences: [], dietaryRestrictions: [] }; }
+    catch(e){ console.warn('loadDietary', e); return { dietaryPreferences: [], dietaryRestrictions: [] }; }
+  };
+  const saveDietary = async (prefs, restrictions) => {
+    if (!accessToken) return;
+    try { await api.weightMetaSet(accessToken, { dietaryPreferences: prefs || [], dietaryRestrictions: restrictions || [] }); }
+    catch(e){ console.warn('saveDietary', e); throw e; }
+  };
+
   // After authentication, ensure consent is fetched and enforce redirect when any required consent is missing
   useEffect(() => {
     if (!accessToken) {
@@ -496,6 +514,8 @@ function AppShell() {
   profile, setProfile, loadProfile, saveProfile, profileError, profileSuccess, profileSaving,
     // weight
     newWeight, setNewWeight, weightAt, setWeightAt, addWeight, loadWeights, weights, summary,
+  // dietary meta
+  loadDietary, saveDietary,
     // activity
     act, setAct, addActivity, period, setPeriod, loadActivityWeek, loadActivityMonth, week, monthData,
     // analytics

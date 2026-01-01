@@ -114,8 +114,9 @@ export const api = {
   me: (accessToken) => request("/protected/me", { token: accessToken }),
   getProfile: (accessToken) => request("/profile", { token: accessToken }),
   saveProfile: (accessToken, payload) => request("/profile", { method: "PUT", token: accessToken, body: payload }),
-  weightAdd: (token, weightKg, at) =>
-  request("/progress/weight", { method: "POST", token, body: { weightKg, at } }),
+  // Accepts body: { weightKg, at, dietaryPreferences?, dietaryRestrictions? }
+  weightAdd: (token, body) =>
+  request("/progress/weight", { method: "POST", token, body }),
   weightList: (token) => request("/progress/weight", { token }),
   analyticsSummary: (token) => request("/analytics/summary", { token }),
   activityAdd: (token, payload) =>
@@ -132,6 +133,9 @@ export const api = {
   privacySet: (token, body) => request("/privacy/consent", { method: "PUT", token, body }),
   privacyExport: (token) => request("/privacy/export", { token }),
   exportHealth: (token) => request("/export/health", { token }),
+  // Dietary meta for weight (per-user preferences stored separately from weight entries)
+  weightMetaGet: (token) => request("/progress/weight/meta", { token }),
+  weightMetaSet: (token, body) => request("/progress/weight/meta", { method: "PUT", token, body }),
   // AI insights
   aiLatest: (token, scope = "weekly") => request(`/ai/insights/latest?scope=${encodeURIComponent(scope)}`, { token }),
   aiRegen: (token, scope = "weekly") => request(`/ai/insights/regenerate?scope=${encodeURIComponent(scope)}`, { method: "POST", token }),

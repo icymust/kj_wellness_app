@@ -35,11 +35,43 @@ public class WeightService {
     e.setUser(user);
     e.setAt(at);
     e.setWeightKg(dto.weightKg);
+    // store dietary arrays as comma-separated strings (empty -> null)
+    if (dto.dietaryPreferences != null && !dto.dietaryPreferences.isEmpty()) {
+      e.setDietaryPreferences(String.join(",", dto.dietaryPreferences));
+    } else {
+      e.setDietaryPreferences(null);
+    }
+    if (dto.dietaryRestrictions != null && !dto.dietaryRestrictions.isEmpty()) {
+      e.setDietaryRestrictions(String.join(",", dto.dietaryRestrictions));
+    } else {
+      e.setDietaryRestrictions(null);
+    }
     return weights.save(e);
   }
 
   public List<WeightEntry> list(String email) {
     UserEntity user = users.findByEmail(email).orElseThrow(() -> new IllegalStateException("User not found"));
     return weights.findAllByUserOrderByAtAsc(user);
+  }
+
+  // Save per-user dietary preferences/restrictions (stored on UserEntity)
+  public void saveDietary(String email, java.util.List<String> prefs, java.util.List<String> restrictions) {
+    UserEntity user = users.findByEmail(email).orElseThrow(() -> new IllegalStateException("User not found"));
+    user.setDietaryPreferencesJson(prefs != null && !prefs.isEmpty() ? String.join(",", prefs) : null);
+    user.setDietaryRestrictionsJson(restrictions != null && !restrictions.isEmpty() ? String.join(",", restrictions) : null);
+    users.save(user);
+  }
+
+  public java.util.Map<String, java.util.List<String>> loadDietary(String email) {
+    UserEntity user = users.findByEmail(email).orElseThrow(() -> new IllegalStateException("User not found"));
+    java.util.List<String> prefs = new java.util.ArrayList<>();
+    java.util.List<String> restr = new java.util.ArrayList<>();
+    if (user.getDietaryPreferencesJson() != null && !user.getDietaryPreferencesJson().isBlank()) {
+      prefs = java.util.Arrays.asList(user.getDietaryPreferencesJson().split(","));
+    }
+    if (user.getDietaryRestrictionsJson() != null && !user.getDietaryRestrictionsJson().isBlank()) {
+      restr = java.util.Arrays.asList(user.getDietaryRestrictionsJson().split(","));
+    }
+    return java.util.Map.of("dietaryPreferences", prefs, "dietaryRestrictions", restr);
   }
 }

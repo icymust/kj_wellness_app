@@ -32,6 +32,13 @@ public class UserEntity {
     @Column(name = "recovery_codes_json", columnDefinition = "TEXT")
     private String recoveryCodesJson;
 
+    // optional stored dietary preferences/restrictions for user (stored as comma-separated values)
+    @Column(name = "dietary_preferences_json", columnDefinition = "TEXT")
+    private String dietaryPreferencesJson;
+
+    @Column(name = "dietary_restrictions_json", columnDefinition = "TEXT")
+    private String dietaryRestrictionsJson;
+
     @Column(nullable = false)
     private boolean emailVerified = false;
 
@@ -59,4 +66,10 @@ public class UserEntity {
 
     public String getRecoveryCodesJson() { return recoveryCodesJson; }
     public void setRecoveryCodesJson(String recoveryCodesJson) { this.recoveryCodesJson = recoveryCodesJson; }
+
+    public String getDietaryPreferencesJson() { return dietaryPreferencesJson; }
+    public void setDietaryPreferencesJson(String dietaryPreferencesJson) { this.dietaryPreferencesJson = dietaryPreferencesJson; }
+
+    public String getDietaryRestrictionsJson() { return dietaryRestrictionsJson; }
+    public void setDietaryRestrictionsJson(String dietaryRestrictionsJson) { this.dietaryRestrictionsJson = dietaryRestrictionsJson; }
 }

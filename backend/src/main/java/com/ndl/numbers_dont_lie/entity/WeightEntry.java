@@ -19,6 +19,11 @@ public class WeightEntry {
 
   @Column(nullable = false)
   private Double weightKg;          // 20..500
+  @Column(name = "dietary_preferences", columnDefinition = "text")
+  private String dietaryPreferences; // stored as comma-separated values (nullable)
+
+  @Column(name = "dietary_restrictions", columnDefinition = "text")
+  private String dietaryRestrictions; // stored as comma-separated values (nullable)
 
   public Long getId() { return id; }
   public UserEntity getUser() { return user; }
@@ -27,4 +32,10 @@ public class WeightEntry {
   public void setAt(Instant at) { this.at = at; }
   public Double getWeightKg() { return weightKg; }
   public void setWeightKg(Double weightKg) { this.weightKg = weightKg; }
+
+  public String getDietaryPreferences() { return dietaryPreferences; }
+  public void setDietaryPreferences(String dietaryPreferences) { this.dietaryPreferences = dietaryPreferences; }
+
+  public String getDietaryRestrictions() { return dietaryRestrictions; }
+  public void setDietaryRestrictions(String dietaryRestrictions) { this.dietaryRestrictions = dietaryRestrictions; }
 }
