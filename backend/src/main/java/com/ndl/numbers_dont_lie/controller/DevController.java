@@ -12,7 +12,7 @@ import java.util.HashMap;
 import java.util.Collections;
 
 @RestController
-@RequestMapping("/dev")
+@RequestMapping("/dev") //Is this only for dev? How to switc on/off in production?
 public class DevController {
   private final PasswordResetTokenRepository tokens;
   private final EmailService emailService;

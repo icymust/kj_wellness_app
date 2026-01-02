@@ -17,7 +17,8 @@ public class ProfileEntity {
 
   private Integer age;              // 5..120
   @Column(length = 16)  private String gender;         // male|female|other
-  private Integer heightCm;         // 50..300
+  private Integer heightCm;         // 50..300 
+  // are you not persisting height, weight, targetweight?
   private Double  weightKg;         // 20..500
   private Double  targetWeightKg;   // цель по весу (кг)
   @Column(length = 24)  private String activityLevel;  // low|moderate|high

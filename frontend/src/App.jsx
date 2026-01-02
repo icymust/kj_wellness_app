@@ -28,6 +28,8 @@ export default function App(){
   );
 }
 
+// The app file is quite big. 
+// Do you want to consider splitting it into smaller components or using context for state management?
 function AppShell() {
   const navigate = useNavigate();
   const location = useLocation();

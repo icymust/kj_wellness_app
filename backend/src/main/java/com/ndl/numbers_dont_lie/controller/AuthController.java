@@ -85,6 +85,7 @@ public class AuthController {
         }
     }
 
+    // Constructor to the top?
     public AuthController(AuthStore store, AuthService authService, JwtService jwt, TwoFactorService twoFactorService, UserRepository userRepository, PasswordResetService passwordResetService, EmailService emailService) {
         this.store = store;
         this.authService = authService;
@@ -172,7 +173,7 @@ public class AuthController {
     }
 
     // TEMP DEBUG endpoint — expose minimal user state to diagnose 2FA login issues.
-    // DO NOT enable in production.
+    // DO NOT enable in production. // how to enable/disable in production?
     @GetMapping("/debug/user")
     public ResponseEntity<?> debugUser(@RequestParam String email) {
         return userRepository.findByEmail(email)

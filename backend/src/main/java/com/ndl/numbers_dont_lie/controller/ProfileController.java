@@ -14,13 +14,14 @@ import java.util.Map;
 public class ProfileController {
 
   private final JwtService jwt;
-  private final ProfileService service;
+  private final ProfileService service; // consider naming it profileService
 
   public ProfileController(JwtService jwt, ProfileService service) {
     this.jwt = jwt;
     this.service = service;
   }
 
+  // could you use auth for this somehow?
   private String emailFromAuth(String authHeader) {
     if (authHeader == null || !authHeader.startsWith("Bearer "))
       throw new IllegalStateException("Missing or invalid Authorization header");
@@ -53,7 +54,7 @@ public class ProfileController {
       // (расширяет существующие проверки диапазона внутри ProfileService)
       StringBuilder errs = new StringBuilder();
       if (dto.heightCm != null && dto.heightCm <= 0) {
-        errs.append("Height must be greater than 0");
+        errs.append("Height must be greater than 0"); // why not do validation with dto?
       }
       if (dto.weightKg != null && dto.weightKg <= 0) {
         if (errs.length() > 0) errs.append(". ");

@@ -6,3 +6,5 @@
   border: 1px solid #ddd;
   border-radius: 8px;
 }
+
+/* Styles could be consolidated as a general style and then seaprate changes.But i like that each page's style is there to be changed according to that specific page's needs */

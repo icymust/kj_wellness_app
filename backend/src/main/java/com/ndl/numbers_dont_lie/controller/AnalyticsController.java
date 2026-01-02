@@ -68,7 +68,7 @@ public class AnalyticsController {
   double habitsScore = activityScore; // пока используем то же значение
   double wellness = HealthCalc.wellness(bmiScore, activityScore, progressScore, habitsScore);
 
-      var initialWeight = (list.isEmpty() ? p.getWeightKg() : list.get(0).getWeightKg());
+      var initialWeight = (list.isEmpty() ? p.getWeightKg() : list.get(0).getWeightKg()); // var type or determine the correct type?
       var gp = GoalProgress.progress(initialWeight, target, latestWeight);
 
       return ResponseEntity.ok(Map.of(
