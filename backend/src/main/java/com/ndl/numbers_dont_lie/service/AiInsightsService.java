@@ -48,6 +48,8 @@ public class AiInsightsService {
     UserEntity user = users.findByEmail(email).orElseThrow(() -> new IllegalStateException("User not found"));
     String goalKey = "default"; // future: derive from profile goal
 
+    // EA: not sure about hardcoding default values, maybe make a settings option, there should be some good practice, but i suppose it can be hard coded
+
     if (!forceRegenerate) {
       Optional<AiInsightCache> latest = cacheRepo.findFirstByUserAndScopeAndGoalKeyOrderByGeneratedAtDesc(user, scope, goalKey);
       if (latest.isPresent()) {
