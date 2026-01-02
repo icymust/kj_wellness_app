@@ -12,7 +12,7 @@ import com.ndl.numbers_dont_lie.repository.AiInsightCacheRepository;
 import com.ndl.numbers_dont_lie.repository.ProfileRepository;
 import com.ndl.numbers_dont_lie.repository.UserRepository;
 import com.ndl.numbers_dont_lie.repository.WeightEntryRepository;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Value; // not used, can be removed
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -311,7 +311,7 @@ public class AIRecommendationService {
   return "For general fitness: ";
   }
 
-  private AiInsightItemDto item(String type, String priorityLevel, String message, String createdAt, boolean cached) {
+  private AiInsightItemDto item(String type, String priorityLevel, String message, String createdAt, boolean cached) { // do you need this constructor method?
     return item(type, priorityLevel, message, message, createdAt, cached);
   }
 

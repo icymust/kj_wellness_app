@@ -1,6 +1,6 @@
 package com.ndl.numbers_dont_lie.entity;
 
-import com.ndl.numbers_dont_lie.entity.UserEntity;
+import com.ndl.numbers_dont_lie.entity.UserEntity; // not used, can be removed
 import jakarta.persistence.*;
 
 @Entity

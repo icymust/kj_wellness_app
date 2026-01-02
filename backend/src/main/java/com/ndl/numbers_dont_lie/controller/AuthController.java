@@ -23,12 +23,12 @@ import java.util.UUID;
 @RequestMapping("/auth")
 public class AuthController {
 
-    private final AuthStore store;        // хранит только verificationTokens
+    private final AuthStore store;        // хранит только verificationTokens // russian comments? do they make it easier to understand your code?
     private final AuthService authService; // работа с БД (users)
     private final JwtService jwt;
     private final TwoFactorService twoFactorService;
     private final UserRepository userRepository;
-    private final PasswordResetService passwordResetService;
+    private final PasswordResetService passwordResetService; // not used, can be removed
     private final EmailService emailService;
 
     

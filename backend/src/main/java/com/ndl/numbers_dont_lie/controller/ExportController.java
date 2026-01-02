@@ -30,7 +30,7 @@ public class ExportController {
   private final WeightEntryRepository weights;
   private final ActivityEntryRepository activities;
   private final PrivacyService privacyService;
-  private final UserConsentRepository consentRepo;
+  private final UserConsentRepository consentRepo; // not used, can be removed
 
   public ExportController(JwtService jwt,
                           UserRepository users,
