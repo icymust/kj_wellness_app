@@ -9,7 +9,6 @@ import com.ndl.numbers_dont_lie.repository.UserRepository;
 import com.ndl.numbers_dont_lie.repository.ProfileRepository;
 import com.ndl.numbers_dont_lie.repository.WeightEntryRepository;
 import com.ndl.numbers_dont_lie.repository.ActivityEntryRepository;
-import com.ndl.numbers_dont_lie.repository.UserConsentRepository;
 import com.ndl.numbers_dont_lie.service.JwtService;
 import com.ndl.numbers_dont_lie.service.PrivacyService;
 import io.jsonwebtoken.JwtException;
@@ -30,16 +29,14 @@ public class ExportController {
   private final WeightEntryRepository weights;
   private final ActivityEntryRepository activities;
   private final PrivacyService privacyService;
-  private final UserConsentRepository consentRepo;
 
   public ExportController(JwtService jwt,
                           UserRepository users,
                           ProfileRepository profiles,
                           WeightEntryRepository weights,
                           ActivityEntryRepository activities,
-                          PrivacyService privacyService,
-                          UserConsentRepository consentRepo) {
-    this.jwt = jwt; this.users = users; this.profiles = profiles; this.weights = weights; this.activities = activities; this.privacyService = privacyService; this.consentRepo = consentRepo;
+                          PrivacyService privacyService) {
+    this.jwt = jwt; this.users = users; this.profiles = profiles; this.weights = weights; this.activities = activities; this.privacyService = privacyService;
   }
 
   private String emailFrom(String auth){
@@ -69,7 +66,6 @@ public class ExportController {
       profileMap.put("targetWeightKg", profile.getTargetWeightKg());
       profileMap.put("activityLevel", profile.getActivityLevel());
       profileMap.put("goal", profile.getGoal());
-      // updatedAt отсутствует в схеме — оставим null для совместимости с примером
       profileMap.put("updatedAt", null);
     }
 

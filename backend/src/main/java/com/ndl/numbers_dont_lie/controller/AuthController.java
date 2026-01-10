@@ -9,7 +9,6 @@ import com.ndl.numbers_dont_lie.dto.RefreshRequest;
 import com.ndl.numbers_dont_lie.dto.TokensResponse;
 import com.ndl.numbers_dont_lie.service.JwtService;
 import com.ndl.numbers_dont_lie.service.TwoFactorService;
-import com.ndl.numbers_dont_lie.service.PasswordResetService;
 import com.ndl.numbers_dont_lie.service.EmailService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -28,7 +27,6 @@ public class AuthController {
     private final JwtService jwt;
     private final TwoFactorService twoFactorService;
     private final UserRepository userRepository;
-    private final PasswordResetService passwordResetService;
     private final EmailService emailService;
 
     
@@ -85,13 +83,12 @@ public class AuthController {
         }
     }
 
-    public AuthController(AuthStore store, AuthService authService, JwtService jwt, TwoFactorService twoFactorService, UserRepository userRepository, PasswordResetService passwordResetService, EmailService emailService) {
+    public AuthController(AuthStore store, AuthService authService, JwtService jwt, TwoFactorService twoFactorService, UserRepository userRepository, EmailService emailService) {
         this.store = store;
         this.authService = authService;
         this.jwt = jwt;
         this.twoFactorService = twoFactorService;
         this.userRepository = userRepository;
-        this.passwordResetService = passwordResetService;
         this.emailService = emailService;
     }
 

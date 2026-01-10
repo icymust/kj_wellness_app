@@ -117,7 +117,6 @@ public class AiInsightsService {
 
     Double latestWeight = (list.isEmpty() ? (p != null ? p.getWeightKg() : null) : list.get(list.size()-1).getWeightKg());
     Integer heightCm    = p != null ? p.getHeightCm() : null;
-    String activityLevel = p != null ? p.getActivityLevel() : null;
 
     // BMI-based insight
     if (canUseProfile && latestWeight != null && heightCm != null) {

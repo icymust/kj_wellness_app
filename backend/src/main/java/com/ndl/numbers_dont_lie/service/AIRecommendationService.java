@@ -12,7 +12,6 @@ import com.ndl.numbers_dont_lie.repository.AiInsightCacheRepository;
 import com.ndl.numbers_dont_lie.repository.ProfileRepository;
 import com.ndl.numbers_dont_lie.repository.UserRepository;
 import com.ndl.numbers_dont_lie.repository.WeightEntryRepository;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -309,10 +308,6 @@ public class AIRecommendationService {
   if ("weight_loss".equals(goal)) return "Since your goal is weight loss: ";
   if ("muscle_gain".equals(goal)) return "For muscle gain: ";
   return "For general fitness: ";
-  }
-
-  private AiInsightItemDto item(String type, String priorityLevel, String message, String createdAt, boolean cached) {
-    return item(type, priorityLevel, message, message, createdAt, cached);
   }
 
   private AiInsightItemDto item(String type, String priorityLevel, String message, String detail, String createdAt, boolean cached) {

@@ -5,7 +5,6 @@ import com.ndl.numbers_dont_lie.entity.UserEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.time.Instant;
-import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
