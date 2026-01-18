@@ -1,5 +1,6 @@
 import '../styles/Profile.css';
 import React, { useState, useEffect } from 'react';
+import NutritionalPreferences from '../components/NutritionalPreferences.jsx';
 
 export default function Profile({ ctx }) {
   const { loadProfile, profile, saveProfile, profileError, profileSuccess, profileSaving, loadWeights, weights } = ctx;
@@ -92,6 +93,7 @@ export default function Profile({ ctx }) {
   };
 
   return (
+    <>
     <section style={{ border: '1px solid #ddd', padding: 16, borderRadius: 12, marginTop: 16 }}>
   <h2>Health Profile</h2>
       <div style={{ display:'flex', gap:8, marginBottom:12 }}>
@@ -141,5 +143,7 @@ export default function Profile({ ctx }) {
         </div>
       </form>
     </section>
+    <NutritionalPreferences token={ctx.accessToken} />
+    </>
   );
 }

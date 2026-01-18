@@ -1,8 +1,11 @@
 package com.ndl.numbers_dont_lie.controller;
 
 import com.ndl.numbers_dont_lie.dto.ProfileUpsertDto;
+import com.ndl.numbers_dont_lie.dto.NutritionalPreferencesDto;
 import com.ndl.numbers_dont_lie.service.ProfileService;
+import com.ndl.numbers_dont_lie.service.NutritionalPreferencesService;
 import com.ndl.numbers_dont_lie.service.JwtService; // где лежит твой JwtService – поправь пакет на свой
+import com.ndl.numbers_dont_lie.model.NutritionalPreferencesConstants;
 import io.jsonwebtoken.JwtException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -15,10 +18,12 @@ public class ProfileController {
 
   private final JwtService jwt;
   private final ProfileService service;
+  private final NutritionalPreferencesService nutritionalPreferencesService;
 
-  public ProfileController(JwtService jwt, ProfileService service) {
+  public ProfileController(JwtService jwt, ProfileService service, NutritionalPreferencesService nutritionalPreferencesService) {
     this.jwt = jwt;
     this.service = service;
+    this.nutritionalPreferencesService = nutritionalPreferencesService;
   }
 
   private String emailFromAuth(String authHeader) {
@@ -68,6 +73,35 @@ public class ProfileController {
       }
       var p = service.upsert(email, dto);
       return ResponseEntity.ok(Map.of("profile", p));
+    } catch (IllegalArgumentException e) {
+      return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+    } catch (IllegalStateException e) {
+      return ResponseEntity.status(401).body(Map.of("error", e.getMessage()));
+    }
+  }
+
+  @GetMapping("/nutritional-preferences")
+  public ResponseEntity<?> getNutritionalPreferences(@RequestHeader(value="Authorization", required=false) String auth) {
+    try {
+      String email = emailFromAuth(auth);
+      var prefs = nutritionalPreferencesService.get(email);
+      return ResponseEntity.ok(Map.of(
+              "nutritionalPreferences", prefs,
+              "availableDietaryPreferences", NutritionalPreferencesConstants.AVAILABLE_DIETARY_PREFERENCES,
+              "availableAllergies", NutritionalPreferencesConstants.AVAILABLE_ALLERGIES
+      ));
+    } catch (IllegalStateException e) {
+      return ResponseEntity.status(401).body(Map.of("error", e.getMessage()));
+    }
+  }
+
+  @PutMapping("/nutritional-preferences")
+  public ResponseEntity<?> updateNutritionalPreferences(@RequestHeader(value="Authorization", required=false) String auth,
+                                                        @RequestBody NutritionalPreferencesDto dto) {
+    try {
+      String email = emailFromAuth(auth);
+      var prefs = nutritionalPreferencesService.upsert(email, dto);
+      return ResponseEntity.ok(Map.of("nutritionalPreferences", prefs));
     } catch (IllegalArgumentException e) {
       return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
     } catch (IllegalStateException e) {

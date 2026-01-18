@@ -146,4 +146,7 @@ export const api = {
   twofaVerifySetup: (token, code) => request("/2fa/verify-setup", { method: "POST", token, body: { code } }),
   twofaDisable: (token, codeOrRecovery) => request("/2fa/disable", { method: "POST", token, body: { codeOrRecovery } }),
   authVerify2fa: (tempToken, code) => request("/auth/2fa/verify", { method: "POST", body: { tempToken, code } }),
+  // Nutritional preferences
+  getNutritionalPreferences: (token) => request("/profile/nutritional-preferences", { token }),
+  saveNutritionalPreferences: (token, payload) => request("/profile/nutritional-preferences", { method: "PUT", token, body: payload }),
 };
