@@ -1,6 +1,6 @@
 package com.ndl.numbers_dont_lie.config;
 
-import com.ndl.numbers_dont_lie.service.JwtService;
+import com.ndl.numbers_dont_lie.auth.service.JwtService;
 import io.jsonwebtoken.JwtException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;

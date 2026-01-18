@@ -1,4 +1,5 @@
 package com.ndl.numbers_dont_lie.entity;
+import com.ndl.numbers_dont_lie.repository.UserRepository;
 
 import jakarta.persistence.*;
 import java.time.Instant;

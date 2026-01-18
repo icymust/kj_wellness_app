@@ -1,8 +1,7 @@
 package com.ndl.numbers_dont_lie.protectedapi;
-
 import com.ndl.numbers_dont_lie.entity.UserEntity;
 import com.ndl.numbers_dont_lie.repository.UserRepository;
-import com.ndl.numbers_dont_lie.service.JwtService;
+import com.ndl.numbers_dont_lie.auth.service.JwtService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 

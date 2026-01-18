@@ -1,8 +1,7 @@
 package com.ndl.numbers_dont_lie.config;
-
 import com.ndl.numbers_dont_lie.entity.UserEntity;
 import com.ndl.numbers_dont_lie.repository.UserRepository;
-import com.ndl.numbers_dont_lie.service.JwtService;
+import com.ndl.numbers_dont_lie.auth.service.JwtService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.security.core.Authentication;
