@@ -7,6 +7,25 @@ export default function NutritionalPreferences({ token }) {
   const [availableAllergies, setAvailableAllergies] = useState([]);
   const [selectedDietary, setSelectedDietary] = useState(new Set());
   const [selectedAllergies, setSelectedAllergies] = useState(new Set());
+  
+  // New state for food preferences and targets
+  const [dislikedIngredients, setDislikedIngredients] = useState('');
+  const [cuisinePreferences, setCuisinePreferences] = useState('');
+  const [calorieTarget, setCalorieTarget] = useState('');
+  const [proteinTarget, setProteinTarget] = useState('');
+  const [carbsTarget, setCarbsTarget] = useState('');
+  const [fatsTarget, setFatsTarget] = useState('');
+  
+  // Meal frequency and timing
+  const [breakfastCount, setBreakfastCount] = useState(1);
+  const [lunchCount, setLunchCount] = useState(1);
+  const [dinnerCount, setDinnerCount] = useState(1);
+  const [snackCount, setSnackCount] = useState(0);
+  const [breakfastTime, setBreakfastTime] = useState('08:00');
+  const [lunchTime, setLunchTime] = useState('12:30');
+  const [dinnerTime, setDinnerTime] = useState('18:00');
+  const [snackTime, setSnackTime] = useState('');
+  
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -28,6 +47,24 @@ export default function NutritionalPreferences({ token }) {
         setNutritionalPrefs(prefs);
         setSelectedDietary(new Set(prefs.dietaryPreferences || []));
         setSelectedAllergies(new Set(prefs.allergies || []));
+        
+        // Load new fields
+        setDislikedIngredients((prefs.dislikedIngredients || []).join(', '));
+        setCuisinePreferences((prefs.cuisinePreferences || []).join(', '));
+        setCalorieTarget(prefs.calorieTarget || '');
+        setProteinTarget(prefs.proteinTarget || '');
+        setCarbsTarget(prefs.carbsTarget || '');
+        setFatsTarget(prefs.fatsTarget || '');
+        
+        // Load meal frequency and timing
+        setBreakfastCount(prefs.breakfastCount ?? 1);
+        setLunchCount(prefs.lunchCount ?? 1);
+        setDinnerCount(prefs.dinnerCount ?? 1);
+        setSnackCount(prefs.snackCount ?? 0);
+        setBreakfastTime(prefs.breakfastTime || '08:00');
+        setLunchTime(prefs.lunchTime || '12:30');
+        setDinnerTime(prefs.dinnerTime || '18:00');
+        setSnackTime(prefs.snackTime || '');
       }
       
       if (response.availableDietaryPreferences) {
@@ -78,9 +115,35 @@ export default function NutritionalPreferences({ token }) {
     
     try {
       const { api } = await import('../lib/api.js');
+      
+      // Parse comma-separated strings to arrays
+      const dislikedIngredientsArray = dislikedIngredients
+        .split(',')
+        .map(s => s.trim())
+        .filter(s => s.length > 0);
+      
+      const cuisinePreferencesArray = cuisinePreferences
+        .split(',')
+        .map(s => s.trim())
+        .filter(s => s.length > 0);
+      
       const response = await api.saveNutritionalPreferences(token, {
         dietaryPreferences: Array.from(selectedDietary),
-        allergies: Array.from(selectedAllergies)
+        allergies: Array.from(selectedAllergies),
+        dislikedIngredients: dislikedIngredientsArray,
+        cuisinePreferences: cuisinePreferencesArray,
+        calorieTarget: calorieTarget ? parseInt(calorieTarget) : null,
+        proteinTarget: proteinTarget ? parseInt(proteinTarget) : null,
+        carbsTarget: carbsTarget ? parseInt(carbsTarget) : null,
+        fatsTarget: fatsTarget ? parseInt(fatsTarget) : null,
+        breakfastCount: breakfastCount,
+        lunchCount: lunchCount,
+        dinnerCount: dinnerCount,
+        snackCount: snackCount,
+        breakfastTime: breakfastCount > 0 ? breakfastTime : null,
+        lunchTime: lunchCount > 0 ? lunchTime : null,
+        dinnerTime: dinnerCount > 0 ? dinnerTime : null,
+        snackTime: snackCount > 0 ? snackTime : null
       });
       
       if (response.nutritionalPreferences) {
@@ -99,6 +162,20 @@ export default function NutritionalPreferences({ token }) {
     if (nutritionalPrefs) {
       setSelectedDietary(new Set(nutritionalPrefs.dietaryPreferences || []));
       setSelectedAllergies(new Set(nutritionalPrefs.allergies || []));
+      setDislikedIngredients((nutritionalPrefs.dislikedIngredients || []).join(', '));
+      setCuisinePreferences((nutritionalPrefs.cuisinePreferences || []).join(', '));
+      setCalorieTarget(nutritionalPrefs.calorieTarget || '');
+      setProteinTarget(nutritionalPrefs.proteinTarget || '');
+      setCarbsTarget(nutritionalPrefs.carbsTarget || '');
+      setFatsTarget(nutritionalPrefs.fatsTarget || '');
+      setBreakfastCount(nutritionalPrefs.breakfastCount ?? 1);
+      setLunchCount(nutritionalPrefs.lunchCount ?? 1);
+      setDinnerCount(nutritionalPrefs.dinnerCount ?? 1);
+      setSnackCount(nutritionalPrefs.snackCount ?? 0);
+      setBreakfastTime(nutritionalPrefs.breakfastTime || '08:00');
+      setLunchTime(nutritionalPrefs.lunchTime || '12:30');
+      setDinnerTime(nutritionalPrefs.dinnerTime || '18:00');
+      setSnackTime(nutritionalPrefs.snackTime || '');
     }
     setDirty(false);
     setStatus(null);
@@ -130,6 +207,246 @@ export default function NutritionalPreferences({ token }) {
       )}
 
       <form onSubmit={handleSave}>
+        {/* Food Preferences & Targets Section */}
+        <div style={{ marginBottom: 20, padding: 16, border: '1px solid #e0e0e0', borderRadius: 8, backgroundColor: '#fafafa' }}>
+          <h3>Food Preferences & Targets</h3>
+          
+          <div style={{ marginBottom: 12 }}>
+            <label style={{ display: 'block', marginBottom: 4, fontWeight: 'bold' }}>
+              Disliked ingredients
+            </label>
+            <input
+              type="text"
+              value={dislikedIngredients}
+              onChange={(e) => { setDislikedIngredients(e.target.value); setDirty(true); setStatus(null); }}
+              placeholder="e.g. mushrooms, olives, cilantro"
+              disabled={saving}
+              style={{ width: '100%', padding: 8, borderRadius: 4, border: '1px solid #ccc' }}
+            />
+          </div>
+
+          <div style={{ marginBottom: 12 }}>
+            <label style={{ display: 'block', marginBottom: 4, fontWeight: 'bold' }}>
+              Cuisine preferences
+            </label>
+            <input
+              type="text"
+              value={cuisinePreferences}
+              onChange={(e) => { setCuisinePreferences(e.target.value); setDirty(true); setStatus(null); }}
+              placeholder="e.g. Italian, Mexican, Asian"
+              disabled={saving}
+              style={{ width: '100%', padding: 8, borderRadius: 4, border: '1px solid #ccc' }}
+            />
+          </div>
+
+          <div style={{ marginBottom: 12 }}>
+            <label style={{ display: 'block', marginBottom: 4, fontWeight: 'bold' }}>
+              Daily calorie target (kcal)
+            </label>
+            <input
+              type="number"
+              value={calorieTarget}
+              onChange={(e) => { setCalorieTarget(e.target.value); setDirty(true); setStatus(null); }}
+              placeholder="e.g. 2000"
+              disabled={saving}
+              min="0"
+              style={{ width: '100%', padding: 8, borderRadius: 4, border: '1px solid #ccc' }}
+            />
+          </div>
+
+          <div style={{ marginBottom: 12 }}>
+            <label style={{ display: 'block', marginBottom: 8, fontWeight: 'bold' }}>
+              Macro targets
+            </label>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+              <div>
+                <label style={{ display: 'block', marginBottom: 4, fontSize: '0.9em' }}>
+                  Protein (g)
+                </label>
+                <input
+                  type="number"
+                  value={proteinTarget}
+                  onChange={(e) => { setProteinTarget(e.target.value); setDirty(true); setStatus(null); }}
+                  placeholder="150"
+                  disabled={saving}
+                  min="0"
+                  style={{ width: '100%', padding: 8, borderRadius: 4, border: '1px solid #ccc' }}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: 4, fontSize: '0.9em' }}>
+                  Carbs (g)
+                </label>
+                <input
+                  type="number"
+                  value={carbsTarget}
+                  onChange={(e) => { setCarbsTarget(e.target.value); setDirty(true); setStatus(null); }}
+                  placeholder="200"
+                  disabled={saving}
+                  min="0"
+                  style={{ width: '100%', padding: 8, borderRadius: 4, border: '1px solid #ccc' }}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: 4, fontSize: '0.9em' }}>
+                  Fats (g)
+                </label>
+                <input
+                  type="number"
+                  value={fatsTarget}
+                  onChange={(e) => { setFatsTarget(e.target.value); setDirty(true); setStatus(null); }}
+                  placeholder="65"
+                  disabled={saving}
+                  min="0"
+                  style={{ width: '100%', padding: 8, borderRadius: 4, border: '1px solid #ccc' }}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Meal Frequency Section */}
+        <div style={{ marginBottom: 20, padding: 16, border: '1px solid #e0e0e0', borderRadius: 8, backgroundColor: '#fafafa' }}>
+          <h3>Meal Frequency</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 12 }}>
+            <div>
+              <label style={{ display: 'block', marginBottom: 4, fontSize: '0.9em' }}>
+                Breakfast
+              </label>
+              <input
+                type="number"
+                value={breakfastCount}
+                onChange={(e) => {
+                  const val = parseInt(e.target.value) || 0;
+                  setBreakfastCount(val);
+                  if (val === 0) setBreakfastTime('');
+                  setDirty(true);
+                  setStatus(null);
+                }}
+                disabled={saving}
+                min="0"
+                max="5"
+                style={{ width: '100%', padding: 8, borderRadius: 4, border: '1px solid #ccc' }}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', marginBottom: 4, fontSize: '0.9em' }}>
+                Lunch
+              </label>
+              <input
+                type="number"
+                value={lunchCount}
+                onChange={(e) => {
+                  const val = parseInt(e.target.value) || 0;
+                  setLunchCount(val);
+                  if (val === 0) setLunchTime('');
+                  setDirty(true);
+                  setStatus(null);
+                }}
+                disabled={saving}
+                min="0"
+                max="5"
+                style={{ width: '100%', padding: 8, borderRadius: 4, border: '1px solid #ccc' }}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', marginBottom: 4, fontSize: '0.9em' }}>
+                Dinner
+              </label>
+              <input
+                type="number"
+                value={dinnerCount}
+                onChange={(e) => {
+                  const val = parseInt(e.target.value) || 0;
+                  setDinnerCount(val);
+                  if (val === 0) setDinnerTime('');
+                  setDirty(true);
+                  setStatus(null);
+                }}
+                disabled={saving}
+                min="0"
+                max="5"
+                style={{ width: '100%', padding: 8, borderRadius: 4, border: '1px solid #ccc' }}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', marginBottom: 4, fontSize: '0.9em' }}>
+                Snacks
+              </label>
+              <input
+                type="number"
+                value={snackCount}
+                onChange={(e) => {
+                  const val = parseInt(e.target.value) || 0;
+                  setSnackCount(val);
+                  if (val === 0) setSnackTime('');
+                  setDirty(true);
+                  setStatus(null);
+                }}
+                disabled={saving}
+                min="0"
+                max="5"
+                style={{ width: '100%', padding: 8, borderRadius: 4, border: '1px solid #ccc' }}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Meal Timing Section */}
+        <div style={{ marginBottom: 20, padding: 16, border: '1px solid #e0e0e0', borderRadius: 8, backgroundColor: '#fafafa' }}>
+          <h3>Meal Timing</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 12 }}>
+            <div>
+              <label style={{ display: 'block', marginBottom: 4, fontSize: '0.9em' }}>
+                Breakfast
+              </label>
+              <input
+                type="time"
+                value={breakfastTime}
+                onChange={(e) => { setBreakfastTime(e.target.value); setDirty(true); setStatus(null); }}
+                disabled={saving || breakfastCount === 0}
+                style={{ width: '100%', padding: 8, borderRadius: 4, border: '1px solid #ccc', opacity: breakfastCount === 0 ? 0.5 : 1 }}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', marginBottom: 4, fontSize: '0.9em' }}>
+                Lunch
+              </label>
+              <input
+                type="time"
+                value={lunchTime}
+                onChange={(e) => { setLunchTime(e.target.value); setDirty(true); setStatus(null); }}
+                disabled={saving || lunchCount === 0}
+                style={{ width: '100%', padding: 8, borderRadius: 4, border: '1px solid #ccc', opacity: lunchCount === 0 ? 0.5 : 1 }}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', marginBottom: 4, fontSize: '0.9em' }}>
+                Dinner
+              </label>
+              <input
+                type="time"
+                value={dinnerTime}
+                onChange={(e) => { setDinnerTime(e.target.value); setDirty(true); setStatus(null); }}
+                disabled={saving || dinnerCount === 0}
+                style={{ width: '100%', padding: 8, borderRadius: 4, border: '1px solid #ccc', opacity: dinnerCount === 0 ? 0.5 : 1 }}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', marginBottom: 4, fontSize: '0.9em' }}>
+                Snack
+              </label>
+              <input
+                type="time"
+                value={snackTime}
+                onChange={(e) => { setSnackTime(e.target.value); setDirty(true); setStatus(null); }}
+                disabled={saving || snackCount === 0}
+                style={{ width: '100%', padding: 8, borderRadius: 4, border: '1px solid #ccc', opacity: snackCount === 0 ? 0.5 : 1 }}
+              />
+            </div>
+          </div>
+        </div>
+
         <div style={{ marginBottom: 20 }}>
           <h3>Dietary Preferences</h3>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 8 }}>

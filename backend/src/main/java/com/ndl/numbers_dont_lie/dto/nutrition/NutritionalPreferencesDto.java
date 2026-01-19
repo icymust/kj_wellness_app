@@ -1,11 +1,26 @@
 package com.ndl.numbers_dont_lie.dto.nutrition;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Set;
 
 public class NutritionalPreferencesDto {
     public Set<String> dietaryPreferences;
     public Set<String> allergies;
+    public List<String> dislikedIngredients;
+    public List<String> cuisinePreferences;
+    public Integer calorieTarget;
+    public Integer proteinTarget;
+    public Integer carbsTarget;
+    public Integer fatsTarget;
+    public Integer breakfastCount;
+    public Integer lunchCount;
+    public Integer dinnerCount;
+    public Integer snackCount;
+    public String breakfastTime;
+    public String lunchTime;
+    public String dinnerTime;
+    public String snackTime;
     public LocalDateTime updatedAt;
 
     public NutritionalPreferencesDto() {}

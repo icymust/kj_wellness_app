@@ -45,7 +45,7 @@ export default function Profile({ ctx }) {
         const res = await loadWeights();
         if (Array.isArray(res)) loadedWeights = res;
         else loadedWeights = weights || [];
-      } catch (e) {
+      } catch {
         // if loadWeights fails or doesn't return, fall back to current `weights` from ctx
         loadedWeights = weights || [];
       }
