@@ -326,7 +326,82 @@ Frontend downloads JSON file automatically.
 
 ---
 
-# 13. Installation & Setup
+# 13. Recipe Data Loading
+
+The project includes 500 recipes and 1,342 ingredients sourced from Food.com dataset. These are pre-processed and stored in JSON files.
+
+## Data Files
+- `backend/src/main/resources/data/recipes.json` (500 recipes)
+- `backend/src/main/resources/data/ingredients.json` (1,342 ingredients)
+
+## Loading Data into Database
+
+### Method 1: Automated Script (Recommended)
+```bash
+./run-data-loader.sh
+```
+
+This script will:
+1. Check if PostgreSQL is running (starts docker-compose if needed)
+2. Verify JSON files exist
+3. Run the data loader with proper Spring profile
+4. Display comprehensive loading summary
+
+### Method 2: Manual Execution
+```bash
+cd backend
+mvn spring-boot:run -Dspring-boot.run.profiles=data-loader
+```
+
+### Method 3: With Docker Compose
+Add to backend service environment in `docker-compose.yml`:
+```yaml
+environment:
+  - SPRING_PROFILES_ACTIVE=data-loader
+```
+
+## Data Loader Features
+
+- **Validation**: Ensures all fields meet requirements (non-negative nutrition, required fields)
+- **Normalization**: Converts ingredient labels to lowercase for consistent matching
+- **Referential Integrity**: Validates recipe ingredients exist before persisting
+- **Duplicate Prevention**: Skips ingredients already in database
+- **Comprehensive Logging**: Tracks inserted/skipped counts, validation errors, missing ingredients
+- **Idempotent**: Safe to run multiple times
+
+## Expected Output
+
+```
+================================================================================
+DATA LOADING SUMMARY
+================================================================================
+
+INGREDIENTS:
+  ✓ Inserted: 1342
+  ⊗ Skipped:  0
+  → Total:    1342
+
+RECIPES:
+  ✓ Inserted: 500
+  ⊗ Skipped:  0
+  → Total:    500
+
+✓ ALL DATA LOADED SUCCESSFULLY
+================================================================================
+```
+
+## Troubleshooting
+
+If recipes are skipped, check for:
+- Missing ingredient references (ingredient name mismatch)
+- Invalid JSON structure
+- Database connection issues
+
+See [DATA_LOADER_README.md](DATA_LOADER_README.md) for detailed documentation.
+
+---
+
+# 14. Installation & Setup
 
 ## Requirements
 - Docker
@@ -354,9 +429,16 @@ Services will start:
 - database on 5432
 - pgAdmin on 5050
 
+## 4. Load Recipe Data (Optional)
+```bash
+./run-data-loader.sh
+```
+
+This loads 500 recipes and 1,342 ingredients into the database for the recipe recommendation feature.
+
 ---
 
-# 14. Usage
+# 15. Usage
 
 ## Register → verify email
 ## Login → optionally pass 2FA
@@ -369,12 +451,12 @@ Services will start:
 
 ---
 
-# 15. License
+# 16. License
 MIT
 
 ---
 
-# 16. Author
+# 17. Author
 Numbers Don't Lie Project — Kood Jõhvi assignment implementation.
 
 https://www.kaggle.com/datasets/shuyangli94/food-com-recipes-and-user-interactions?resource=download&select=RAW_recipes.csv
