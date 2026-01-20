@@ -1,5 +1,7 @@
 package com.ndl.numbers_dont_lie.recipe.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -20,6 +22,7 @@ public class RecipeIngredient {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "recipe_id", nullable = false)
+    @JsonIgnore
     private Recipe recipe;
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -27,6 +30,7 @@ public class RecipeIngredient {
     private Ingredient ingredient;
 
     @Column(nullable = false)
+    @JsonProperty("quantity")
     private Double quantity; // amount in grams or ml for this recipe
 
     public RecipeIngredient() {

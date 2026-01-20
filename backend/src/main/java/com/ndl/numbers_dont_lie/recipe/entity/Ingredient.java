@@ -1,6 +1,8 @@
 package com.ndl.numbers_dont_lie.recipe.entity;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.Column;
+import jakarta.persistence.Embedded;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -21,28 +23,33 @@ public class Ingredient {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    private Long id; // database ID
+
+    @Column(nullable = false, unique = true, length = 16)
+    @JsonProperty("id")
+    private String stableId; // stable external ID (e.g., "ing0974b137")
 
     @Column(nullable = false)
+    @JsonProperty("label")
     private String label; // ingredient name in lowercase
 
     @Column(nullable = false, length = 8)
-    private String unit; // "gram" or "ml"
+    @JsonProperty("unit")
+    private String unit; // "gram" or "milliliter"
 
     @Column(nullable = false)
+    @JsonProperty("quantity")
     private Double quantityPer100; // always 100.0 for standardization
 
-    @Column(nullable = false)
-    private Double calories; // kcal per 100g/ml
-
-    @Column(nullable = false)
-    private Double protein; // grams per 100g/ml
-
-    @Column(nullable = false)
-    private Double carbs; // grams per 100g/ml
-
-    @Column(nullable = false)
-    private Double fats; // grams per 100g/ml
+    /**
+     * Embedded nutrition information.
+     * IMPORTANT: These values are REFERENCE DATA ONLY.
+     * All nutritional calculations must be performed via function calling,
+     * NOT directly using these Ingredient reference values.
+     */
+    @Embedded
+    @JsonProperty("nutrition")
+    private Nutrition nutrition;
 
     @JdbcTypeCode(SqlTypes.ARRAY)
     @Column(name = "embedding", columnDefinition = "real[]")
@@ -51,19 +58,34 @@ public class Ingredient {
     public Ingredient() {
     }
 
-    public Ingredient(String label, String unit, Double quantityPer100, Double calories, Double protein,
-                      Double carbs, Double fats) {
+    public Ingredient(String stableId, String label, String unit, Double quantityPer100, 
+                      Double calories, Double protein, Double carbs, Double fats) {
+        this.stableId = stableId;
         this.label = label;
         this.unit = unit;
         this.quantityPer100 = quantityPer100;
-        this.calories = calories;
-        this.protein = protein;
-        this.carbs = carbs;
-        this.fats = fats;
+        this.nutrition = new Nutrition(calories, protein, carbs, fats);
+    }
+
+    public Ingredient(String stableId, String label, String unit, Double quantityPer100, 
+                      Nutrition nutrition) {
+        this.stableId = stableId;
+        this.label = label;
+        this.unit = unit;
+        this.quantityPer100 = quantityPer100;
+        this.nutrition = nutrition;
     }
 
     public Long getId() {
         return id;
+    }
+
+    public String getStableId() {
+        return stableId;
+    }
+
+    public void setStableId(String stableId) {
+        this.stableId = stableId;
     }
 
     public String getLabel() {
@@ -90,36 +112,56 @@ public class Ingredient {
         this.quantityPer100 = quantityPer100;
     }
 
+    public Nutrition getNutrition() {
+        return nutrition;
+    }
+
+    public void setNutrition(Nutrition nutrition) {
+        this.nutrition = nutrition;
+    }
+
     public Double getCalories() {
-        return calories;
+        return nutrition != null ? nutrition.getCalories() : null;
     }
 
     public void setCalories(Double calories) {
-        this.calories = calories;
+        if (nutrition == null) {
+            nutrition = new Nutrition();
+        }
+        nutrition.setCalories(calories);
     }
 
     public Double getProtein() {
-        return protein;
+        return nutrition != null ? nutrition.getProtein() : null;
     }
 
     public void setProtein(Double protein) {
-        this.protein = protein;
+        if (nutrition == null) {
+            nutrition = new Nutrition();
+        }
+        nutrition.setProtein(protein);
     }
 
     public Double getCarbs() {
-        return carbs;
+        return nutrition != null ? nutrition.getCarbs() : null;
     }
 
     public void setCarbs(Double carbs) {
-        this.carbs = carbs;
+        if (nutrition == null) {
+            nutrition = new Nutrition();
+        }
+        nutrition.setCarbs(carbs);
     }
 
     public Double getFats() {
-        return fats;
+        return nutrition != null ? nutrition.getFats() : null;
     }
 
     public void setFats(Double fats) {
-        this.fats = fats;
+        if (nutrition == null) {
+            nutrition = new Nutrition();
+        }
+        nutrition.setFats(fats);
     }
 
     public float[] getEmbedding() {

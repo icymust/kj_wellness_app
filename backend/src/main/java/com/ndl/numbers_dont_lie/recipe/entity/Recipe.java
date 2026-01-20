@@ -1,9 +1,12 @@
 package com.ndl.numbers_dont_lie.recipe.entity;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
 import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -32,38 +35,54 @@ public class Recipe {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    private Long id; // database ID
+
+    @Column(nullable = false, unique = true, length = 16)
+    @JsonProperty("id")
+    private String stableId; // stable external ID (e.g., "r00001")
 
     @Column(nullable = false)
+    @JsonProperty("title")
     private String title;
 
     @Column(length = 64)
+    @JsonProperty("cuisine")
     private String cuisine; // e.g. Italian, Mexican, Asian, Mediterranean
 
     @Column(length = 32)
-    private String meal; // breakfast/lunch/dinner/snack
+    @JsonProperty("meal")
+    @Enumerated(EnumType.STRING)
+    private MealType meal; // breakfast/lunch/dinner/snack
 
     @Column(nullable = false)
+    @JsonProperty("servings")
     private Integer servings;
 
     @Column(length = 1024)
+    @JsonProperty("summary")
     private String summary;
 
     @Column(name = "time_minutes")
+    @JsonProperty("time")
     private Integer timeMinutes; // preparation time in minutes
 
     @Column(length = 32)
-    private String difficultyLevel; // easy/medium/hard
+    @JsonProperty("difficulty_level")
+    @Enumerated(EnumType.STRING)
+    private DifficultyLevel difficultyLevel; // easy/medium/hard
 
     @Column(length = 64)
+    @JsonProperty("source")
     private String source; // e.g. food-com, ai-generated, user-created
 
     @Column(length = 512)
+    @JsonProperty("img")
     private String imageUrl;
 
     @ElementCollection(fetch = FetchType.LAZY)
     @CollectionTable(name = "recipe_dietary_tags", joinColumns = @JoinColumn(name = "recipe_id"))
     @Column(name = "tag", length = 64)
+    @JsonProperty("dietary_tags")
     private List<String> dietaryTags = new ArrayList<>();
 
     private LocalDateTime createdAt;
@@ -73,9 +92,11 @@ public class Recipe {
     private float[] embedding; // vector for RAG search (populated later)
 
     @OneToMany(mappedBy = "recipe", fetch = FetchType.LAZY, cascade = jakarta.persistence.CascadeType.ALL, orphanRemoval = true)
+    @JsonProperty("ingredients")
     private List<RecipeIngredient> ingredients = new ArrayList<>();
 
     @OneToMany(mappedBy = "recipe", fetch = FetchType.LAZY, cascade = jakarta.persistence.CascadeType.ALL, orphanRemoval = true)
+    @JsonProperty("preparation")
     private List<PreparationStep> preparationSteps = new ArrayList<>();
 
     @PrePersist
@@ -88,8 +109,9 @@ public class Recipe {
     public Recipe() {
     }
 
-    public Recipe(String title, String cuisine, String meal, Integer servings, String summary,
-                  Integer timeMinutes, String difficultyLevel, String source, String imageUrl) {
+    public Recipe(String stableId, String title, String cuisine, MealType meal, Integer servings, String summary,
+                  Integer timeMinutes, DifficultyLevel difficultyLevel, String source, String imageUrl) {
+        this.stableId = stableId;
         this.title = title;
         this.cuisine = cuisine;
         this.meal = meal;
@@ -103,6 +125,14 @@ public class Recipe {
 
     public Long getId() {
         return id;
+    }
+
+    public String getStableId() {
+        return stableId;
+    }
+
+    public void setStableId(String stableId) {
+        this.stableId = stableId;
     }
 
     public String getTitle() {
@@ -121,12 +151,16 @@ public class Recipe {
         this.cuisine = cuisine;
     }
 
-    public String getMeal() {
+    public MealType getMeal() {
         return meal;
     }
 
-    public void setMeal(String meal) {
+    public void setMeal(MealType meal) {
         this.meal = meal;
+    }
+
+    public void setMealFromString(String mealValue) {
+        this.meal = MealType.fromString(mealValue);
     }
 
     public Integer getServings() {
@@ -153,12 +187,16 @@ public class Recipe {
         this.timeMinutes = timeMinutes;
     }
 
-    public String getDifficultyLevel() {
+    public DifficultyLevel getDifficultyLevel() {
         return difficultyLevel;
     }
 
-    public void setDifficultyLevel(String difficultyLevel) {
+    public void setDifficultyLevel(DifficultyLevel difficultyLevel) {
         this.difficultyLevel = difficultyLevel;
+    }
+
+    public void setDifficultyLevelFromString(String difficultyValue) {
+        this.difficultyLevel = DifficultyLevel.fromString(difficultyValue);
     }
 
     public String getSource() {

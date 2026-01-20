@@ -2,7 +2,10 @@ package com.ndl.numbers_dont_lie.recipe.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ndl.numbers_dont_lie.recipe.entity.DifficultyLevel;
 import com.ndl.numbers_dont_lie.recipe.entity.Ingredient;
+import com.ndl.numbers_dont_lie.recipe.entity.MealType;
+import com.ndl.numbers_dont_lie.recipe.entity.Nutrition;
 import com.ndl.numbers_dont_lie.recipe.entity.PreparationStep;
 import com.ndl.numbers_dont_lie.recipe.entity.Recipe;
 import com.ndl.numbers_dont_lie.recipe.entity.RecipeIngredient;
@@ -27,20 +30,17 @@ import org.springframework.core.io.ClassPathResource;
 
 /**
  * Intelligent DataLoader for recipe and ingredient data management.
+ * Works with new JSON data structures:
+ * - Ingredients: id, label, unit, quantity, nutrition{calories, carbs, protein, fats}
+ * - Recipes: id, title, cuisine, meal, servings, ingredients[], summary, time, difficulty_level, dietary_tags[], source, img, preparation[]
  * 
  * On application startup, this component:
  * 1. Checks if data already exists in the database
  * 2. Only loads JSON data if the database is empty (recipes count == 0)
  * 3. Ensures idempotency - safe to restart application without duplicating data
- * 4. Validates all data before persistence
- * 5. Generates startup report with statistics
- * 
- * This approach ensures:
- * - Data is loaded once on first startup
- * - Subsequent restarts skip loading (data already present)
- * - No duplicate records
- * - Clean transaction handling
- * - Production-safe execution
+ * 4. Preserves stable IDs across restarts
+ * 5. Validates all data before persistence
+ * 6. Generates startup report with statistics
  */
 @Component
 public class RecipeDataLoader implements CommandLineRunner {
@@ -89,20 +89,11 @@ public class RecipeDataLoader implements CommandLineRunner {
             
             // Step 2: Conditional loading based on current state
             if (recipesBeforeCount == 0) {
-                log.info("No recipes found. Loading ingredients and recipes...");
-                log.info("");
-                
-                // Load ingredients first (required for foreign key references)
-                Map<String, Ingredient> ingredientMap = loadIngredients();
-                
-                // Load recipes with ingredient references
-                loadRecipes(ingredientMap);
-                
                 loadWasPerformed = true;
-                loadStatus = "LOADED";
+                loadStatus = "SUCCESS";
+                Map<String, Ingredient> ingredientMap = loadIngredients();
+                loadRecipes(ingredientMap);
             } else {
-                log.info("Recipes already present. Skipping data load.");
-                loadWasPerformed = false;
                 loadStatus = "SKIPPED";
             }
             
@@ -134,9 +125,16 @@ public class RecipeDataLoader implements CommandLineRunner {
 
     /**
      * Load and persist ingredients from ingredients.json
-     * Returns a map of normalized label -> Ingredient for recipe processing
+     * Returns a map of ingredient ID -> Ingredient for recipe processing
      * 
-     * IMPORTANT: Only loads if ingredient table is empty
+     * NEW STRUCTURE:
+     * {
+     *   "id": "ing0974b137",
+     *   "label": "cooked brown rice",
+     *   "unit": "gram",
+     *   "quantity": 100,
+     *   "nutrition": { "calories": 32.0, "carbs": 3.2, "protein": 2.1, "fats": 1.2 }
+     * }
      */
     @Transactional
     protected Map<String, Ingredient> loadIngredients() throws IOException {
@@ -166,19 +164,11 @@ public class RecipeDataLoader implements CommandLineRunner {
                 Ingredient ingredient = processIngredient(node);
                 
                 if (ingredient != null) {
-                    // Check for duplicates
-                    if (ingredientMap.containsKey(ingredient.getLabel())) {
-                        log.warn("Duplicate ingredient found: '{}' - skipping", ingredient.getLabel());
-                        ingredientsSkipped++;
-                        continue;
-                    }
-                    
-                    // Save to database
-                    Ingredient saved = ingredientRepository.save(ingredient);
-                    ingredientMap.put(saved.getLabel(), saved);
+                    ingredientRepository.save(ingredient);
+                    ingredientMap.put(ingredient.getStableId(), ingredient);
                     ingredientsInserted++;
                     
-                    if (ingredientsInserted % 100 == 0) {
+                    if (ingredientsInserted % 200 == 0) {
                         log.info("Processed {} / {} ingredients", ingredientsInserted, totalIngredients);
                     }
                 }
@@ -207,49 +197,81 @@ public class RecipeDataLoader implements CommandLineRunner {
     protected Map<String, Ingredient> rebuildIngredientMap() {
         Map<String, Ingredient> ingredientMap = new HashMap<>();
         ingredientRepository.findAll().forEach(ingredient -> 
-            ingredientMap.put(ingredient.getLabel(), ingredient)
+            ingredientMap.put(ingredient.getStableId(), ingredient)
         );
         return ingredientMap;
     }
 
     /**
-     * Process and validate a single ingredient from JSON
+     * Process and validate a single ingredient from JSON (NEW FORMAT)
      */
     private Ingredient processIngredient(JsonNode node) {
-        // Validate required field: label
+        // Validate required fields
+        if (!node.has("id") || node.get("id").asText().trim().isEmpty()) {
+            validationErrors.add("Ingredient missing required field: id");
+            ingredientsSkipped++;
+            return null;
+        }
+        
         if (!node.has("label") || node.get("label").asText().trim().isEmpty()) {
             validationErrors.add("Ingredient missing required field: label");
             ingredientsSkipped++;
             return null;
         }
         
-        // Normalize label to lowercase and trim
-        String originalLabel = node.get("label").asText();
-        String normalizedLabel = originalLabel.toLowerCase().trim();
+        String stableId = node.get("id").asText();
+        String label = node.get("label").asText().toLowerCase().trim();
         
         // Extract fields with defaults
         String unit = node.has("unit") ? node.get("unit").asText() : "gram";
-        Double quantityPer100 = node.has("quantityPer100") ? node.get("quantityPer100").asDouble() : 100.0;
-        Double calories = node.has("calories") ? node.get("calories").asDouble() : 0.0;
-        Double protein = node.has("protein") ? node.get("protein").asDouble() : 0.0;
-        Double carbs = node.has("carbs") ? node.get("carbs").asDouble() : 0.0;
-        Double fats = node.has("fats") ? node.get("fats").asDouble() : 0.0;
+        Double quantity = node.has("quantity") ? node.get("quantity").asDouble() : 100.0;
+        
+        // Extract nutrition from nested object
+        Double calories = 0.0;
+        Double protein = 0.0;
+        Double carbs = 0.0;
+        Double fats = 0.0;
+        
+        if (node.has("nutrition") && node.get("nutrition").isObject()) {
+            JsonNode nutrition = node.get("nutrition");
+            calories = nutrition.has("calories") ? nutrition.get("calories").asDouble() : 0.0;
+            protein = nutrition.has("protein") ? nutrition.get("protein").asDouble() : 0.0;
+            carbs = nutrition.has("carbs") ? nutrition.get("carbs").asDouble() : 0.0;
+            fats = nutrition.has("fats") ? nutrition.get("fats").asDouble() : 0.0;
+        }
         
         // Validate numeric fields are non-negative
-        if (quantityPer100 < 0 || calories < 0 || protein < 0 || carbs < 0 || fats < 0) {
-            String error = String.format("Ingredient '%s' has negative nutrition values", normalizedLabel);
+        if (quantity < 0 || calories < 0 || protein < 0 || carbs < 0 || fats < 0) {
+            String error = String.format("Ingredient '%s' has negative values", label);
             validationErrors.add(error);
             ingredientsSkipped++;
             return null;
         }
         
-        return new Ingredient(normalizedLabel, unit, quantityPer100, calories, protein, carbs, fats);
+        // Create with new constructor that takes Nutrition object
+        Nutrition nutritionObj = new Nutrition(calories, protein, carbs, fats);
+        return new Ingredient(stableId, label, unit, quantity, nutritionObj);
     }
 
     /**
      * Load and persist recipes from recipes.json
      * 
-     * IMPORTANT: Only loads if recipe table is empty
+     * NEW STRUCTURE:
+     * {
+     *   "id": "r00001",
+     *   "title": "...",
+     *   "cuisine": "...",
+     *   "meal": "...",
+     *   "servings": 4,
+     *   "ingredients": [{ "id": "ing...", "name": "...", "quantity": 100 }],
+     *   "summary": "...",
+     *   "time": 25,
+     *   "difficulty_level": "easy",
+     *   "dietary_tags": [...],
+     *   "source": "...",
+     *   "img": "...",
+     *   "preparation": [{ "step": "...", "description": "...", "ingredients": [...] }]
+     * }
      */
     @Transactional
     protected void loadRecipes(Map<String, Ingredient> ingredientMap) throws IOException {
@@ -300,76 +322,112 @@ public class RecipeDataLoader implements CommandLineRunner {
     }
 
     /**
-     * Process and validate a single recipe from JSON
+     * Process and validate a single recipe from JSON (NEW FORMAT)
      */
     private Recipe processRecipe(JsonNode node, Map<String, Ingredient> ingredientMap) {
-        // Validate required field: title
+        // Validate required fields
+        if (!node.has("id") || node.get("id").asText().trim().isEmpty()) {
+            validationErrors.add("Recipe missing required field: id");
+            recipesSkipped++;
+            return null;
+        }
+        
         if (!node.has("title") || node.get("title").asText().trim().isEmpty()) {
             validationErrors.add("Recipe missing required field: title");
             recipesSkipped++;
             return null;
         }
         
+        String stableId = node.get("id").asText();
         String title = node.get("title").asText().trim();
         
         // Extract fields with defaults
         String cuisine = node.has("cuisine") ? node.get("cuisine").asText() : "Other";
-        String meal = node.has("meal") ? node.get("meal").asText() : "lunch";
+        String mealStr = node.has("meal") ? node.get("meal").asText() : "dinner";
         Integer servings = node.has("servings") ? node.get("servings").asInt() : 4;
         String summary = node.has("summary") ? node.get("summary").asText() : "";
-        Integer timeMinutes = node.has("timeMinutes") ? node.get("timeMinutes").asInt() : 30;
-        String difficultyLevel = node.has("difficultyLevel") ? node.get("difficultyLevel").asText() : "medium";
+        Integer time = node.has("time") ? node.get("time").asInt() : 30;
+        String difficultyStr = node.has("difficulty_level") ? node.get("difficulty_level").asText() : "medium";
         String source = node.has("source") ? node.get("source").asText() : "food-com";
-        String imageUrl = node.has("imageUrl") ? node.get("imageUrl").asText() : "/images/default-recipe.jpg";
+        String img = node.has("img") ? node.get("img").asText() : "/images/default-recipe.jpg";
         
-        // Create recipe entity
-        Recipe recipe = new Recipe(title, cuisine, meal, servings, summary, 
-                                   timeMinutes, difficultyLevel, source, imageUrl);
+        // Convert strings to enums with safe conversion
+        MealType meal = MealType.fromString(mealStr);
+        DifficultyLevel difficultyLevel = DifficultyLevel.fromString(difficultyStr);
+        
+        // Create recipe entity with enums
+        Recipe recipe = new Recipe(stableId, title, cuisine, meal, servings, summary, 
+                                   time, difficultyLevel, source, img);
         
         // Process dietary tags
-        if (node.has("dietaryTags") && node.get("dietaryTags").isArray()) {
+        if (node.has("dietary_tags") && node.get("dietary_tags").isArray()) {
             List<String> tags = new ArrayList<>();
-            for (JsonNode tagNode : node.get("dietaryTags")) {
+            for (JsonNode tagNode : node.get("dietary_tags")) {
                 tags.add(tagNode.asText());
             }
             recipe.setDietaryTags(tags);
         }
         
-        // Process ingredient references
-        if (node.has("ingredientNames") && node.get("ingredientNames").isArray()) {
+        // Process ingredient references from ingredients array
+        if (node.has("ingredients") && node.get("ingredients").isArray()) {
             List<String> missingForThisRecipe = new ArrayList<>();
             
-            for (JsonNode ingredientNameNode : node.get("ingredientNames")) {
-                String ingredientName = ingredientNameNode.asText().toLowerCase().trim();
+            for (JsonNode ingredientNode : node.get("ingredients")) {
+                String ingredientId = ingredientNode.has("id") ? ingredientNode.get("id").asText() : null;
+                String ingredientName = ingredientNode.has("name") ? ingredientNode.get("name").asText() : null;
+                Double ingredientQuantity = ingredientNode.has("quantity") ? ingredientNode.get("quantity").asDouble() : 100.0;
                 
-                Ingredient ingredient = ingredientMap.get(ingredientName);
-                if (ingredient == null) {
-                    missingForThisRecipe.add(ingredientName);
-                    missingIngredients.add(ingredientName);
-                } else {
-                    // Create recipe-ingredient junction with default quantity (100g)
-                    RecipeIngredient recipeIngredient = new RecipeIngredient(recipe, ingredient, 100.0);
-                    recipe.getIngredients().add(recipeIngredient);
+                if (ingredientId == null || ingredientId.isEmpty()) {
+                    missingForThisRecipe.add("null");
+                    missingIngredients.add("null");
+                    continue;
                 }
+                
+                Ingredient ingredient = ingredientMap.get(ingredientId);
+                if (ingredient == null) {
+                    missingForThisRecipe.add(ingredientName != null ? ingredientName : ingredientId);
+                    missingIngredients.add(ingredientName != null ? ingredientName : ingredientId);
+                    continue;
+                }
+                
+                RecipeIngredient recipeIngredient = new RecipeIngredient();
+                recipeIngredient.setRecipe(recipe);
+                recipeIngredient.setIngredient(ingredient);
+                recipeIngredient.setQuantity(ingredientQuantity.doubleValue());
+                recipe.getIngredients().add(recipeIngredient);
             }
             
             // Skip recipe if any ingredients are missing
             if (!missingForThisRecipe.isEmpty()) {
-                String error = String.format("Recipe '%s' references missing ingredients: %s", 
-                                            title, String.join(", ", missingForThisRecipe));
+                String error = String.format("Recipe '%s' missing ingredients: %s", title, String.join(", ", missingForThisRecipe));
                 validationErrors.add(error);
-                log.warn(error);
                 recipesSkipped++;
                 return null;
             }
         }
         
-        // Process preparation steps
-        if (node.has("steps") && node.get("steps").isArray()) {
+        // Process preparation steps with new structure
+        if (node.has("preparation") && node.get("preparation").isArray()) {
             int stepIndex = 1;
-            for (JsonNode stepNode : node.get("steps")) {
-                String stepDescription = stepNode.asText();
-                PreparationStep step = new PreparationStep(recipe, stepIndex, null, stepDescription);
+            for (JsonNode stepNode : node.get("preparation")) {
+                String stepTitle = stepNode.has("step") ? stepNode.get("step").asText() : "Step " + stepIndex;
+                String stepDescription = stepNode.has("description") ? stepNode.get("description").asText() : "";
+                
+                PreparationStep step = new PreparationStep();
+                step.setRecipe(recipe);
+                step.setOrderNumber(stepIndex);
+                step.setStepTitle(stepTitle);  // Set the step name
+                step.setDescription(stepDescription);
+                
+                // Populate ingredients list from preparation step
+                if (stepNode.has("ingredients") && stepNode.get("ingredients").isArray()) {
+                    List<String> stepIngredients = new ArrayList<>();
+                    for (JsonNode ingNode : stepNode.get("ingredients")) {
+                        stepIngredients.add(ingNode.asText());
+                    }
+                    step.setIngredientIds(stepIngredients);
+                }
+                
                 recipe.getPreparationSteps().add(step);
                 stepIndex++;
             }
@@ -411,11 +469,12 @@ public class RecipeDataLoader implements CommandLineRunner {
             sortedMissing.sort(String::compareTo);
             int count = 0;
             for (String missing : sortedMissing) {
-                log.warn("  - {}", missing);
-                if (++count >= 20) {
-                    log.warn("  ... and {} more", sortedMissing.size() - 20);
-                    break;
+                if (count++ < 20) {
+                    log.warn("  - {}", missing);
                 }
+            }
+            if (sortedMissing.size() > 20) {
+                log.warn("  ... and {} more", sortedMissing.size() - 20);
             }
             log.warn("");
         }
@@ -424,11 +483,12 @@ public class RecipeDataLoader implements CommandLineRunner {
             log.warn("VALIDATION ERRORS ({}):", validationErrors.size());
             int count = 0;
             for (String error : validationErrors) {
-                log.warn("  - {}", error);
-                if (++count >= 20) {
-                    log.warn("  ... and {} more", validationErrors.size() - 20);
-                    break;
+                if (count++ < 20) {
+                    log.warn("  - {}", error);
                 }
+            }
+            if (validationErrors.size() > 20) {
+                log.warn("  ... and {} more", validationErrors.size() - 20);
             }
             log.warn("");
         }
@@ -439,11 +499,9 @@ public class RecipeDataLoader implements CommandLineRunner {
         if (!loadWasPerformed) {
             log.info("✓ STARTUP CHECK PASSED: Recipes already loaded ({} records)", recipesBeforeCount);
         } else if (recipesSkipped == 0 && ingredientsSkipped == 0 && validationErrors.isEmpty()) {
-            log.info("✓ DATA LOADED SUCCESSFULLY");
-        } else if (recipesInserted > 0 && ingredientsInserted > 0) {
-            log.warn("⚠ DATA LOADED WITH WARNINGS");
+            log.info("✓ LOAD SUCCESS: All data loaded without errors!");
         } else {
-            log.error("✗ DATA LOADING FAILED");
+            log.warn("⚠ LOAD COMPLETED WITH WARNINGS: Check validation errors above");
         }
         
         log.info("=".repeat(80));

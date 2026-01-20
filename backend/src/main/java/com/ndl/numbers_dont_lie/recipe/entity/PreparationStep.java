@@ -1,5 +1,6 @@
 package com.ndl.numbers_dont_lie.recipe.entity;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
 import jakarta.persistence.ElementCollection;
@@ -27,18 +28,21 @@ public class PreparationStep {
     private Recipe recipe;
 
     @Column(name = "order_number", nullable = false)
+    @JsonProperty("step")
     private Integer orderNumber;
 
     @Column(length = 256)
     private String stepTitle;
 
     @Column(length = 2048)
+    @JsonProperty("description")
     private String description;
 
     @ElementCollection(fetch = FetchType.LAZY)
     @CollectionTable(name = "preparation_step_ingredient_ids", joinColumns = @JoinColumn(name = "step_id"))
     @Column(name = "ingredient_id")
-    private List<Long> ingredientIds = new ArrayList<>();
+    @JsonProperty("ingredients")
+    private List<String> ingredientIds = new ArrayList<>();
 
     public PreparationStep() {
     }
@@ -86,11 +90,11 @@ public class PreparationStep {
         this.description = description;
     }
 
-    public List<Long> getIngredientIds() {
+    public List<String> getIngredientIds() {
         return ingredientIds;
     }
 
-    public void setIngredientIds(List<Long> ingredientIds) {
+    public void setIngredientIds(List<String> ingredientIds) {
         this.ingredientIds = ingredientIds;
     }
 }
