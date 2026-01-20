@@ -377,3 +377,4 @@ MIT
 # 16. Author
 Numbers Don't Lie Project — Kood Jõhvi assignment implementation.
 
+https://www.kaggle.com/datasets/shuyangli94/food-com-recipes-and-user-interactions?resource=download&select=RAW_recipes.csv
