@@ -9,7 +9,7 @@ public class NutritionalPreferencesConstants {
     public static final Set<String> AVAILABLE_DIETARY_PREFERENCES = new HashSet<>(Arrays.asList(
             "vegetarian", "vegan", "keto", "paleo", "pescatarian", "low-carb", 
             "gluten-free", "dairy-free", "halal", "kosher", "organic", 
-            "low-sodium", "high-protein", "mediterranean", "intermittent-fasting"
+            "low-sodium", "high-protein", "low-fat", "intermittent-fasting"
     ));
 
     public static final Set<String> AVAILABLE_ALLERGIES = new HashSet<>(Arrays.asList(

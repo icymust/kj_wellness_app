@@ -5,12 +5,13 @@ export default function NutritionalPreferences({ token }) {
   const [nutritionalPrefs, setNutritionalPrefs] = useState(null);
   const [availableDietaryPreferences, setAvailableDietaryPreferences] = useState([]);
   const [availableAllergies, setAvailableAllergies] = useState([]);
+  const [availableCuisines] = useState(['American', 'Asian', 'French', 'Indian', 'Italian', 'Mediterranean', 'Mexican', 'Middle Eastern', 'Other']);
   const [selectedDietary, setSelectedDietary] = useState(new Set());
   const [selectedAllergies, setSelectedAllergies] = useState(new Set());
+  const [selectedCuisines, setSelectedCuisines] = useState(new Set());
   
   // New state for food preferences and targets
   const [dislikedIngredients, setDislikedIngredients] = useState('');
-  const [cuisinePreferences, setCuisinePreferences] = useState('');
   const [calorieTarget, setCalorieTarget] = useState('');
   const [proteinTarget, setProteinTarget] = useState('');
   const [carbsTarget, setCarbsTarget] = useState('');
@@ -47,10 +48,10 @@ export default function NutritionalPreferences({ token }) {
         setNutritionalPrefs(prefs);
         setSelectedDietary(new Set(prefs.dietaryPreferences || []));
         setSelectedAllergies(new Set(prefs.allergies || []));
+        setSelectedCuisines(new Set(prefs.cuisinePreferences || []));
         
         // Load new fields
         setDislikedIngredients((prefs.dislikedIngredients || []).join(', '));
-        setCuisinePreferences((prefs.cuisinePreferences || []).join(', '));
         setCalorieTarget(prefs.calorieTarget || '');
         setProteinTarget(prefs.proteinTarget || '');
         setCarbsTarget(prefs.carbsTarget || '');
@@ -106,6 +107,18 @@ export default function NutritionalPreferences({ token }) {
     setStatus(null);
   };
 
+  const handleCuisineChange = (cuisine) => {
+    const newSelected = new Set(selectedCuisines);
+    if (newSelected.has(cuisine)) {
+      newSelected.delete(cuisine);
+    } else {
+      newSelected.add(cuisine);
+    }
+    setSelectedCuisines(newSelected);
+    setDirty(true);
+    setStatus(null);
+  };
+
   const handleSave = async (e) => {
     e.preventDefault();
     if (!dirty) return;
@@ -122,16 +135,11 @@ export default function NutritionalPreferences({ token }) {
         .map(s => s.trim())
         .filter(s => s.length > 0);
       
-      const cuisinePreferencesArray = cuisinePreferences
-        .split(',')
-        .map(s => s.trim())
-        .filter(s => s.length > 0);
-      
       const response = await api.saveNutritionalPreferences(token, {
         dietaryPreferences: Array.from(selectedDietary),
         allergies: Array.from(selectedAllergies),
         dislikedIngredients: dislikedIngredientsArray,
-        cuisinePreferences: cuisinePreferencesArray,
+        cuisinePreferences: Array.from(selectedCuisines),
         calorieTarget: calorieTarget ? parseInt(calorieTarget) : null,
         proteinTarget: proteinTarget ? parseInt(proteinTarget) : null,
         carbsTarget: carbsTarget ? parseInt(carbsTarget) : null,
@@ -162,8 +170,8 @@ export default function NutritionalPreferences({ token }) {
     if (nutritionalPrefs) {
       setSelectedDietary(new Set(nutritionalPrefs.dietaryPreferences || []));
       setSelectedAllergies(new Set(nutritionalPrefs.allergies || []));
+      setSelectedCuisines(new Set(nutritionalPrefs.cuisinePreferences || []));
       setDislikedIngredients((nutritionalPrefs.dislikedIngredients || []).join(', '));
-      setCuisinePreferences((nutritionalPrefs.cuisinePreferences || []).join(', '));
       setCalorieTarget(nutritionalPrefs.calorieTarget || '');
       setProteinTarget(nutritionalPrefs.proteinTarget || '');
       setCarbsTarget(nutritionalPrefs.carbsTarget || '');
@@ -226,17 +234,22 @@ export default function NutritionalPreferences({ token }) {
           </div>
 
           <div style={{ marginBottom: 12 }}>
-            <label style={{ display: 'block', marginBottom: 4, fontWeight: 'bold' }}>
+            <label style={{ display: 'block', marginBottom: 8, fontWeight: 'bold' }}>
               Cuisine preferences
             </label>
-            <input
-              type="text"
-              value={cuisinePreferences}
-              onChange={(e) => { setCuisinePreferences(e.target.value); setDirty(true); setStatus(null); }}
-              placeholder="e.g. Italian, Mexican, Asian"
-              disabled={saving}
-              style={{ width: '100%', padding: 8, borderRadius: 4, border: '1px solid #ccc' }}
-            />
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 8 }}>
+              {availableCuisines.map((cuisine) => (
+                <label key={cuisine} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <input
+                    type="checkbox"
+                    checked={selectedCuisines.has(cuisine)}
+                    onChange={() => handleCuisineChange(cuisine)}
+                    disabled={saving}
+                  />
+                  <span>{cuisine}</span>
+                </label>
+              ))}
+            </div>
           </div>
 
           <div style={{ marginBottom: 12 }}>
