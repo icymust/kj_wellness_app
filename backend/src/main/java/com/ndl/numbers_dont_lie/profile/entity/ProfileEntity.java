@@ -23,6 +23,8 @@ public class ProfileEntity {
   private Double  targetWeightKg;   // цель по весу (кг)
   @Column(length = 24)  private String activityLevel;  // low|moderate|high
   @Column(length = 32)  private String goal;           // weight_loss|muscle_gain|general_fitness
+  @Column(length = 32)  private String mealFrequency;  // THREE_MEALS|FOUR_MEALS|FIVE_MEALS
+  @Column(length = 32)  private String timezone;       // IANA timezone (e.g., "Europe/Tallinn")
 
   public Long getId() { return id; }
   public UserEntity getUser() { return user; }
@@ -41,4 +43,8 @@ public class ProfileEntity {
   public void setActivityLevel(String activityLevel) { this.activityLevel = activityLevel; }
   public String getGoal() { return goal; }
   public void setGoal(String goal) { this.goal = goal; }
+  public String getMealFrequency() { return mealFrequency; }
+  public void setMealFrequency(String mealFrequency) { this.mealFrequency = mealFrequency; }
+  public String getTimezone() { return timezone; }
+  public void setTimezone(String timezone) { this.timezone = timezone; }
 }

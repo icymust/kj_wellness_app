@@ -54,4 +54,9 @@ app:
   ai:
     enabled: ${AI_ENABLED:true}    # If false, service returns cached recommendations only
 
+# Groq AI configuration (optional)
+groq:
+  api:
+    key: ${GROQ_API_KEY:}  # Optional: Set GROQ_API_KEY env variable to enable AI features
+
 
