@@ -18,6 +18,7 @@ import Verify from "./pages/Verify";
 import Forgot from "./pages/Forgot";
 import Reset from "./pages/Reset";
 import Log from "./pages/Log";
+import { DebugMealPlanPage } from "./pages/DebugMealPlanPage";
 
 // Root component wraps router so inner shell can use hooks
 export default function App(){
@@ -577,6 +578,7 @@ function AppShell() {
           <Route path="/forgot" element={<Forgot ctx={ctx} />} />
           <Route path="/reset" element={<Reset ctx={ctx} />} />
           <Route path="/log" element={<Log ctx={ctx} />} />
+          <Route path="/debug/meal-plans" element={<DebugMealPlanPage />} />
           <Route path="/oauth-callback" element={<OAuthCallback onTokens={({ access, refresh }) => { setAccessToken(access); setRefreshToken(refresh); setTokens(access, refresh); navigate('/profile'); }} />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
