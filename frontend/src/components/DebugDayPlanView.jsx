@@ -1,7 +1,7 @@
 /**
- * STEP 5.5.2: DayPlanView Component
+ * STEP 5.5.2 + STEP 6.3: DayPlanView Component
  * 
- * Debug viewer for single-day meal plan.
+ * Debug viewer for single-day meal plan with nutrition visualization.
  * This is a TEMPORARY READ-ONLY component for visual inspection.
  * NOT intended for production use.
  * 
@@ -9,25 +9,40 @@
  * - Fetch day plan on mount
  * - Display date and list of meals
  * - For each meal: show type, recipe, calories, macros, ingredients, steps
+ * - STEP 6.3: Nutrition Summary section with progress bars
  * - Show loading/error states
  * - Use JSON.stringify for clarity over beauty
  */
 
 import React, { useState, useEffect } from 'react';
-import { fetchDayPlan } from '../lib/debugApi';
+import { fetchDayPlan, fetchDayNutrition } from '../lib/debugApi';
 
 export function DayPlanView({ date }) {
   const [dayPlan, setDayPlan] = useState(null);
+  const [nutritionSummary, setNutritionSummary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [nutritionError, setNutritionError] = useState(null);
 
   useEffect(() => {
-    const loadDayPlan = async () => {
+    const loadDayData = async () => {
       try {
         setLoading(true);
         setError(null);
-        const data = await fetchDayPlan(date);
-        setDayPlan(data);
+        setNutritionError(null);
+        
+        // Fetch day plan
+        const dayPlanData = await fetchDayPlan(date);
+        setDayPlan(dayPlanData);
+        
+        // Fetch nutrition summary (STEP 6.3)
+        try {
+          const nutritionData = await fetchDayNutrition(date);
+          setNutritionSummary(nutritionData);
+        } catch (nutritionErr) {
+          console.warn('Failed to load nutrition summary:', nutritionErr);
+          setNutritionError(nutritionErr.message);
+        }
       } catch (err) {
         setError(err.message);
         console.error('Error loading day plan:', err);
@@ -36,7 +51,7 @@ export function DayPlanView({ date }) {
       }
     };
 
-    loadDayPlan();
+    loadDayData();
   }, [date]);
 
   if (loading) {
@@ -79,6 +94,64 @@ export function DayPlanView({ date }) {
         <p><strong>Total Meals:</strong> {dayPlan.meals?.length || 0}</p>
         <p><strong>ID:</strong> {dayPlan.id}</p>
       </div>
+
+      {/* STEP 6.3: Nutrition Summary Section */}
+      {nutritionSummary ? (
+        <div style={{ marginBottom: '20px', padding: '15px', backgroundColor: '#f0f8e8', border: '1px solid #d0e0c0', borderRadius: '4px' }}>
+          <h4 style={{ marginTop: 0, marginBottom: '15px', color: '#2d5016' }}>📊 Nutrition Summary</h4>
+          
+          {/* Calories */}
+          <NutritionProgress
+            label="Calories"
+            actual={nutritionSummary.total_calories}
+            target={nutritionSummary.target_calories}
+            percentage={nutritionSummary.calories_percentage}
+            unit="kcal"
+          />
+          
+          {/* Protein */}
+          <NutritionProgress
+            label="Protein"
+            actual={nutritionSummary.total_protein}
+            target={nutritionSummary.target_protein}
+            percentage={nutritionSummary.protein_percentage}
+            unit="g"
+          />
+          
+          {/* Carbs */}
+          <NutritionProgress
+            label="Carbs"
+            actual={nutritionSummary.total_carbs}
+            target={nutritionSummary.target_carbs}
+            percentage={nutritionSummary.carbs_percentage}
+            unit="g"
+          />
+          
+          {/* Fats */}
+          <NutritionProgress
+            label="Fats"
+            actual={nutritionSummary.total_fats}
+            target={nutritionSummary.target_fats}
+            percentage={nutritionSummary.fats_percentage}
+            unit="g"
+          />
+          
+          {/* Metadata */}
+          <div style={{ marginTop: '15px', fontSize: '0.85em', color: '#666', borderTop: '1px solid #d0e0c0', paddingTop: '10px' }}>
+            <p style={{ margin: '5px 0' }}>
+              <strong>Date:</strong> {nutritionSummary.date} | <strong>Meals:</strong> {nutritionSummary.meal_count}
+            </p>
+            <p style={{ margin: '5px 0', fontStyle: 'italic', color: '#888' }}>
+              ℹ️ MVP Note: Nutrition data is placeholder (Meal entity doesn't store nutrition yet)
+            </p>
+          </div>
+        </div>
+      ) : nutritionError ? (
+        <div style={{ marginBottom: '20px', padding: '15px', backgroundColor: '#fff8e0', border: '1px solid #f0d080', borderRadius: '4px' }}>
+          <h4 style={{ marginTop: 0, color: '#806000' }}>⚠️ Nutrition Summary Unavailable</h4>
+          <p style={{ fontSize: '0.9em', color: '#666' }}>{nutritionError}</p>
+        </div>
+      ) : null}
 
       {/* Meals List */}
       <div>
@@ -201,6 +274,82 @@ export function DayPlanView({ date }) {
             {JSON.stringify(dayPlan, null, 2)}
           </pre>
         </details>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * STEP 6.3: Nutrition Progress Bar Component
+ * 
+ * Displays a single macro nutrient with:
+ * - Label, actual value, target value
+ * - Progress bar showing percentage
+ * - Color coding: green (80-100%), yellow (100-120%), red (>120%)
+ */
+function NutritionProgress({ label, actual, target, percentage, unit }) {
+  // Handle missing data
+  if (actual === null || actual === undefined) {
+    return (
+      <div style={{ marginBottom: '12px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px', fontSize: '0.9em' }}>
+          <strong>{label}:</strong>
+          <span style={{ color: '#999' }}>No data</span>
+        </div>
+      </div>
+    );
+  }
+
+  // Determine bar color based on percentage
+  let barColor = '#4caf50'; // Green: within range (80-100%)
+  let backgroundColor = '#e0f2e0';
+  
+  if (percentage === null || target === null || target === 0) {
+    barColor = '#999'; // Gray: no target set
+    backgroundColor = '#f0f0f0';
+  } else if (percentage > 120) {
+    barColor = '#f44336'; // Red: exceeded (>120%)
+    backgroundColor = '#ffe0e0';
+  } else if (percentage > 100) {
+    barColor = '#ff9800'; // Orange/Yellow: near limit (100-120%)
+    backgroundColor = '#fff8e0';
+  }
+
+  // Cap percentage display at 100% for bar width (but show actual % in text)
+  const barWidth = percentage ? Math.min(percentage, 100) : 0;
+  const displayPercentage = percentage ? Math.round(percentage) : 0;
+
+  return (
+    <div style={{ marginBottom: '12px' }}>
+      {/* Label and values */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px', fontSize: '0.9em' }}>
+        <strong>{label}:</strong>
+        <span>
+          {actual ? actual.toFixed(1) : '0.0'} / {target || '—'} {unit}
+          {percentage !== null && (
+            <span style={{ marginLeft: '10px', fontWeight: 'bold', color: barColor }}>
+              ({displayPercentage}%)
+            </span>
+          )}
+        </span>
+      </div>
+      
+      {/* Progress bar */}
+      <div style={{
+        width: '100%',
+        height: '20px',
+        backgroundColor: backgroundColor,
+        borderRadius: '10px',
+        overflow: 'hidden',
+        border: '1px solid #ddd'
+      }}>
+        <div style={{
+          width: `${barWidth}%`,
+          height: '100%',
+          backgroundColor: barColor,
+          transition: 'width 0.3s ease',
+          borderRadius: '10px'
+        }} />
       </div>
     </div>
   );

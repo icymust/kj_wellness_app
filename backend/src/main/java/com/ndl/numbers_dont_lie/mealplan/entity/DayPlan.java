@@ -1,5 +1,7 @@
 package com.ndl.numbers_dont_lie.mealplan.entity;
 
+import com.fasterxml.jackson.annotation.JsonBackReference;
+import com.fasterxml.jackson.annotation.JsonManagedReference;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
@@ -36,6 +38,7 @@ public class DayPlan {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "meal_plan_version_id", nullable = false)
+    @JsonBackReference("version-dayplans")
     private MealPlanVersion mealPlanVersion;
 
     @Column(name = "plan_date", nullable = false)
@@ -44,6 +47,7 @@ public class DayPlan {
 
     @OneToMany(mappedBy = "dayPlan", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
     @JsonProperty("meals")
+    @JsonManagedReference("dayplan-meals")
     private List<Meal> meals = new ArrayList<>();
 
     public DayPlan() {

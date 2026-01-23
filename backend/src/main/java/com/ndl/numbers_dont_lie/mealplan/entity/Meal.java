@@ -1,5 +1,6 @@
 package com.ndl.numbers_dont_lie.mealplan.entity;
 
+import com.fasterxml.jackson.annotation.JsonBackReference;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -34,6 +35,7 @@ public class Meal {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "day_plan_id", nullable = false)
+    @JsonBackReference("dayplan-meals")
     private DayPlan dayPlan;
 
     @Column(name = "meal_type", length = 16, nullable = false)

@@ -127,7 +127,7 @@ function AppShell() {
     setVerificationLink(null);
     setVerifyStatus(null);
     if (!email || !password || password.length < 6) {
-  setRegisterError("Password must be at least 6 characters");
+      setRegisterError("Password must be at least 6 characters");
       return;
     }
     setRegisterLoading(true);
@@ -135,9 +135,9 @@ function AppShell() {
       const res = await api.register(email, password);
       setVerificationLink(res.verificationLink || null);
       if (res.verificationLink) {
-  setVerifyStatus("User created. Please follow the verification link sent to your email.");
+        setVerifyStatus("User created. Please follow the verification link sent to your email.");
       } else {
-  setVerifyStatus("User created. Verification link is available in server logs.");
+        setVerifyStatus("User created. Verification link is available in server logs.");
       }
     } catch (err) {
       setRegisterError(err?.data?.error || err.message);
@@ -197,7 +197,7 @@ function AppShell() {
         setTokens(res.accessToken, res.refreshToken || null);
         navigate('/profile'); // redirect after login
       } else {
-  setLoginError('Unknown server response');
+        setLoginError('Unknown server response');
       }
     } catch (err) {
       setLoginError(err?.data?.error || err.message);
@@ -220,7 +220,7 @@ function AppShell() {
         localStorage.removeItem('pre2faFlag');
         navigate('/profile');
       } else {
-  setTwofaError('Response missing token');
+        setTwofaError('Response missing token');
       }
     } catch (err) {
       setTwofaError(err?.data?.error || err.message);
@@ -243,7 +243,7 @@ function AppShell() {
         setTokens(r.accessToken, refreshToken);
       }
     } catch (err) {
-  console.warn('Refresh failed', err);
+      console.warn('Refresh failed', err);
       handleLogout();
     }
   };
@@ -254,7 +254,7 @@ function AppShell() {
       const r = await api.me(accessToken);
       setMe(r.user || r);
     } catch (err) {
-  console.warn('me failed', err);
+      console.warn('me failed', err);
     }
   };
 
@@ -294,11 +294,11 @@ function AppShell() {
       setProfileSuccess('Profile saved');
       return saved;
     } catch (e) {
-  console.warn('saveProfile', e);
+      console.warn('saveProfile', e);
       if (e.status === 400 && e.data?.error) {
         setProfileError(e.data.error);
       } else {
-  setProfileError('Failed to save profile');
+        setProfileError('Failed to save profile');
       }
       throw e;
     } finally {
@@ -385,7 +385,13 @@ function AppShell() {
       const year = now.getFullYear();
       const month = now.getMonth() + 1;
       const r = await api.activityMonth(accessToken, year, month);
-      setMonthData({ year, month, total: Object.values(r.byDayMinutes || {}).reduce((s,v)=>s+v,0), daysActive: Object.values(r.byDayMinutes || {}).filter(v=>v>0).length, byDayMinutes: r.byDayMinutes || {} });
+      setMonthData({
+        year,
+        month,
+        total: Object.values(r.byDayMinutes || {}).reduce((s,v)=>s+v,0),
+        daysActive: Object.values(r.byDayMinutes || {}).filter(v=>v>0).length,
+        byDayMinutes: r.byDayMinutes || {},
+      });
     } catch (e) {
       if (e.status === 429) handleRateLimit(e, 'month'); else console.warn('loadActivityMonth', e);
     }
@@ -450,8 +456,13 @@ function AppShell() {
   }, [accessToken]);
   const exportData = async () => {
     if (!accessToken) return;
-    try { const r = await api.privacyExport(accessToken); const blob = new Blob([JSON.stringify(r, null, 2)], { type: 'application/json' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'export.json'; a.click(); URL.revokeObjectURL(url); }
-    catch(e){ console.warn('exportData', e); }
+    try {
+      const r = await api.privacyExport(accessToken);
+      const blob = new Blob([JSON.stringify(r, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'export.json'; a.click(); URL.revokeObjectURL(url);
+    } catch(e){ console.warn('exportData', e); }
   };
 
   // Aggregated dashboard loader to simplify Dashboard.jsx logic
@@ -512,25 +523,25 @@ function AppShell() {
     // 2FA setup page
     twofaSetup, setTwofaSetup,
     // profile
-  profile, setProfile, loadProfile, saveProfile, profileError, profileSuccess, profileSaving,
+    profile, setProfile, loadProfile, saveProfile, profileError, profileSuccess, profileSaving,
     // weight
     newWeight, setNewWeight, weightAt, setWeightAt, addWeight, loadWeights, weights, summary,
-  // dietary meta
-  loadDietary, saveDietary,
+    // dietary meta
+    loadDietary, saveDietary,
     // activity
     act, setAct, addActivity, period, setPeriod, loadActivityWeek, loadActivityMonth, week, monthData,
     // analytics
     loadSummary,
     // AI
     aiScope, setAiScope, loadAiLatest, regenAi, ai, aiLoading,
-  // rate limit status
-  rateLimitUntil,
-  // dashboard aggregate
-  dashboardLoading, dashboardError, loadDashboard,
+    // rate limit status
+    rateLimitUntil,
+    // dashboard aggregate
+    dashboardLoading, dashboardError, loadDashboard,
     // privacy
     consentForm, setConsentForm, loadConsent, saveConsent, exportData,
-  // export health
-  exportHealth: (tokenArg) => api.exportHealth(tokenArg || accessToken),
+    // export health
+    exportHealth: (tokenArg) => api.exportHealth(tokenArg || accessToken),
     // helpers
     go: (path) => navigate(path), oauthUrl, api, tempToken,
   };
@@ -549,6 +560,7 @@ function AppShell() {
           <Link to="/profile">Profile</Link>
           <Link to="/security">Security</Link>
           <Link to="/privacy">Privacy</Link>
+          <Link to="/debug/meal-plan">Meal Plan</Link>
         </nav>
         <div style={{ marginLeft: 'auto' }}>
           {accessToken ? (
@@ -578,8 +590,22 @@ function AppShell() {
           <Route path="/forgot" element={<Forgot ctx={ctx} />} />
           <Route path="/reset" element={<Reset ctx={ctx} />} />
           <Route path="/log" element={<Log ctx={ctx} />} />
+          {/* Debug routes (read-only) */}
           <Route path="/debug/meal-plans" element={<DebugMealPlanPage />} />
-          <Route path="/oauth-callback" element={<OAuthCallback onTokens={({ access, refresh }) => { setAccessToken(access); setRefreshToken(refresh); setTokens(access, refresh); navigate('/profile'); }} />} />
+          <Route path="/debug/meal-plan" element={<DebugMealPlanPage />} />
+          <Route
+            path="/oauth-callback"
+            element={
+              <OAuthCallback
+                onTokens={({ access, refresh }) => {
+                  setAccessToken(access);
+                  setRefreshToken(refresh);
+                  setTokens(access, refresh);
+                  navigate('/profile');
+                }}
+              />
+            }
+          />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>

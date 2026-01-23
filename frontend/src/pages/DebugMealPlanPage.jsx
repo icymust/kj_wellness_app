@@ -42,17 +42,37 @@ export function DebugMealPlanPage() {
         padding: '20px',
         backgroundColor: '#f0f0f0',
         borderRadius: '4px',
-        borderLeft: '4px solid #ff6b6b'
+        borderLeft: '4px solid #ff6b6b',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center'
       }}>
-        <h1 style={{ margin: '0 0 10px 0', color: '#333' }}>
-          🔍 Debug Meal Plan Viewer
-        </h1>
+        <div>
+          <h1 style={{ margin: '0 0 10px 0', color: '#333' }}>
+            🔍 Debug Meal Plan Viewer
+          </h1>
+        </div>
+        <button
+          onClick={() => alert('Кнопка работает!')}
+          style={{
+            padding: '10px 20px',
+            backgroundColor: '#ff6b6b',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            fontSize: '14px',
+            fontWeight: 'bold'
+          }}
+        >
+          Нажми на меня
+        </button>
         <p style={{ margin: '0 0 10px 0', color: '#666', fontSize: '0.95em' }}>
           <strong>⚠️ WARNING:</strong> This is a TEMPORARY debug interface for visually inspecting AI-generated meal plans.
           NOT intended for production use.
         </p>
         <p style={{ margin: '0', color: '#666', fontSize: '0.9em' }}>
-          <strong>Backend:</strong> http://localhost:8080/api/debug/meal-plans
+          <strong>Backend:</strong> http://localhost:5173/api/debug/meal-plans
         </p>
       </div>
 
@@ -95,7 +115,7 @@ export function DebugMealPlanPage() {
           <li>User profile is configured with nutritional preferences (STEP 4.0)</li>
           <li>AI strategy has been generated and cached (STEP 4.1)</li>
           <li>Meal structure has been generated and cached (STEP 4.2)</li>
-          <li>Backend is running on localhost:8080</li>
+          <li>Backend is running on localhost:5173</li>
           <li>GROQ API is configured and working</li>
         </ol>
       </div>

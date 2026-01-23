@@ -1,9 +1,11 @@
 package com.ndl.numbers_dont_lie.mealplan.controller;
 
+import com.ndl.numbers_dont_lie.mealplan.dto.DailyNutritionSummary;
 import com.ndl.numbers_dont_lie.mealplan.entity.DayPlan;
 import com.ndl.numbers_dont_lie.mealplan.entity.MealPlan;
 import com.ndl.numbers_dont_lie.mealplan.entity.MealPlanVersion;
 import com.ndl.numbers_dont_lie.mealplan.service.DayPlanAssemblerService;
+import com.ndl.numbers_dont_lie.mealplan.service.NutritionSummaryService;
 import com.ndl.numbers_dont_lie.mealplan.service.WeeklyMealPlanService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -53,12 +56,15 @@ public class DebugMealPlanController {
     
     private final DayPlanAssemblerService dayPlanAssemblerService;
     private final WeeklyMealPlanService weeklyMealPlanService;
+    private final NutritionSummaryService nutritionSummaryService;
     
     public DebugMealPlanController(
             DayPlanAssemblerService dayPlanAssemblerService,
-            WeeklyMealPlanService weeklyMealPlanService) {
+            WeeklyMealPlanService weeklyMealPlanService,
+            NutritionSummaryService nutritionSummaryService) {
         this.dayPlanAssemblerService = dayPlanAssemblerService;
         this.weeklyMealPlanService = weeklyMealPlanService;
+        this.nutritionSummaryService = nutritionSummaryService;
     }
     
     /**
@@ -80,6 +86,7 @@ public class DebugMealPlanController {
             @RequestParam(name = "date")
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
             LocalDate date) {
+        logger.info("DEBUG endpoint HIT: /day");
         try {
             logger.info("Debug: Generating meal plan for date={}", date);
             
@@ -99,24 +106,26 @@ public class DebugMealPlanController {
             );
             
             logger.info("Debug: Successfully generated meal plan for date={}", date);
-            return ResponseEntity.ok(dayPlan);
+                return ResponseEntity.ok(dayPlan);
             
         } catch (IllegalStateException e) {
-            String errorMsg = e.getMessage() != null ? e.getMessage() : "Unknown error";
-            logger.error("Debug: Failed to generate meal plan for date={}: {}", date, errorMsg);
-            return ResponseEntity.badRequest().body(Map.of(
-                    "error", "Generation failed",
-                    "message", errorMsg,
-                    "date", date.toString()
-            ));
+                logger.error("Debug: Failed to generate meal plan for date={} (IllegalStateException)", date, e);
+                return ResponseEntity.ok(Map.of(
+                    "debug", true,
+                    "fallback", true,
+                    "error", e.getMessage() != null ? e.getMessage() : "Generation failed",
+                    "date", date.toString(),
+                    "meals", java.util.List.of(Map.of("name", "Fallback Meal", "calories", 500))
+                ));
         } catch (Exception e) {
-            String errorMsg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
-            logger.error("Debug: Unexpected error generating meal plan for date={}", date, e);
-            return ResponseEntity.internalServerError().body(Map.of(
-                    "error", "Unexpected error",
-                    "message", errorMsg,
-                    "date", date.toString()
-            ));
+                logger.error("Debug: Unexpected error generating meal plan for date={}", date, e);
+                return ResponseEntity.ok(Map.of(
+                    "debug", true,
+                    "fallback", true,
+                    "error", e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName(),
+                    "date", date.toString(),
+                    "meals", java.util.List.of(Map.of("name", "Fallback Meal", "calories", 500))
+                ));
         }
     }
     
@@ -138,6 +147,7 @@ public class DebugMealPlanController {
             @RequestParam(name = "startDate")
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
             LocalDate startDate) {
+        logger.info("DEBUG endpoint HIT: /week");
         try {
             logger.info("Debug: Generating weekly meal plan for startDate={}", startDate);
             
@@ -148,23 +158,88 @@ public class DebugMealPlanController {
             );
             
             logger.info("Debug: Successfully generated weekly meal plan starting from={}", startDate);
-            return ResponseEntity.ok(mealPlan);
+                return ResponseEntity.ok(mealPlan);
+            
+        } catch (IllegalStateException e) {
+                logger.error("Debug: Failed to generate weekly meal plan for startDate={} (IllegalStateException)", startDate, e);
+                return ResponseEntity.ok(Map.of(
+                    "debug", true,
+                    "fallback", true,
+                    "error", e.getMessage() != null ? e.getMessage() : "Generation failed",
+                    "startDate", startDate.toString(),
+                    "meals", java.util.List.of(Map.of("name", "Fallback Meal", "calories", 500))
+                ));
+        } catch (Exception e) {
+                logger.error("Debug: Unexpected error generating weekly meal plan for startDate={}", startDate, e);
+                return ResponseEntity.ok(Map.of(
+                    "debug", true,
+                    "fallback", true,
+                    "error", e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName(),
+                    "startDate", startDate.toString(),
+                    "meals", java.util.List.of(Map.of("name", "Fallback Meal", "calories", 500))
+                ));
+        }
+    }
+    
+    /**
+     * Get nutrition summary for a specific day (STEP 6.3 - Nutrition Visualization).
+     * 
+     * Aggregates nutrition from all meals in the day and compares to user targets.
+     * Returns daily totals, percentages of targets, and progress visualization data.
+     * 
+     * CURRENT MVP LIMITATION:
+     * - Meal entity doesn't store GeneratedRecipe nutrition yet
+     * - Returns placeholder data for UI development and testing
+     * - See NutritionSummaryService for future enhancement plan
+     * 
+     * @param date the target date for nutrition summary (ISO 8601 format: YYYY-MM-DD)
+     * @return DailyNutritionSummary with aggregated nutrition and progress percentages
+     * @throws IllegalStateException if day plan not found or user has no nutritional targets
+     */
+    @GetMapping("/day/nutrition")
+    public ResponseEntity<?> getDayNutrition(
+            @RequestParam(name = "date")
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+            LocalDate date) {
+        try {
+            logger.info("Debug: Fetching nutrition summary for date={}", date);
+            
+            // For debug purposes, we need to generate a day first or fetch existing
+            // Since this is MVP, we'll generate day on-demand
+            MealPlanVersion tempVersion = new MealPlanVersion();
+            tempVersion.setVersionNumber(0);
+            tempVersion.setCreatedAt(java.time.LocalDateTime.now());
+            tempVersion.setReason(com.ndl.numbers_dont_lie.mealplan.entity.VersionReason.INITIAL_GENERATION);
+            
+            // Generate DayPlan with meals
+            DayPlan dayPlan = dayPlanAssemblerService.assembleDayPlan(
+                    DEBUG_USER_ID,
+                    date,
+                    tempVersion
+            );
+            
+            // Generate nutrition summary
+            DailyNutritionSummary summary = nutritionSummaryService.generateSummary(dayPlan, DEBUG_USER_ID);
+            
+            logger.info("Debug: Nutrition summary generated for date={}, meals={}", 
+                date, dayPlan.getMeals().size());
+            return ResponseEntity.ok(summary);
             
         } catch (IllegalStateException e) {
             String errorMsg = e.getMessage() != null ? e.getMessage() : "Unknown error";
-            logger.error("Debug: Failed to generate weekly meal plan for startDate={}: {}", startDate, errorMsg);
+            logger.error("Debug: Failed to fetch nutrition summary for date={}: {}", date, errorMsg);
             return ResponseEntity.badRequest().body(Map.of(
-                    "error", "Generation failed",
+                    "error", "Summary generation failed",
                     "message", errorMsg,
-                    "startDate", startDate.toString()
+                    "date", date.toString()
             ));
         } catch (Exception e) {
             String errorMsg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
-            logger.error("Debug: Unexpected error generating weekly meal plan for startDate={}", startDate, e);
+            logger.error("Debug: Unexpected error fetching nutrition summary for date={}", date, e);
             return ResponseEntity.internalServerError().body(Map.of(
                     "error", "Unexpected error",
                     "message", errorMsg,
-                    "startDate", startDate.toString()
+                    "date", date.toString()
             ));
         }
     }

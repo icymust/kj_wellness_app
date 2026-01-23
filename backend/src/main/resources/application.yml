@@ -48,6 +48,10 @@ app:
     window-seconds: 60 
     override:
       auth2faVerify: 10        # /auth/2fa/verify
+  # DEBUG ONLY: Mock AI responses to bypass Groq API during development
+  debug:
+    ai:
+      mock: ${DEBUG_AI_MOCK:true}  # Set to false in production
       twofaVerifySetup: 10     # /2fa/verify-setup
   frontend:
     base-url: ${FRONTEND_ORIGIN:http://localhost:8080}

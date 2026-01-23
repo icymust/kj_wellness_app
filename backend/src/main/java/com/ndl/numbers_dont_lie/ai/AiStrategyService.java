@@ -7,6 +7,9 @@ import com.ndl.numbers_dont_lie.ai.dto.AiMealStructureResult;
 import com.ndl.numbers_dont_lie.ai.dto.AiStrategyRequest;
 import com.ndl.numbers_dont_lie.ai.dto.AiStrategyResult;
 import com.ndl.numbers_dont_lie.ai.exception.AiClientException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 
 import java.time.LocalTime;
 import java.util.*;
@@ -15,10 +18,18 @@ import java.util.*;
  * Service to craft prompts, call Groq, validate JSON schema and store in-session.
  * Supports sequential prompting: STEP 4.1 → STEP 4.2 → STEP 4.3.
  * No persistence; strictly analysis/strategy metadata.
+ * 
+ * DEBUG ONLY: When app.debug.ai.mock=true, returns hardcoded responses to bypass Groq API.
  */
 public class AiStrategyService {
+    private static final Logger logger = LoggerFactory.getLogger(AiStrategyService.class);
+    
     private final GroqClient groqClient;
     private final AiSessionCache cache;
+    
+    // DEBUG ONLY: Flag to enable mock AI responses
+    @Value("${app.debug.ai.mock:false}")
+    private boolean mockMode;
 
     public AiStrategyService(GroqClient groqClient, AiSessionCache cache) {
         this.groqClient = groqClient;
@@ -30,8 +41,18 @@ public class AiStrategyService {
     /**
      * STEP 4.1: Generate nutrition strategy from user profile.
      * Stores result in cache for STEP 4.2.
+     * 
+     * DEBUG ONLY: When mockMode=true, returns hardcoded strategy.
      */
     public AiStrategyResult analyzeStrategy(AiStrategyRequest req) {
+        // DEBUG ONLY: Return mock response if flag is enabled
+        if (mockMode) {
+            logger.warn("[DEBUG MOCK] Returning mock AI strategy (Groq API bypassed)");
+            AiStrategyResult mockResult = createMockStrategy(req);
+            cache.putStrategyResult(req.getUserId(), mockResult);
+            return mockResult;
+        }
+        
         String prompt = buildStrategyPrompt(req);
         JsonNode json = groqClient.callForJson(prompt);
         AiStrategyResult result = validateAndMapStrategy(json);
@@ -51,6 +72,8 @@ public class AiStrategyService {
      * Stores result in cache for STEP 4.3.
      * 
      * DOES NOT generate recipes or name dishes.
+     * 
+     * DEBUG ONLY: When mockMode=true, returns hardcoded meal structure.
      */
     public AiMealStructureResult analyzeMealStructure(AiMealStructureRequest req) {
         // Enforce sequential flow: STEP 4.1 must complete first
@@ -63,6 +86,14 @@ public class AiStrategyService {
                 );
             }
             req.setStrategyResult(cached);
+        }
+
+        // DEBUG ONLY: Return mock response if flag is enabled
+        if (mockMode) {
+            logger.warn("[DEBUG MOCK] Returning mock meal structure (Groq API bypassed)");
+            AiMealStructureResult mockResult = createMockMealStructure(req);
+            cache.putMealStructureResult(req.getUserId(), mockResult);
+            return mockResult;
         }
 
         String prompt = buildMealStructurePrompt(req);
@@ -265,5 +296,123 @@ public class AiStrategyService {
         result.setMeals(slots);
         result.setTotalCaloriesDistributed(json.get("total_calories_distributed").asInt());
         return result;
+    }
+
+    // ========== DEBUG ONLY: Mock Response Generators ==========
+    
+    /**
+     * DEBUG ONLY: Creates hardcoded AI strategy response.
+     * Used when app.debug.ai.mock=true to bypass Groq API.
+     */
+    private AiStrategyResult createMockStrategy(AiStrategyRequest req) {
+        AiStrategyResult result = new AiStrategyResult();
+        
+        // Calculate mock calories based on user profile
+        int dailyCalories = calculateMockCalories(req);
+        
+        result.setStrategyName("Mock High-Protein Moderate Deficit");
+        result.setRationale("DEBUG MODE: Hardcoded strategy for " + req.getGoal() + 
+                           ". Real AI analysis bypassed to unblock frontend development.");
+        
+        Map<String, Integer> targetCalories = new HashMap<>();
+        targetCalories.put("daily", dailyCalories);
+        targetCalories.put("breakfast", (int)(dailyCalories * 0.25));
+        targetCalories.put("lunch", (int)(dailyCalories * 0.35));
+        targetCalories.put("dinner", (int)(dailyCalories * 0.30));
+        targetCalories.put("snack", (int)(dailyCalories * 0.10));
+        result.setTargetCalories(targetCalories);
+        
+        Map<String, Double> macroSplit = new HashMap<>();
+        macroSplit.put("protein", 0.30);
+        macroSplit.put("carbs", 0.45);
+        macroSplit.put("fat", 0.25);
+        result.setMacroSplit(macroSplit);
+        
+        result.setConstraints(Arrays.asList("moderate_deficit", "high_protein"));
+        result.setRecommendations(Arrays.asList("increase_fiber", "hydrate_regularly", "track_progress"));
+        
+        logger.info("[DEBUG MOCK] Generated mock strategy: {} calories/day", dailyCalories);
+        return result;
+    }
+    
+    /**
+     * DEBUG ONLY: Creates hardcoded meal structure response.
+     * Used when app.debug.ai.mock=true to bypass Groq API.
+     */
+    private AiMealStructureResult createMockMealStructure(AiMealStructureRequest req) {
+        AiMealStructureResult result = new AiMealStructureResult();
+        
+        Map<String, Integer> targetCals = req.getStrategyResult().getTargetCalories();
+        int dailyTotal = targetCals.getOrDefault("daily", 2000);
+        
+        List<AiMealStructureResult.MealSlot> meals = new ArrayList<>();
+        
+        // Breakfast
+        AiMealStructureResult.MealSlot breakfast = new AiMealStructureResult.MealSlot();
+        breakfast.setMealType("breakfast");
+        breakfast.setIndex(0);
+        breakfast.setCalorieTarget(targetCals.getOrDefault("breakfast", 500));
+        breakfast.setMacroFocus(Map.of("protein", 0.25, "carbs", 0.50, "fat", 0.25));
+        breakfast.setTimingNote("Morning energy boost");
+        meals.add(breakfast);
+        
+        // Lunch
+        AiMealStructureResult.MealSlot lunch = new AiMealStructureResult.MealSlot();
+        lunch.setMealType("lunch");
+        lunch.setIndex(0);
+        lunch.setCalorieTarget(targetCals.getOrDefault("lunch", 700));
+        lunch.setMacroFocus(Map.of("protein", 0.35, "carbs", 0.40, "fat", 0.25));
+        lunch.setTimingNote("Midday sustenance");
+        meals.add(lunch);
+        
+        // Dinner
+        AiMealStructureResult.MealSlot dinner = new AiMealStructureResult.MealSlot();
+        dinner.setMealType("dinner");
+        dinner.setIndex(0);
+        dinner.setCalorieTarget(targetCals.getOrDefault("dinner", 600));
+        dinner.setMacroFocus(Map.of("protein", 0.40, "carbs", 0.35, "fat", 0.25));
+        dinner.setTimingNote("Evening meal");
+        meals.add(dinner);
+        
+        // Snack
+        AiMealStructureResult.MealSlot snack = new AiMealStructureResult.MealSlot();
+        snack.setMealType("snack");
+        snack.setIndex(0);
+        snack.setCalorieTarget(targetCals.getOrDefault("snack", 200));
+        snack.setMacroFocus(Map.of("protein", 0.30, "carbs", 0.40, "fat", 0.30));
+        snack.setTimingNote("Post-workout or afternoon");
+        meals.add(snack);
+        
+        result.setMeals(meals);
+        result.setTotalCaloriesDistributed(dailyTotal);
+        
+        logger.info("[DEBUG MOCK] Generated mock meal structure: {} meals, {} total calories", 
+                   meals.size(), dailyTotal);
+        return result;
+    }
+    
+    /**
+     * DEBUG ONLY: Simple calorie calculation for mock data.
+     */
+    private int calculateMockCalories(AiStrategyRequest req) {
+        // Simple BMR estimation (Mifflin-St Jeor)
+        double bmr;
+        if ("male".equalsIgnoreCase(req.getSex())) {
+            bmr = (10 * req.getWeightKg()) + (6.25 * req.getHeightCm()) - (5 * req.getAge()) + 5;
+        } else {
+            bmr = (10 * req.getWeightKg()) + (6.25 * req.getHeightCm()) - (5 * req.getAge()) - 161;
+        }
+        
+        // Apply activity multiplier (assume moderate activity)
+        double tdee = bmr * 1.55;
+        
+        // Apply goal modifier
+        if (req.getGoal() != null && req.getGoal().contains("loss")) {
+            tdee *= 0.85; // 15% deficit
+        } else if (req.getGoal() != null && req.getGoal().contains("gain")) {
+            tdee *= 1.10; // 10% surplus
+        }
+        
+        return (int) Math.round(tdee / 100) * 100; // Round to nearest 100
     }
 }

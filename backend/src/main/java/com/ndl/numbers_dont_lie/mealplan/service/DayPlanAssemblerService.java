@@ -18,6 +18,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Propagation;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -126,7 +127,7 @@ public class DayPlanAssemblerService {
      * @return Assembled DayPlan with all meals
      * @throws IllegalStateException if strategy/structure not cached or user profile missing
      */
-    @Transactional
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public DayPlan assembleDayPlan(Long userId, LocalDate date, MealPlanVersion mealPlanVersion) {
         logger.info("Starting DayPlan assembly for userId={}, date={}", userId, date);
         

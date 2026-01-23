@@ -10,6 +10,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Propagation;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -122,7 +123,7 @@ public class WeeklyMealPlanService {
      * @return Complete MealPlan with 7 DayPlans
      * @throws IllegalStateException if prerequisites not met
      */
-    @Transactional
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public MealPlan generateWeeklyPlan(Long userId, LocalDate startDate) {
         logger.info("Starting weekly meal plan generation for userId={}, startDate={}", 
             userId, startDate);

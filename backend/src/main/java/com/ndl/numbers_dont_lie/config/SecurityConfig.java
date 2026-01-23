@@ -21,6 +21,9 @@ public class SecurityConfig {
     .authorizeHttpRequests(auth -> auth
       // allow preflight CORS requests without authentication
       .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+        // debug endpoints (no authentication required) - must be before auth/** to override OAuth2
+        .requestMatchers(HttpMethod.GET, "/api/debug/**").permitAll()
+        .requestMatchers(HttpMethod.POST, "/api/debug/**").permitAll()
       .requestMatchers("/auth/**","/health","/login/**","/oauth2/**","/oauth-callback/**").permitAll()
       // dev/test helpers (non-sensitive): allow temporarily for local verification
       // .requestMatchers("/dev/**").permitAll()
