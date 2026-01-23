@@ -9,6 +9,7 @@ import com.fasterxml.jackson.annotation.JsonValue;
 public enum VersionReason {
     INITIAL_GENERATION("initial_generation"),
     REGENERATED("regenerated"),
+    RESTORED("restored"),
     MANUAL_CHANGE("manual_change");
 
     private final String jsonValue;
