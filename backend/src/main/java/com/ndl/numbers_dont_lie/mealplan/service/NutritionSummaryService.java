@@ -63,11 +63,11 @@ public class NutritionSummaryService {
     * - Calculates percentages against user targets (avoids divide-by-zero)
      * 
      * @param dayPlan The day plan containing meals
-     * @param userId User ID for loading nutritional targets
      * @return DailyNutritionSummary with aggregated data and percentages
      */
     @Transactional(propagation = Propagation.NOT_SUPPORTED, readOnly = true)
-    public DailyNutritionSummary generateSummary(DayPlan dayPlan, Long userId) {
+    public DailyNutritionSummary generateSummary(DayPlan dayPlan) {
+        Long userId = dayPlan.getUserId();
         logger.debug("[NUTRITION-SUMMARY] Generating summary for date: {}, user: {}", 
             dayPlan.getDate(), userId);
         

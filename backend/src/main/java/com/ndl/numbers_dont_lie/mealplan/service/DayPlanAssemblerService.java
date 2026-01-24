@@ -201,6 +201,7 @@ public class DayPlanAssemblerService {
         
         // Step 3: Create DayPlan shell
         DayPlan dayPlan = existingDayPlan != null ? existingDayPlan : new DayPlan(mealPlanVersion, date);
+        dayPlan.setUserId(userId);
         
         // Clear meals if context changed
         if (contextChanged) {

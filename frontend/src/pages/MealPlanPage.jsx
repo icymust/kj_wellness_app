@@ -38,7 +38,7 @@ export function MealPlanPage() {
 
         // Fetch day plan from production API
         const dayResponse = await fetch(
-          `http://localhost:5173/api/meal-plans/day?date=${today}`
+          `http://localhost:5173/api/meal-plans/day?userId=${userId}&date=${today}`
         );
         if (!dayResponse.ok) throw new Error('Failed to load meal plan');
         const dayData = await dayResponse.json();
@@ -50,7 +50,7 @@ export function MealPlanPage() {
         // Fetch nutrition summary from production API
         try {
           const nutritionResponse = await fetch(
-            `http://localhost:5173/api/meal-plans/day/nutrition?date=${today}`
+            `http://localhost:5173/api/meal-plans/day/nutrition?userId=${userId}&date=${today}`
           );
           if (nutritionResponse.ok) {
             const nutritionData = await nutritionResponse.json();

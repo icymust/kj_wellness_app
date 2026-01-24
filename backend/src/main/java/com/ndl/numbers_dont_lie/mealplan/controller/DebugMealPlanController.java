@@ -254,7 +254,7 @@ public class DebugMealPlanController {
             );
             
             // Generate nutrition summary
-            DailyNutritionSummary summary = nutritionSummaryService.generateSummary(dayPlan, userId);
+            DailyNutritionSummary summary = nutritionSummaryService.generateSummary(dayPlan);
             
             logger.info("Debug: Nutrition summary generated for userId={}, date={}, meals={}", 
                 userId, date, dayPlan.getMeals().size());

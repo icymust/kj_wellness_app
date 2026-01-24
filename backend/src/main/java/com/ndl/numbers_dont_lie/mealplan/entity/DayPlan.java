@@ -45,6 +45,10 @@ public class DayPlan {
     @JsonProperty("date")
     private LocalDate date; // ISO 8601 date (timezone-agnostic, interpreted via parent)
 
+    @Column(name = "user_id", nullable = false)
+    @JsonProperty("user_id")
+    private Long userId; // Owner of this day plan
+
     @Column(name = "context_hash", length = 64)
     @JsonProperty("context_hash")
     private String contextHash; // SHA-256 hash of user preferences and meal structure
@@ -80,6 +84,14 @@ public class DayPlan {
 
     public void setDate(LocalDate date) {
         this.date = date;
+    }
+
+    public Long getUserId() {
+        return userId;
+    }
+
+    public void setUserId(Long userId) {
+        this.userId = userId;
     }
 
     public String getContextHash() {

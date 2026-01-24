@@ -49,7 +49,6 @@ import java.util.Map;
 @RequestMapping("/api/meal-plans")
 public class MealPlanController {
     private static final Logger logger = LoggerFactory.getLogger(MealPlanController.class);
-    private static final Long TEMP_USER_ID = 2L; // Temporary hardcode, replace with auth
     
     private final DayPlanAssemblerService dayPlanAssemblerService;
     private final NutritionSummaryService nutritionSummaryService;
@@ -84,6 +83,7 @@ public class MealPlanController {
      */
     @GetMapping("/day")
     public ResponseEntity<DayPlan> getDayPlan(
+            @RequestParam(name = "userId") Long userId,
             @RequestParam(name = "date", required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
             LocalDate date) {
@@ -91,8 +91,6 @@ public class MealPlanController {
         if (date == null) {
             date = LocalDate.now();
         }
-        
-        Long userId = TEMP_USER_ID; // TODO: Replace with actual userId from auth
         
         logger.info("[MEAL_PLAN] Fetching day plan for userId={}, date={}", userId, date);
         
@@ -180,6 +178,7 @@ public class MealPlanController {
      */
     @GetMapping("/day/nutrition")
     public ResponseEntity<DailyNutritionSummary> getDayNutrition(
+            @RequestParam(name = "userId") Long userId,
             @RequestParam(name = "date", required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
             LocalDate date) {
@@ -187,8 +186,6 @@ public class MealPlanController {
         if (date == null) {
             date = LocalDate.now();
         }
-        
-        Long userId = TEMP_USER_ID; // TODO: Replace with actual userId from auth
         
         logger.info("[MEAL_PLAN] Fetching nutrition summary for userId={}, date={}", userId, date);
         
@@ -207,7 +204,7 @@ public class MealPlanController {
             );
             
             // Generate nutrition summary
-            DailyNutritionSummary summary = nutritionSummaryService.generateSummary(dayPlan, userId);
+            DailyNutritionSummary summary = nutritionSummaryService.generateSummary(dayPlan);
             
             logger.info("[MEAL_PLAN] Nutrition summary generated for userId={}, date={}", userId, date);
             return ResponseEntity.ok(summary);
@@ -238,13 +235,13 @@ public class MealPlanController {
      */
     @GetMapping("/week")
     public ResponseEntity<WeeklyPlanResponse> getWeeklyPlan(
+            @RequestParam(name = "userId") Long userId,
             @RequestParam(name = "startDate", required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
             LocalDate startDate) {
         if (startDate == null) {
             startDate = LocalDate.now();
         }
-        Long userId = TEMP_USER_ID; // TODO: auth
 
         logger.info("[WEEK_PLAN] Fetching week plan for userId={} startDate={}", userId, startDate);
         try {

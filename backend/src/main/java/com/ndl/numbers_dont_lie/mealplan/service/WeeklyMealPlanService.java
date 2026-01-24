@@ -186,7 +186,7 @@ public class WeeklyMealPlanService {
                 });
                 
                 dayPlans.add(dayPlan);
-                DailyNutritionSummary summary = nutritionSummaryService.generateSummary(dayPlan, userId);
+                DailyNutritionSummary summary = nutritionSummaryService.generateSummary(dayPlan);
                 dailySummaries.add(summary);
                 successCount++;
                 
@@ -272,7 +272,7 @@ public class WeeklyMealPlanService {
                     }
                 });
                 dayPlans.add(dayPlan);
-                dailySummaries.add(nutritionSummaryService.generateSummary(dayPlan, userId));
+                dailySummaries.add(nutritionSummaryService.generateSummary(dayPlan));
                 logger.info("[WEEK_PLAN] Day {} generated with {} meals", currentDate, dayPlan.getMeals().size());
             } catch (Exception e) {
                 logger.error("[WEEK_PLAN] Failed to generate day {}: {}", currentDate, e.getMessage(), e);
