@@ -10,8 +10,11 @@ import com.ndl.numbers_dont_lie.mealplan.entity.DayPlan;
 import com.ndl.numbers_dont_lie.mealplan.entity.Meal;
 import com.ndl.numbers_dont_lie.mealplan.entity.MealPlanVersion;
 import com.ndl.numbers_dont_lie.mealplan.entity.MealType;
+import com.ndl.numbers_dont_lie.mealplan.util.DayPlanContextHash;
 import com.ndl.numbers_dont_lie.profile.entity.ProfileEntity;
 import com.ndl.numbers_dont_lie.profile.repository.ProfileRepository;
+import com.ndl.numbers_dont_lie.recipe.entity.Recipe;
+import com.ndl.numbers_dont_lie.recipe.repository.RecipeRepository;
 import com.ndl.numbers_dont_lie.repository.nutrition.NutritionalPreferencesRepository;
 import com.ndl.numbers_dont_lie.repository.UserRepository;
 import org.slf4j.Logger;
@@ -82,6 +85,7 @@ public class DayPlanAssemblerService {
     private final UserRepository userRepository;
     private final ProfileRepository profileRepository;
     private final NutritionalPreferencesRepository nutritionalPreferencesRepository;
+    private final RecipeRepository recipeRepository;
     
     // Default meal times (can be customized per user in future)
     private static final LocalTime DEFAULT_BREAKFAST_TIME = LocalTime.of(8, 0);
@@ -95,13 +99,15 @@ public class DayPlanAssemblerService {
             RecipeRetrievalService recipeRetrievalService,
             UserRepository userRepository,
             ProfileRepository profileRepository,
-            NutritionalPreferencesRepository nutritionalPreferencesRepository) {
+            NutritionalPreferencesRepository nutritionalPreferencesRepository,
+            RecipeRepository recipeRepository) {
         this.aiStrategyService = aiStrategyService;
         this.recipeGenerationService = recipeGenerationService;
         this.recipeRetrievalService = recipeRetrievalService;
         this.userRepository = userRepository;
         this.profileRepository = profileRepository;
         this.nutritionalPreferencesRepository = nutritionalPreferencesRepository;
+        this.recipeRepository = recipeRepository;
     }
     
     /**
@@ -129,6 +135,22 @@ public class DayPlanAssemblerService {
      */
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public DayPlan assembleDayPlan(Long userId, LocalDate date, MealPlanVersion mealPlanVersion) {
+        return assembleDayPlan(userId, date, mealPlanVersion, null);
+    }
+
+    /**
+     * Assemble a day plan with context change detection.
+     * 
+     * If existingDayPlan is provided and context has changed, clear existing meals and regenerate.
+     * Logs: "[DAY_PLAN] Context changed → regenerating meals" and "[DAY_PLAN] Old hash=..., New hash=..."
+     * 
+     * @param userId The user ID
+     * @param date The date for the meal plan
+     * @param mealPlanVersion The meal plan version
+     * @param existingDayPlan Optional existing day plan to check for context changes
+     * @return A new or updated DayPlan
+     */
+    public DayPlan assembleDayPlan(Long userId, LocalDate date, MealPlanVersion mealPlanVersion, DayPlan existingDayPlan) {
         logger.info("Starting DayPlan assembly for userId={}, date={}", userId, date);
         
         // Step 1: Fetch prerequisites
@@ -154,8 +176,38 @@ public class DayPlanAssemblerService {
         // Step 2: Fetch user dietary constraints
         UserDietaryConstraints constraints = fetchUserDietaryConstraints(user);
         
+        // Step 2.5: Compute context hash to detect preference changes
+        String currentContextHash = DayPlanContextHash.generate(
+            userId,
+            constraints.dietaryRestrictions,
+            constraints.allergies,
+            constraints.dislikedIngredients,
+            constraints.cuisinePreferences,
+            null,
+            mealStructure.getMeals()
+        );
+        logger.info("[DAY_PLAN] Computed context hash: {}", currentContextHash);
+        
+        // Step 2.6: Detect context changes
+        boolean contextChanged = false;
+        if (existingDayPlan != null && existingDayPlan.getContextHash() != null) {
+            String oldContextHash = existingDayPlan.getContextHash();
+            if (!oldContextHash.equals(currentContextHash)) {
+                contextChanged = true;
+                logger.info("[DAY_PLAN] Context changed → regenerating meals");
+                logger.info("[DAY_PLAN] Old hash={}, New hash={}", oldContextHash, currentContextHash);
+            }
+        }
+        
         // Step 3: Create DayPlan shell
-        DayPlan dayPlan = new DayPlan(mealPlanVersion, date);
+        DayPlan dayPlan = existingDayPlan != null ? existingDayPlan : new DayPlan(mealPlanVersion, date);
+        
+        // Clear meals if context changed
+        if (contextChanged) {
+            dayPlan.getMeals().clear();
+        }
+        
+        dayPlan.setContextHash(currentContextHash);
         String timezone = profile.getTimezone() != null ? profile.getTimezone() : "UTC";
         ZoneId zoneId = ZoneId.of(timezone);
         
@@ -164,6 +216,7 @@ public class DayPlanAssemblerService {
         logger.info("Generating {} meals for date {}", mealSlots.size(), date);
         
         List<Meal> generatedMeals = new ArrayList<>();
+        Set<String> usedRecipeTitles = new HashSet<>();
         int successCount = 0;
         int failureCount = 0;
         
@@ -176,7 +229,8 @@ public class DayPlanAssemblerService {
                     constraints, 
                     dayPlan, 
                     date, 
-                    zoneId
+                    zoneId,
+                    usedRecipeTitles
                 );
                 generatedMeals.add(meal);
                 successCount++;
@@ -222,14 +276,15 @@ public class DayPlanAssemblerService {
      * 5. Generate recipe with AI (STEP 4.3.2)
      * 6. Convert to Meal entity
      */
-    private Meal generateMealForSlot(
+        private Meal generateMealForSlot(
             UserEntity user,
             AiStrategyResult strategy,
             AiMealStructureResult.MealSlot slot,
             UserDietaryConstraints constraints,
             DayPlan dayPlan,
             LocalDate date,
-            ZoneId zoneId) {
+            ZoneId zoneId,
+            Set<String> usedRecipeTitles) {
         
         logger.debug("Generating meal for slot: {} (index {})", slot.getMealType(), slot.getIndex());
         logger.info("[PREFERENCES] Loaded for userId={}: allergies={}, disliked={}, dietary={}, cuisines={}", 
@@ -270,7 +325,13 @@ public class DayPlanAssemblerService {
             generatedRecipe, 
             constraints, 
             slot.getMealType(),
-            user.getId());
+            user.getId(),
+            Double.valueOf(slot.getCalorieTarget()),
+            usedRecipeTitles);
+
+        if (filteredRecipe.getTitle() != null) {
+            usedRecipeTitles.add(filteredRecipe.getTitle().toLowerCase());
+        }
         
         // Step 6: Convert to Meal entity
         Meal meal = convertToMeal(filteredRecipe, slot, dayPlan, date, zoneId);
@@ -308,9 +369,11 @@ public class DayPlanAssemblerService {
             GeneratedRecipe recipe,
             UserDietaryConstraints constraints,
             String mealType,
-            Long userId) {
+            Long userId,
+            Double targetCalories,
+            Set<String> usedRecipeTitles) {
         
-        logger.info("[RECIPE_FILTER] Starting validation for recipe: '{}'", recipe.getTitle());
+        logger.info("[RECIPE_FILTER] Starting validation for userId={} recipe='{}'", userId, recipe.getTitle());
         
         // Build comprehensive recipe text for filtering (title + summary + ingredients)
         String recipeText = buildRecipeTextForFiltering(recipe);
@@ -322,7 +385,7 @@ public class DayPlanAssemblerService {
                 if (containsAnyMeatIndicators(recipeLower)) {
                     logger.warn("[RECIPE_FILTER] Excluded recipe='{}' reason=vegetarian (contains meat)", 
                         recipe.getTitle());
-                    return createFallbackRecipe(mealType, "Vegetarian constraint");
+                    return createFallbackRecipe(mealType, "Vegetarian constraint", constraints, targetCalories, usedRecipeTitles);
                 }
             }
         }
@@ -332,7 +395,7 @@ public class DayPlanAssemblerService {
             if (recipeContainsIngredient(recipe, allergen)) {
                 logger.warn("[RECIPE_FILTER] Excluded recipe='{}' reason=allergen({})", 
                     recipe.getTitle(), allergen);
-                return createFallbackRecipe(mealType, "Allergen: " + allergen);
+                return createFallbackRecipe(mealType, "Allergen: " + allergen, constraints, targetCalories, usedRecipeTitles);
             }
         }
         
@@ -341,7 +404,7 @@ public class DayPlanAssemblerService {
             if (recipeContainsIngredient(recipe, disliked)) {
                 logger.warn("[RECIPE_FILTER] Excluded recipe='{}' reason=disliked({})", 
                     recipe.getTitle(), disliked);
-                return createFallbackRecipe(mealType, "Disliked: " + disliked);
+                return createFallbackRecipe(mealType, "Disliked: " + disliked, constraints, targetCalories, usedRecipeTitles);
             }
         }
         
@@ -430,9 +493,26 @@ public class DayPlanAssemblerService {
     
     /**
      * Create a safe fallback recipe when filtering rejects the generated recipe.
-     * Uses a simple, universally safe option.
+     * First attempts to find a safe recipe from database, then falls back to placeholder.
      */
-    private GeneratedRecipe createFallbackRecipe(String mealType, String reason) {
+    private GeneratedRecipe createFallbackRecipe(
+            String mealType,
+            String reason,
+            UserDietaryConstraints constraints,
+            Double targetCalories,
+            Set<String> usedRecipeTitles) {
+        logger.warn("[RECIPE_FALLBACK] AI recipe rejected: {}", reason);
+        
+        // Try to find a safe database recipe first
+        Recipe safeDbRecipe = findSafeDatabaseRecipe(mealType, constraints, targetCalories, usedRecipeTitles);
+        if (safeDbRecipe != null) {
+            logger.info("[RECIPE_FALLBACK] Using DB recipe: {}", safeDbRecipe.getTitle());
+            return convertRecipeToGeneratedRecipe(safeDbRecipe);
+        }
+        
+        // No safe DB recipe found, use placeholder fallback
+        logger.warn("[RECIPE_FALLBACK] No safe DB recipes found, using fallback placeholder");
+        
         GeneratedRecipe fallback = new GeneratedRecipe();
         fallback.setTitle("[Fallback - " + reason + "]");
         fallback.setMeal(mealType);
@@ -456,9 +536,259 @@ public class DayPlanAssemblerService {
         ingredients.add(ing2);
         
         fallback.setIngredients(ingredients);
-        
-        logger.info("[RECIPE_FILTER] No recipes left after filtering, fallback used");
         return fallback;
+    }
+    
+    /**
+     * Find a safe recipe from database that matches meal type and passes dietary filters.
+     * 
+     * @param mealType Meal type (breakfast, lunch, dinner, snack)
+     * @param constraints Optional dietary constraints (if null, will use basic safe criteria)
+     * @return Safe recipe from database, or null if none found
+     */
+    private Recipe findSafeDatabaseRecipe(
+            String mealType,
+            UserDietaryConstraints constraints,
+            Double targetCalories,
+            Set<String> usedRecipeTitles) {
+        logger.info("[RECIPE_FALLBACK] Searching DB for safe {} recipe", mealType);
+        
+        // Convert string meal type to Recipe's MealType enum
+        com.ndl.numbers_dont_lie.recipe.entity.MealType recipeMealType;
+        try {
+            recipeMealType = com.ndl.numbers_dont_lie.recipe.entity.MealType.valueOf(mealType.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            logger.warn("[RECIPE_FALLBACK] Invalid meal type: {}", mealType);
+            return null;
+        }
+        
+        // Query recipes matching meal type - pass Recipe's MealType
+        List<Recipe> candidates = recipeRepository.findByMeal(recipeMealType);
+        
+        if (candidates.isEmpty()) {
+            logger.debug("[RECIPE_FALLBACK] No {} recipes in database", mealType);
+            return null;
+        }
+        
+        logger.debug("[RECIPE_FALLBACK] Found {} candidate recipes for {}", candidates.size(), mealType);
+        
+        List<Recipe> eligible = new ArrayList<>();
+        if (constraints == null) {
+            for (Recipe recipe : candidates) {
+                if (isRecipeVegetarian(recipe)) {
+                    eligible.add(recipe);
+                }
+            }
+            if (eligible.isEmpty()) {
+                eligible.addAll(candidates);
+            }
+        } else {
+            for (Recipe recipe : candidates) {
+                if (isRecipeSafeForConstraints(recipe, constraints)) {
+                    eligible.add(recipe);
+                }
+            }
+        }
+        
+        if (eligible.isEmpty()) {
+            logger.debug("[RECIPE_FALLBACK] No safe recipes found after filtering");
+            return null;
+        }
+        
+        return selectBestRecipeCandidate(eligible, constraints, targetCalories, usedRecipeTitles);
+    }
+
+    private Recipe selectBestRecipeCandidate(
+            List<Recipe> candidates,
+            UserDietaryConstraints constraints,
+            Double targetCalories,
+            Set<String> usedRecipeTitles) {
+        List<ScoredCandidate> scored = new ArrayList<>();
+        for (Recipe candidate : candidates) {
+            scored.add(scoreCandidate(candidate, constraints, targetCalories, usedRecipeTitles));
+        }
+        scored.sort(Comparator.comparingDouble(ScoredCandidate::score).reversed());
+        ScoredCandidate best = scored.get(0);
+        for (ScoredCandidate entry : scored) {
+            if (entry == best) {
+                logger.info("[RECIPE_DECISION] Selected {} score={} reasons={}",
+                    entry.recipe.getTitle(), formatScore(entry.score), entry.reasons);
+            } else {
+                logger.info("[RECIPE_DECISION] Rejected {} score={} reasons={}",
+                    entry.recipe.getTitle(), formatScore(entry.score), entry.reasons);
+            }
+        }
+        return best.recipe;
+    }
+
+    private ScoredCandidate scoreCandidate(
+            Recipe recipe,
+            UserDietaryConstraints constraints,
+            Double targetCalories,
+            Set<String> usedRecipeTitles) {
+        double score = 0.0;
+        List<String> reasons = new ArrayList<>();
+
+        // Cuisine preference match
+        if (constraints != null && !constraints.cuisinePreferences.isEmpty() && recipe.getCuisine() != null) {
+            boolean matches = constraints.cuisinePreferences.stream()
+                    .anyMatch(pref -> pref.equalsIgnoreCase(recipe.getCuisine()));
+            if (matches) {
+                score += 30.0;
+                reasons.add("cuisine match");
+            } else {
+                reasons.add("cuisine not preferred");
+            }
+        } else if (recipe.getCuisine() != null) {
+            reasons.add("no cuisine preference");
+        } else {
+            reasons.add("cuisine unknown");
+        }
+
+        // Macro / calorie alignment (neutral if data unavailable)
+        if (targetCalories != null) {
+            reasons.add("calorie target " + targetCalories.intValue() + " (data unavailable, neutral)");
+        }
+
+        // Preparation time - shorter is better
+        if (recipe.getTimeMinutes() != null) {
+            double timeScore = Math.max(0.0, 25.0 - recipe.getTimeMinutes());
+            score += timeScore;
+            reasons.add("prep " + recipe.getTimeMinutes() + "min");
+        } else {
+            reasons.add("prep time unknown");
+        }
+
+        // Variety - avoid repeating the same title in a day plan
+        boolean duplicate = usedRecipeTitles != null && recipe.getTitle() != null &&
+                usedRecipeTitles.stream().anyMatch(t -> t.equalsIgnoreCase(recipe.getTitle()));
+        if (duplicate) {
+            score -= 40.0;
+            reasons.add("repeat penalty");
+        } else {
+            reasons.add("unique title");
+        }
+
+        return new ScoredCandidate(recipe, score, reasons);
+    }
+
+    private String formatScore(double score) {
+        return String.format("%.2f", score);
+    }
+
+    private static class ScoredCandidate {
+        private final Recipe recipe;
+        private final double score;
+        private final List<String> reasons;
+
+        ScoredCandidate(Recipe recipe, double score, List<String> reasons) {
+            this.recipe = recipe;
+            this.score = score;
+            this.reasons = reasons;
+        }
+
+        public double score() {
+            return score;
+        }
+    }
+    
+    /**
+     * Check if a recipe is vegetarian based on dietary tags.
+     */
+    private boolean isRecipeVegetarian(Recipe recipe) {
+        if (recipe.getDietaryTags() == null) {
+            return false;
+        }
+        return recipe.getDietaryTags().stream()
+                .anyMatch(tag -> tag.equalsIgnoreCase("vegetarian") || 
+                                tag.equalsIgnoreCase("vegan"));
+    }
+    
+    /**
+     * Check if a recipe is safe for user's dietary constraints.
+     * Uses same filtering logic as applyExplicitRecipeFiltering but for DB recipes.
+     */
+    private boolean isRecipeSafeForConstraints(Recipe recipe, UserDietaryConstraints constraints) {
+        String recipeTitle = recipe.getTitle() != null ? recipe.getTitle().toLowerCase() : "";
+        String recipeSummary = recipe.getSummary() != null ? recipe.getSummary().toLowerCase() : "";
+        String recipeText = recipeTitle + " " + recipeSummary;
+        
+        // Check vegetarian constraint
+        for (String dietary : constraints.dietaryRestrictions) {
+            if ("vegetarian".equalsIgnoreCase(dietary)) {
+                if (containsAnyMeatIndicators(recipeText)) {
+                    logger.debug("[RECIPE_FALLBACK] Recipe '{}' contains meat", recipe.getTitle());
+                    return false;
+                }
+                // Also check dietary tags
+                if (recipe.getDietaryTags() != null && 
+                    !recipe.getDietaryTags().stream().anyMatch(tag -> 
+                        tag.equalsIgnoreCase("vegetarian") || tag.equalsIgnoreCase("vegan"))) {
+                    logger.debug("[RECIPE_FALLBACK] Recipe '{}' not tagged vegetarian", recipe.getTitle());
+                    return false;
+                }
+            }
+        }
+        
+        // Check allergies (basic text matching - not perfect but safe)
+        for (String allergen : constraints.allergies) {
+            if (recipeText.contains(allergen.toLowerCase())) {
+                logger.debug("[RECIPE_FALLBACK] Recipe '{}' may contain allergen: {}", recipe.getTitle(), allergen);
+                return false;
+            }
+        }
+        
+        // Check disliked ingredients
+        for (String disliked : constraints.dislikedIngredients) {
+            if (recipeText.contains(disliked.toLowerCase())) {
+                logger.debug("[RECIPE_FALLBACK] Recipe '{}' contains disliked ingredient: {}", recipe.getTitle(), disliked);
+                return false;
+            }
+        }
+        
+        return true;
+    }
+    
+    /**
+     * Convert database Recipe entity to GeneratedRecipe DTO for meal assembly.
+     */
+    private GeneratedRecipe convertRecipeToGeneratedRecipe(Recipe recipe) {
+        GeneratedRecipe generated = new GeneratedRecipe();
+        generated.setTitle(recipe.getTitle());
+        generated.setMeal(recipe.getMeal() != null ? recipe.getMeal().name().toLowerCase() : "lunch");
+        generated.setCuisine(recipe.getCuisine());
+        generated.setSummary(recipe.getSummary());
+        generated.setServings(recipe.getServings());
+        
+        if (recipe.getDietaryTags() != null) {
+            generated.setDietaryTags(new ArrayList<>(recipe.getDietaryTags()));
+        }
+        
+        // Convert ingredients if available
+        if (recipe.getIngredients() != null && !recipe.getIngredients().isEmpty()) {
+            List<GeneratedRecipe.GeneratedIngredient> genIngredients = new ArrayList<>();
+            recipe.getIngredients().forEach(recipeIng -> {
+                if (recipeIng.getIngredient() != null) {
+                    GeneratedRecipe.GeneratedIngredient genIng = new GeneratedRecipe.GeneratedIngredient();
+                    genIng.setName(recipeIng.getIngredient().getLabel());
+                    genIng.setQuantity(recipeIng.getQuantity());
+                    genIng.setUnit(recipeIng.getIngredient().getUnit());
+                    genIngredients.add(genIng);
+                }
+            });
+            generated.setIngredients(genIngredients);
+        } else {
+            // Minimal fallback ingredients
+            List<GeneratedRecipe.GeneratedIngredient> ingredients = new ArrayList<>();
+            GeneratedRecipe.GeneratedIngredient ing = new GeneratedRecipe.GeneratedIngredient();
+            ing.setName(recipe.getTitle());
+            ing.setQuantity(1.0);
+            ing.setUnit("serving");
+            ingredients.add(ing);
+            generated.setIngredients(ingredients);
+        }
+        
+        return generated;
     }
 
     /**

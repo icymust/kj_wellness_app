@@ -7,11 +7,13 @@ import com.ndl.numbers_dont_lie.ai.dto.AiStrategyRequest;
 import com.ndl.numbers_dont_lie.ai.dto.AiStrategyResult;
 import com.ndl.numbers_dont_lie.entity.UserEntity;
 import com.ndl.numbers_dont_lie.mealplan.dto.DailyNutritionSummary;
+import com.ndl.numbers_dont_lie.mealplan.dto.WeeklyPlanResponse;
 import com.ndl.numbers_dont_lie.mealplan.entity.DayPlan;
 import com.ndl.numbers_dont_lie.mealplan.entity.MealPlanVersion;
 import com.ndl.numbers_dont_lie.mealplan.entity.VersionReason;
 import com.ndl.numbers_dont_lie.mealplan.service.DayPlanAssemblerService;
 import com.ndl.numbers_dont_lie.mealplan.service.NutritionSummaryService;
+import com.ndl.numbers_dont_lie.mealplan.service.WeeklyMealPlanService;
 import com.ndl.numbers_dont_lie.profile.entity.ProfileEntity;
 import com.ndl.numbers_dont_lie.profile.repository.ProfileRepository;
 import com.ndl.numbers_dont_lie.repository.UserRepository;
@@ -51,6 +53,7 @@ public class MealPlanController {
     
     private final DayPlanAssemblerService dayPlanAssemblerService;
     private final NutritionSummaryService nutritionSummaryService;
+    private final WeeklyMealPlanService weeklyMealPlanService;
     private final AiStrategyService aiStrategyService;
     private final UserRepository userRepository;
     private final ProfileRepository profileRepository;
@@ -58,11 +61,13 @@ public class MealPlanController {
     public MealPlanController(
             DayPlanAssemblerService dayPlanAssemblerService,
             NutritionSummaryService nutritionSummaryService,
+            WeeklyMealPlanService weeklyMealPlanService,
             AiStrategyService aiStrategyService,
             UserRepository userRepository,
             ProfileRepository profileRepository) {
         this.dayPlanAssemblerService = dayPlanAssemblerService;
         this.nutritionSummaryService = nutritionSummaryService;
+        this.weeklyMealPlanService = weeklyMealPlanService;
         this.aiStrategyService = aiStrategyService;
         this.userRepository = userRepository;
         this.profileRepository = profileRepository;
@@ -224,6 +229,31 @@ public class MealPlanController {
             fallbackSummary.setDate(date);
             fallbackSummary.setNutritionEstimated(true);
             return ResponseEntity.ok(fallbackSummary);
+        }
+    }
+
+    /**
+     * Generate a weekly meal plan (7 days) using existing daily logic.
+     * Returns day plans plus aggregated weekly nutrition summary.
+     */
+    @GetMapping("/week")
+    public ResponseEntity<WeeklyPlanResponse> getWeeklyPlan(
+            @RequestParam(name = "startDate", required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+            LocalDate startDate) {
+        if (startDate == null) {
+            startDate = LocalDate.now();
+        }
+        Long userId = TEMP_USER_ID; // TODO: auth
+
+        logger.info("[WEEK_PLAN] Fetching week plan for userId={} startDate={}", userId, startDate);
+        try {
+            WeeklyPlanResponse response = weeklyMealPlanService.generateWeeklyPlanPreview(userId, startDate);
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            logger.error("[WEEK_PLAN] Failed to generate week plan: {}", e.getMessage(), e);
+            WeeklyPlanResponse fallback = new WeeklyPlanResponse(java.util.Collections.emptyList(), new com.ndl.numbers_dont_lie.mealplan.dto.WeeklyNutritionSummary());
+            return ResponseEntity.ok(fallback);
         }
     }
     

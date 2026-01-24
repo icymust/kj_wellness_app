@@ -45,6 +45,10 @@ public class DayPlan {
     @JsonProperty("date")
     private LocalDate date; // ISO 8601 date (timezone-agnostic, interpreted via parent)
 
+    @Column(name = "context_hash", length = 64)
+    @JsonProperty("context_hash")
+    private String contextHash; // SHA-256 hash of user preferences and meal structure
+
     @OneToMany(mappedBy = "dayPlan", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
     @JsonProperty("meals")
     @JsonManagedReference("dayplan-meals")
@@ -76,6 +80,14 @@ public class DayPlan {
 
     public void setDate(LocalDate date) {
         this.date = date;
+    }
+
+    public String getContextHash() {
+        return contextHash;
+    }
+
+    public void setContextHash(String contextHash) {
+        this.contextHash = contextHash;
     }
 
     public List<Meal> getMeals() {

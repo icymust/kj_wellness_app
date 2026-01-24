@@ -278,4 +278,97 @@ public class DebugMealPlanController {
             ));
         }
     }
+
+    /**
+     * Test context-reactive meal plan regeneration.
+     * 
+     * Demonstrates the context change detection feature:
+     * 1. Takes an existing DayPlan
+     * 2. Reassembles it with current user preferences
+     * 3. If preferences changed, regenerates all meals
+     * 4. Logs old/new context hashes
+     * 
+     * This endpoint simulates scenario where user changes preferences
+     * (e.g., changes cuisine preference) and requests the same day.
+     * 
+     * @param date the date to regenerate
+     * @param userId the user ID
+     * @return updated DayPlan with potentially new meals if context changed
+     */
+    @GetMapping("/day/test-context-change")
+    public ResponseEntity<?> testContextChange(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam(value = "userId", required = false) Long userId) {
+        
+        if (userId == null) {
+            userId = 1L; // Default test user
+        }
+        
+        logger.info("[USER_CONTEXT] Using userId = {}", userId);
+        logger.info("DEBUG endpoint HIT: /day/test-context-change for userId={}, date={}", userId, date);
+        
+        try {
+            // Step 1: Generate initial plan
+            MealPlanVersion tempVersion = new MealPlanVersion();
+            tempVersion.setVersionNumber(0);
+            tempVersion.setCreatedAt(java.time.LocalDateTime.now());
+            tempVersion.setReason(com.ndl.numbers_dont_lie.mealplan.entity.VersionReason.INITIAL_GENERATION);
+            
+            DayPlan initialPlan = dayPlanAssemblerService.assembleDayPlan(userId, date, tempVersion);
+            String initialHash = initialPlan.getContextHash();
+            int initialMealCount = initialPlan.getMeals().size();
+            
+            logger.info("[DAY_PLAN] Initial plan generated with {} meals, context hash: {}", 
+                initialMealCount, initialHash);
+            
+            // Step 2: Reassemble the same plan (simulating context check)
+            // In real scenario, user would have changed preferences between calls
+            DayPlan updatedPlan = dayPlanAssemblerService.assembleDayPlan(
+                userId, 
+                date, 
+                tempVersion, 
+                initialPlan  // Pass existing plan for context comparison
+            );
+            
+            String updatedHash = updatedPlan.getContextHash();
+            int updatedMealCount = updatedPlan.getMeals().size();
+            boolean contextChanged = !initialHash.equals(updatedHash);
+            
+            logger.info("[DAY_PLAN] After context check: {} meals, context hash: {}, changed: {}", 
+                updatedMealCount, updatedHash, contextChanged);
+            
+            return ResponseEntity.ok(Map.of(
+                "debug", true,
+                "contextReactivity", "ENABLED",
+                "initial", Map.of(
+                    "meals", initialMealCount,
+                    "contextHash", initialHash
+                ),
+                "updated", Map.of(
+                    "meals", updatedMealCount,
+                    "contextHash", updatedHash
+                ),
+                "contextChanged", contextChanged,
+                "message", contextChanged 
+                    ? "Context changed - meals were regenerated" 
+                    : "Context unchanged - meals were reused",
+                "dayPlan", updatedPlan
+            ));
+            
+        } catch (IllegalStateException e) {
+            logger.error("Debug: Failed context change test for userId={}, date={} (IllegalStateException)", userId, date, e);
+            return ResponseEntity.badRequest().body(Map.of(
+                    "error", e.getMessage(),
+                    "date", date.toString()
+            ));
+        } catch (Exception e) {
+            String errorMsg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+            logger.error("Debug: Unexpected error in context change test for userId={}, date={}", userId, date, e);
+            return ResponseEntity.internalServerError().body(Map.of(
+                    "error", "Unexpected error",
+                    "message", errorMsg,
+                    "date", date.toString()
+            ));
+        }
+    }
 }
