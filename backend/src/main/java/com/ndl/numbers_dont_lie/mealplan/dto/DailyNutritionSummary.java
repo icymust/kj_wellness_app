@@ -66,6 +66,9 @@ public class DailyNutritionSummary {
     @JsonProperty("fats_percentage")
     private double fatsPercentage;
 
+    @JsonProperty("nutrition_estimated")
+    private boolean nutritionEstimated;
+
     public DailyNutritionSummary() {
     }
 
@@ -171,5 +174,13 @@ public class DailyNutritionSummary {
 
     public void setFatsPercentage(double fatsPercentage) {
         this.fatsPercentage = fatsPercentage;
+    }
+
+    public boolean isNutritionEstimated() {
+        return nutritionEstimated;
+    }
+
+    public void setNutritionEstimated(boolean nutritionEstimated) {
+        this.nutritionEstimated = nutritionEstimated;
     }
 }

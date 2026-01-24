@@ -134,6 +134,7 @@ public class NutritionSummaryService {
         summary.setProteinPercentage(0.0);
         summary.setCarbsPercentage(0.0);
         summary.setFatsPercentage(0.0);
+        summary.setNutritionEstimated(false);
         
         logger.info("[NUTRITION-SUMMARY] Returning empty summary: {}", reason);
         return summary;
@@ -141,8 +142,13 @@ public class NutritionSummaryService {
 
     /**
      * Read-only aggregation of existing DayPlan/Meal data. Since Meal currently does not
-     * persist nutrition, totals default to 0.0 but method is ready to sum real values
-     * once nutrition is stored.
+     * persist nutrition, uses MVP estimation based on meal count and daily targets.
+     * 
+     * Estimation Strategy:
+     * - Divide daily calorie target equally across all meals
+     * - Apply standard macro ratios: protein=25%, carbs=45%, fats=30%
+     * - Convert to grams: protein/carbs = calories / 4, fats = calories / 9
+     * - Flag result as estimated for transparency
      */
     private DailyNutritionSummary aggregateTotals(
             DayPlan dayPlan,
@@ -154,13 +160,34 @@ public class NutritionSummaryService {
         double totalProtein = 0.0;
         double totalCarbs = 0.0;
         double totalFats = 0.0;
+        boolean isEstimated = false;
 
-        // No nutrition stored on Meal yet; keep read-only iteration for future data.
-        for (Meal meal : dayPlan.getMeals()) {
-            // Future: sum meal.getNutrition() values here
-            if (meal == null) {
-                continue;
-            }
+        int mealCount = dayPlan.getMeals().size();
+        
+        // No nutrition stored on Meal yet; use estimation
+        if (mealCount > 0 && targetCalories != null && targetCalories > 0) {
+            logger.debug("[NUTRITION] Using MVP estimation: {} meals, {} cal target", 
+                mealCount, targetCalories);
+            
+            // Estimate calories per meal (equal distribution)
+            double caloriesPerMeal = targetCalories.doubleValue() / mealCount;
+            totalCalories = targetCalories.doubleValue();
+            
+            // Apply standard macro ratios:
+            // Protein: 25% of calories ÷ 4 cal/g = grams
+            // Carbs: 45% of calories ÷ 4 cal/g = grams
+            // Fats: 30% of calories ÷ 9 cal/g = grams
+            totalProtein = (totalCalories * 0.25) / 4.0;
+            totalCarbs = (totalCalories * 0.45) / 4.0;
+            totalFats = (totalCalories * 0.30) / 9.0;
+            
+            isEstimated = true;
+            
+            logger.debug("[NUTRITION] Estimated totals: cal={}, pro={}g, carb={}g, fat={}g",
+                Math.round(totalCalories), Math.round(totalProtein), 
+                Math.round(totalCarbs), Math.round(totalFats));
+        } else {
+            logger.debug("[NUTRITION] No meals or no target, returning zeros");
         }
 
         double targetCal = targetCalories != null ? targetCalories.doubleValue() : 0.0;
@@ -181,6 +208,7 @@ public class NutritionSummaryService {
         summary.setProteinPercentage(calculatePercentage(totalProtein, targetPro));
         summary.setCarbsPercentage(calculatePercentage(totalCarbs, targetCarb));
         summary.setFatsPercentage(calculatePercentage(totalFats, targetFat));
+        summary.setNutritionEstimated(isEstimated);
 
         return summary;
     }

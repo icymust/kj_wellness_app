@@ -1,0 +1,291 @@
+/* Meal Plan Page Styles */
+
+.meal-plan-page {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 20px;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+/* Header */
+.meal-plan-header {
+  margin-bottom: 40px;
+  padding-bottom: 20px;
+  border-bottom: 2px solid #e0e0e0;
+}
+
+.meal-plan-header h1 {
+  margin: 0 0 10px 0;
+  font-size: 32px;
+  color: #333;
+  font-weight: 600;
+}
+
+.meal-plan-date {
+  margin: 0;
+  font-size: 16px;
+  color: #666;
+}
+
+/* States */
+.loading-state,
+.error-state,
+.empty-state {
+  padding: 60px 20px;
+  text-align: center;
+  border-radius: 8px;
+  background-color: #f9f9f9;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid #e0e0e0;
+  border-top: 3px solid #2196f3;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 20px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.loading-state p,
+.error-state p,
+.empty-state p {
+  color: #666;
+  font-size: 16px;
+  margin: 10px 0;
+}
+
+.error-state h2,
+.empty-state h2 {
+  margin: 0 0 20px 0;
+  font-size: 24px;
+  color: #333;
+}
+
+.error-state button {
+  padding: 10px 30px;
+  background-color: #2196f3;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 14px;
+  cursor: pointer;
+  margin-top: 20px;
+}
+
+.error-state button:hover {
+  background-color: #1976d2;
+}
+
+/* Nutrition Summary */
+.nutrition-summary {
+  background-color: #f9f9f9;
+  border-radius: 8px;
+  padding: 25px;
+  margin-bottom: 40px;
+  border-left: 4px solid #4caf50;
+}
+
+.nutrition-summary h2 {
+  margin: 0 0 15px 0;
+  font-size: 20px;
+  color: #333;
+}
+
+.nutrition-note {
+  margin: 0 0 20px 0;
+  padding: 10px 15px;
+  background-color: #e3f2fd;
+  border-radius: 4px;
+  color: #1976d2;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+}
+
+.nutrition-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 20px;
+}
+
+.nutrition-item {
+  padding: 15px;
+  background-color: white;
+  border-radius: 6px;
+  border: 1px solid #e0e0e0;
+}
+
+.nutrition-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.nutrition-label {
+  font-weight: 600;
+  color: #333;
+  font-size: 14px;
+}
+
+.nutrition-value {
+  font-size: 12px;
+  color: #666;
+}
+
+.nutrition-bar {
+  height: 8px;
+  background-color: #e0e0e0;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 5px;
+}
+
+.nutrition-bar.warning {
+  background-color: #ffe0b2;
+}
+
+.nutrition-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #4caf50, #45a049);
+  transition: width 0.3s ease;
+}
+
+.nutrition-bar.warning .nutrition-bar-fill {
+  background: linear-gradient(90deg, #ff9800, #f57c00);
+}
+
+.nutrition-percentage {
+  font-size: 12px;
+  color: #666;
+  display: block;
+}
+
+/* Meals Section */
+.meals-section {
+  margin-bottom: 40px;
+}
+
+.meals-section h2 {
+  margin: 0 0 20px 0;
+  font-size: 20px;
+  color: #333;
+  font-weight: 600;
+}
+
+.meals-list {
+  display: grid;
+  gap: 20px;
+}
+
+/* Meal Card */
+.meal-card {
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 20px;
+  background-color: white;
+  transition: box-shadow 0.2s ease;
+}
+
+.meal-card:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.meal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.meal-type {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #333;
+  text-transform: capitalize;
+}
+
+.meal-calories {
+  background-color: #e8f5e9;
+  color: #2e7d32;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.meal-name {
+  margin: 0 0 15px 0;
+  font-size: 15px;
+  color: #555;
+  font-style: italic;
+}
+
+.meal-section {
+  margin-bottom: 15px;
+}
+
+.meal-section:last-child {
+  margin-bottom: 0;
+}
+
+.meal-section h4 {
+  margin: 0 0 10px 0;
+  font-size: 13px;
+  text-transform: uppercase;
+  color: #666;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+}
+
+.ingredients-list,
+.steps-list {
+  margin: 0;
+  padding-left: 20px;
+  color: #555;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.ingredients-list li,
+.steps-list li {
+  margin: 5px 0;
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+  .meal-plan-page {
+    padding: 15px;
+  }
+
+  .meal-plan-header h1 {
+    font-size: 24px;
+  }
+
+  .nutrition-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .meal-card {
+    padding: 15px;
+  }
+
+  .meal-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .meal-calories {
+    align-self: flex-start;
+  }
+}

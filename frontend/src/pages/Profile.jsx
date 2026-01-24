@@ -1,9 +1,11 @@
 import '../styles/Profile.css';
 import React, { useState, useEffect } from 'react';
 import NutritionalPreferences from '../components/NutritionalPreferences.jsx';
+import { useUser } from '../contexts/UserContext';
 
 export default function Profile({ ctx }) {
   const { loadProfile, profile, saveProfile, profileError, profileSuccess, profileSaving, loadWeights, weights } = ctx;
+  const { userId } = useUser();
   const [form, setForm] = useState({ age: '', gender: 'male', heightCm: '', weightKg: '', targetWeightKg: '', activityLevel: 'moderate', goal: 'general_fitness' });
   const [dirty, setDirty] = useState(false);
   const [status, setStatus] = useState(null);
@@ -76,6 +78,7 @@ export default function Profile({ ctx }) {
     try {
       const saved = await saveProfile(form);
       setStatus('Saved');
+      console.log(`[PROFILE] Preferences saved for userId = ${userId}`);
       // reflect server (if changed) in form; numeric fields may come back as numbers
       setForm({
         age: saved.age ?? '',

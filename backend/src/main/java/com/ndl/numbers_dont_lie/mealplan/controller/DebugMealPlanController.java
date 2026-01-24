@@ -47,13 +47,6 @@ import java.util.Map;
 public class DebugMealPlanController {
     private static final Logger logger = LoggerFactory.getLogger(DebugMealPlanController.class);
     
-    /**
-     * Mock userId for debug endpoints.
-     * In production, this would be extracted from JWT or authentication context.
-     * For debugging, we use a fixed value to avoid authentication requirements.
-     */
-    private static final Long DEBUG_USER_ID = 1L;
-    
     private final DayPlanAssemblerService dayPlanAssemblerService;
     private final WeeklyMealPlanService weeklyMealPlanService;
     private final NutritionSummaryService nutritionSummaryService;
@@ -78,6 +71,7 @@ public class DebugMealPlanController {
      * - STEP 5.1: Assemble meals into DayPlan
      * 
      * @param date the target date for meal plan generation (ISO 8601 format: YYYY-MM-DD)
+     * @param userId required user ID for meal plan generation
      * @return DayPlan containing all meals for the specified date
      * @throws IllegalStateException if user not found, strategy/structure not cached, or generation fails
      */
@@ -85,10 +79,23 @@ public class DebugMealPlanController {
     public ResponseEntity<?> generateDay(
             @RequestParam(name = "date")
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
-            LocalDate date) {
-        logger.info("DEBUG endpoint HIT: /day");
+            LocalDate date,
+            @RequestParam(name = "userId")
+            Long userId) {
+        // Guard: userId is required
+        if (userId == null || userId <= 0) {
+            logger.warn("[USER_CONTEXT] MISSING: userId is required for /day endpoint");
+            return ResponseEntity.badRequest().body(Map.of(
+                "error", "Missing required parameter: userId",
+                "message", "userId must be a positive integer",
+                "example", "/api/debug/meal-plans/day?date=2026-01-25&userId=2"
+            ));
+        }
+        
+        logger.info("[USER_CONTEXT] Using userId = {}", userId);
+        logger.info("DEBUG endpoint HIT: /day for userId={}, date={}", userId, date);
         try {
-            logger.info("Debug: Generating meal plan for date={}", date);
+            logger.info("Debug: Generating meal plan for userId={}, date={}", userId, date);
             
             // Create temporary MealPlanVersion for assembly
             // In production, this would be part of an existing MealPlan
@@ -100,16 +107,16 @@ public class DebugMealPlanController {
             
             // Call service to generate DayPlan
             DayPlan dayPlan = dayPlanAssemblerService.assembleDayPlan(
-                    DEBUG_USER_ID,
+                    userId,
                     date,
                     tempVersion
             );
             
-            logger.info("Debug: Successfully generated meal plan for date={}", date);
+            logger.info("Debug: Successfully generated meal plan for userId={}, date={}", userId, date);
                 return ResponseEntity.ok(dayPlan);
             
         } catch (IllegalStateException e) {
-                logger.error("Debug: Failed to generate meal plan for date={} (IllegalStateException)", date, e);
+                logger.error("Debug: Failed to generate meal plan for userId={}, date={} (IllegalStateException)", userId, date, e);
                 return ResponseEntity.ok(Map.of(
                     "debug", true,
                     "fallback", true,
@@ -118,7 +125,7 @@ public class DebugMealPlanController {
                     "meals", java.util.List.of(Map.of("name", "Fallback Meal", "calories", 500))
                 ));
         } catch (Exception e) {
-                logger.error("Debug: Unexpected error generating meal plan for date={}", date, e);
+                logger.error("Debug: Unexpected error generating meal plan for userId={}, date={}", userId, date, e);
                 return ResponseEntity.ok(Map.of(
                     "debug", true,
                     "fallback", true,
@@ -139,6 +146,7 @@ public class DebugMealPlanController {
      * - Returns complete MealPlan with all DayPlans
      * 
      * @param startDate the start date for week (Monday, ISO 8601 format: YYYY-MM-DD)
+     * @param userId required user ID for meal plan generation
      * @return MealPlan containing 7 DayPlans (one per day)
      * @throws IllegalStateException if user not found or generation fails
      */
@@ -146,22 +154,35 @@ public class DebugMealPlanController {
     public ResponseEntity<?> generateWeek(
             @RequestParam(name = "startDate")
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
-            LocalDate startDate) {
-        logger.info("DEBUG endpoint HIT: /week");
+            LocalDate startDate,
+            @RequestParam(name = "userId")
+            Long userId) {
+        // Guard: userId is required
+        if (userId == null || userId <= 0) {
+            logger.warn("[USER_CONTEXT] MISSING: userId is required for /week endpoint");
+            return ResponseEntity.badRequest().body(Map.of(
+                "error", "Missing required parameter: userId",
+                "message", "userId must be a positive integer",
+                "example", "/api/debug/meal-plans/week?startDate=2026-01-20&userId=2"
+            ));
+        }
+        
+        logger.info("[USER_CONTEXT] Using userId = {}", userId);
+        logger.info("DEBUG endpoint HIT: /week for userId={}, startDate={}", userId, startDate);
         try {
-            logger.info("Debug: Generating weekly meal plan for startDate={}", startDate);
+            logger.info("Debug: Generating weekly meal plan for userId={}, startDate={}", userId, startDate);
             
             // Call service to generate 7-day MealPlan
             MealPlan mealPlan = weeklyMealPlanService.generateWeeklyPlan(
-                    DEBUG_USER_ID,
+                    userId,
                     startDate
             );
             
-            logger.info("Debug: Successfully generated weekly meal plan starting from={}", startDate);
+            logger.info("Debug: Successfully generated weekly meal plan starting from userId={}, startDate={}", userId, startDate);
                 return ResponseEntity.ok(mealPlan);
             
         } catch (IllegalStateException e) {
-                logger.error("Debug: Failed to generate weekly meal plan for startDate={} (IllegalStateException)", startDate, e);
+                logger.error("Debug: Failed to generate weekly meal plan for userId={}, startDate={} (IllegalStateException)", userId, startDate, e);
                 return ResponseEntity.ok(Map.of(
                     "debug", true,
                     "fallback", true,
@@ -170,7 +191,7 @@ public class DebugMealPlanController {
                     "meals", java.util.List.of(Map.of("name", "Fallback Meal", "calories", 500))
                 ));
         } catch (Exception e) {
-                logger.error("Debug: Unexpected error generating weekly meal plan for startDate={}", startDate, e);
+                logger.error("Debug: Unexpected error generating weekly meal plan for userId={}, startDate={}", userId, startDate, e);
                 return ResponseEntity.ok(Map.of(
                     "debug", true,
                     "fallback", true,
@@ -193,6 +214,7 @@ public class DebugMealPlanController {
      * - See NutritionSummaryService for future enhancement plan
      * 
      * @param date the target date for nutrition summary (ISO 8601 format: YYYY-MM-DD)
+     * @param userId required user ID for meal plan generation
      * @return DailyNutritionSummary with aggregated nutrition and progress percentages
      * @throws IllegalStateException if day plan not found or user has no nutritional targets
      */
@@ -200,9 +222,22 @@ public class DebugMealPlanController {
     public ResponseEntity<?> getDayNutrition(
             @RequestParam(name = "date")
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
-            LocalDate date) {
+            LocalDate date,
+            @RequestParam(name = "userId")
+            Long userId) {
+        // Guard: userId is required
+        if (userId == null || userId <= 0) {
+            logger.warn("[USER_CONTEXT] MISSING: userId is required for /day/nutrition endpoint");
+            return ResponseEntity.badRequest().body(Map.of(
+                "error", "Missing required parameter: userId",
+                "message", "userId must be a positive integer",
+                "example", "/api/debug/meal-plans/day/nutrition?date=2026-01-25&userId=2"
+            ));
+        }
+        
+        logger.info("[USER_CONTEXT] Using userId = {}", userId);
         try {
-            logger.info("Debug: Fetching nutrition summary for date={}", date);
+            logger.info("Debug: Fetching nutrition summary for userId={}, date={}", userId, date);
             
             // For debug purposes, we need to generate a day first or fetch existing
             // Since this is MVP, we'll generate day on-demand
@@ -213,21 +248,21 @@ public class DebugMealPlanController {
             
             // Generate DayPlan with meals
             DayPlan dayPlan = dayPlanAssemblerService.assembleDayPlan(
-                    DEBUG_USER_ID,
+                    userId,
                     date,
                     tempVersion
             );
             
             // Generate nutrition summary
-            DailyNutritionSummary summary = nutritionSummaryService.generateSummary(dayPlan, DEBUG_USER_ID);
+            DailyNutritionSummary summary = nutritionSummaryService.generateSummary(dayPlan, userId);
             
-            logger.info("Debug: Nutrition summary generated for date={}, meals={}", 
-                date, dayPlan.getMeals().size());
+            logger.info("Debug: Nutrition summary generated for userId={}, date={}, meals={}", 
+                userId, date, dayPlan.getMeals().size());
             return ResponseEntity.ok(summary);
             
         } catch (IllegalStateException e) {
             String errorMsg = e.getMessage() != null ? e.getMessage() : "Unknown error";
-            logger.error("Debug: Failed to fetch nutrition summary for date={}: {}", date, errorMsg);
+            logger.error("Debug: Failed to fetch nutrition summary for userId={}, date={}: {}", userId, date, errorMsg);
             return ResponseEntity.badRequest().body(Map.of(
                     "error", "Summary generation failed",
                     "message", errorMsg,
@@ -235,7 +270,7 @@ public class DebugMealPlanController {
             ));
         } catch (Exception e) {
             String errorMsg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
-            logger.error("Debug: Unexpected error fetching nutrition summary for date={}", date, e);
+            logger.error("Debug: Unexpected error fetching nutrition summary for userId={}, date={}", userId, date, e);
             return ResponseEntity.internalServerError().body(Map.of(
                     "error", "Unexpected error",
                     "message", errorMsg,

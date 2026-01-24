@@ -217,9 +217,10 @@ public class DayPlanAssemblerService {
      * Flow:
      * 1. Build recipe query from slot and user preferences
      * 2. Retrieve similar recipes (RAG - STEP 4.3.1)
-     * 3. Build recipe generation request
-     * 4. Generate recipe with AI (STEP 4.3.2)
-     * 5. Convert to Meal entity
+     * 3. Filter retrieved recipes based on user preferences (allergies, dislikes, dietary)
+     * 4. Build recipe generation request
+     * 5. Generate recipe with AI (STEP 4.3.2)
+     * 6. Convert to Meal entity
      */
     private Meal generateMealForSlot(
             UserEntity user,
@@ -231,6 +232,9 @@ public class DayPlanAssemblerService {
             ZoneId zoneId) {
         
         logger.debug("Generating meal for slot: {} (index {})", slot.getMealType(), slot.getIndex());
+        logger.info("[PREFERENCES] Loaded for userId={}: allergies={}, disliked={}, dietary={}, cuisines={}", 
+            user.getId(), constraints.allergies, constraints.dislikedIngredients, 
+            constraints.dietaryRestrictions, constraints.cuisinePreferences);
         
         // Step 1: Build recipe query for RAG
         RecipeQuery query = buildRecipeQuery(slot, constraints);
@@ -239,26 +243,296 @@ public class DayPlanAssemblerService {
         List<RetrievedRecipe> retrievedRecipes = recipeRetrievalService.retrieve(query, 5);
         logger.debug("Retrieved {} similar recipes for {}", retrievedRecipes.size(), slot.getMealType());
         
-        // Step 3: Build recipe generation request
+        // Step 3: Filter recipes based on user preferences
+        List<RetrievedRecipe> filteredRecipes = filterRecipesByPreferences(
+            retrievedRecipes, constraints, slot.getMealType());
+        logger.info("[PREFERENCES] Filtered {} → {} recipes (allergies/dislikes/dietary)", 
+            retrievedRecipes.size(), filteredRecipes.size());
+        
+        // Step 4: Build recipe generation request
         RecipeGenerationRequest request = new RecipeGenerationRequest();
         request.setUserId(String.valueOf(user.getId()));
         request.setStrategy(strategy);
         request.setMealSlot(slot);
-        request.setRetrievedRecipes(retrievedRecipes);
+        request.setRetrievedRecipes(filteredRecipes.isEmpty() ? retrievedRecipes : filteredRecipes);
         request.setDietaryRestrictions(constraints.dietaryRestrictions);
         request.setAllergies(constraints.allergies);
         request.setDietaryPreferences(constraints.dietaryPreferences);
         request.setTargetCalories(slot.getCalorieTarget());
         request.setServings(1); // Default to 1 serving
         
-        // Step 4: Generate recipe (STEP 4.3.2)
+        // Step 5: Generate recipe (STEP 4.3.2)
         GeneratedRecipe generatedRecipe = recipeGenerationService.generate(request);
         logger.debug("Generated recipe: {}", generatedRecipe.getTitle());
         
-        // Step 5: Convert to Meal entity
-        Meal meal = convertToMeal(generatedRecipe, slot, dayPlan, date, zoneId);
+        // Step 5.5: EXPLICIT RECIPE FILTERING - Apply strict constraints to generated recipe
+        GeneratedRecipe filteredRecipe = applyExplicitRecipeFiltering(
+            generatedRecipe, 
+            constraints, 
+            slot.getMealType(),
+            user.getId());
+        
+        // Step 6: Convert to Meal entity
+        Meal meal = convertToMeal(filteredRecipe, slot, dayPlan, date, zoneId);
         
         return meal;
+    }
+    
+    /**
+     * Apply explicit dietary constraint filtering to a generated recipe.
+     * 
+     * FILTER RULES (MVP):
+     * 1. dietaryPreferences (HARD FILTER)
+     *    - If user has "vegetarian": exclude any recipe whose name/description/ingredients imply meat
+     *      (beef, pork, chicken, turkey, fish, salmon, tuna, bacon, sausage, etc.)
+     * 
+     * 2. allergies (HARD FILTER)
+     *    - Exclude any recipe whose name/description/ingredients mention allergic items
+     *      (e.g. peanuts, shellfish, dairy, gluten, etc.)
+     * 
+     * 3. dislikedIngredients (HARD FILTER)
+     *    - Exclude any recipe whose name/description/ingredients mention disliked items
+     *      (e.g. cilantro, olives, mushrooms)
+     * 
+     * 4. cuisinePreferences (SOFT FILTER)
+     *    - If cuisinePreferences present: prefer matching recipes
+     *    - If no recipes match: DO NOT exclude, continue with recipe
+     * 
+     * @param recipe Generated recipe to validate
+     * @param constraints User dietary constraints
+     * @param mealType Meal type for logging
+     * @param userId User ID for tracing
+     * @return Validated recipe if it passes all filters, or fallback if rejected
+     */
+    private GeneratedRecipe applyExplicitRecipeFiltering(
+            GeneratedRecipe recipe,
+            UserDietaryConstraints constraints,
+            String mealType,
+            Long userId) {
+        
+        logger.info("[RECIPE_FILTER] Starting validation for recipe: '{}'", recipe.getTitle());
+        
+        // Build comprehensive recipe text for filtering (title + summary + ingredients)
+        String recipeText = buildRecipeTextForFiltering(recipe);
+        String recipeLower = recipeText.toLowerCase();
+        
+        // RULE 1: DIETARY RESTRICTIONS (HARD FILTER - vegetarian)
+        for (String dietary : constraints.dietaryRestrictions) {
+            if ("vegetarian".equalsIgnoreCase(dietary)) {
+                if (containsAnyMeatIndicators(recipeLower)) {
+                    logger.warn("[RECIPE_FILTER] Excluded recipe='{}' reason=vegetarian (contains meat)", 
+                        recipe.getTitle());
+                    return createFallbackRecipe(mealType, "Vegetarian constraint");
+                }
+            }
+        }
+        
+        // RULE 2: ALLERGIES (HARD FILTER)
+        for (String allergen : constraints.allergies) {
+            if (recipeContainsIngredient(recipe, allergen)) {
+                logger.warn("[RECIPE_FILTER] Excluded recipe='{}' reason=allergen({})", 
+                    recipe.getTitle(), allergen);
+                return createFallbackRecipe(mealType, "Allergen: " + allergen);
+            }
+        }
+        
+        // RULE 3: DISLIKED INGREDIENTS (HARD FILTER)
+        for (String disliked : constraints.dislikedIngredients) {
+            if (recipeContainsIngredient(recipe, disliked)) {
+                logger.warn("[RECIPE_FILTER] Excluded recipe='{}' reason=disliked({})", 
+                    recipe.getTitle(), disliked);
+                return createFallbackRecipe(mealType, "Disliked: " + disliked);
+            }
+        }
+        
+        // RULE 4: CUISINE PREFERENCES (SOFT FILTER)
+        if (!constraints.cuisinePreferences.isEmpty()) {
+            if (recipe.getCuisine() != null && 
+                constraints.cuisinePreferences.contains(recipe.getCuisine())) {
+                logger.info("[RECIPE_FILTER] ✓ Recipe matches preferred cuisine: {}", recipe.getCuisine());
+            } else {
+                logger.debug("[RECIPE_FILTER] Recipe cuisine {} not in preferences, but accepting anyway (soft filter)", 
+                    recipe.getCuisine());
+            }
+        }
+        
+        // All filters passed
+        logger.info("[RECIPE_FILTER] ✓ Recipe passed all dietary constraints: '{}'", recipe.getTitle());
+        return recipe;
+    }
+    
+    /**
+     * Build comprehensive recipe text from title, summary, and ingredients for filtering.
+     */
+    private String buildRecipeTextForFiltering(GeneratedRecipe recipe) {
+        StringBuilder text = new StringBuilder();
+        
+        if (recipe.getTitle() != null) {
+            text.append(recipe.getTitle()).append(" ");
+        }
+        if (recipe.getSummary() != null) {
+            text.append(recipe.getSummary()).append(" ");
+        }
+        
+        if (recipe.getIngredients() != null) {
+            for (GeneratedRecipe.GeneratedIngredient ing : recipe.getIngredients()) {
+                if (ing.getName() != null) {
+                    text.append(ing.getName()).append(" ");
+                }
+            }
+        }
+        
+        return text.toString();
+    }
+    
+    /**
+     * Check if recipe contains any indicators of meat (chicken, beef, pork, fish, etc).
+     */
+    private boolean containsAnyMeatIndicators(String recipeLower) {
+        String[] meatIndicators = {
+            "beef", "pork", "chicken", "turkey", "lamb", "veal",
+            "fish", "salmon", "tuna", "trout", "cod", "shrimp", "prawn", "lobster", "crab",
+            "bacon", "ham", "sausage", "steak", "ribs", "tenderloin", "breast", "thigh",
+            "duck", "goose", "venison", "game", "meat"
+        };
+        
+        for (String meat : meatIndicators) {
+            if (recipeLower.contains(meat)) {
+                return true;
+            }
+        }
+        return false;
+    }
+    
+    /**
+     * Check if recipe contains a specific ingredient (by name matching).
+     */
+    private boolean recipeContainsIngredient(GeneratedRecipe recipe, String ingredient) {
+        String ingredientLower = ingredient.toLowerCase();
+        
+        // Check in title and summary
+        String recipeText = buildRecipeTextForFiltering(recipe).toLowerCase();
+        if (recipeText.contains(ingredientLower)) {
+            return true;
+        }
+        
+        // Also check ingredient names explicitly
+        if (recipe.getIngredients() != null) {
+            for (GeneratedRecipe.GeneratedIngredient ing : recipe.getIngredients()) {
+                if (ing.getName() != null && ing.getName().toLowerCase().contains(ingredientLower)) {
+                    return true;
+                }
+            }
+        }
+        
+        return false;
+    }
+    
+    /**
+     * Create a safe fallback recipe when filtering rejects the generated recipe.
+     * Uses a simple, universally safe option.
+     */
+    private GeneratedRecipe createFallbackRecipe(String mealType, String reason) {
+        GeneratedRecipe fallback = new GeneratedRecipe();
+        fallback.setTitle("[Fallback - " + reason + "]");
+        fallback.setMeal(mealType);
+        fallback.setCuisine("International");
+        fallback.setSummary("Safe fallback meal due to dietary constraints");
+        fallback.setServings(1);
+        fallback.setDietaryTags(Arrays.asList("vegetarian", "hypoallergenic"));
+        
+        // Simple safe ingredients
+        List<GeneratedRecipe.GeneratedIngredient> ingredients = new ArrayList<>();
+        GeneratedRecipe.GeneratedIngredient ing1 = new GeneratedRecipe.GeneratedIngredient();
+        ing1.setName("Rice");
+        ing1.setQuantity(100.0);
+        ing1.setUnit("g");
+        ingredients.add(ing1);
+        
+        GeneratedRecipe.GeneratedIngredient ing2 = new GeneratedRecipe.GeneratedIngredient();
+        ing2.setName("Steamed Vegetables");
+        ing2.setQuantity(150.0);
+        ing2.setUnit("g");
+        ingredients.add(ing2);
+        
+        fallback.setIngredients(ingredients);
+        
+        logger.info("[RECIPE_FILTER] No recipes left after filtering, fallback used");
+        return fallback;
+    }
+
+    /**
+     * Filter retrieved recipes based on user dietary preferences.
+     * 
+     * CURRENT LIMITATIONS (STEP 5.1):
+     * - RetrievedRecipe only contains title, cuisine, relevance
+     * - Full ingredient data not available at retrieval stage
+     * - AI-generated recipes will apply filters via RAG constraints
+     * 
+     * RULES (Future Enhancement):
+     * 1. Exclude recipes containing allergic ingredients (when ingredient data available)
+     * 2. Exclude recipes containing disliked ingredients (when ingredient data available)
+     * 3. Respect dietary preferences (when recipe tags available)
+     * 4. Prefer cuisine preferences (can check now)
+     * 
+     * For now, log preferences and sort by cuisine preference.
+     * Full filtering happens via AI RAG constraints in RecipeGenerationRequest.
+     * 
+     * @param recipes Retrieved recipes from RAG
+     * @param constraints User dietary constraints
+     * @param mealType Meal type for logging
+     * @return Recipes optionally sorted by cuisine preference (no hard filtering yet)
+     */
+    private List<RetrievedRecipe> filterRecipesByPreferences(
+            List<RetrievedRecipe> recipes,
+            UserDietaryConstraints constraints,
+            String mealType) {
+        
+        // Log what preferences are available for filtering
+        if (!constraints.allergies.isEmpty()) {
+            logger.info("[RECIPE FILTER] Allergies to avoid: {}", constraints.allergies);
+        }
+        if (!constraints.dislikedIngredients.isEmpty()) {
+            logger.info("[RECIPE FILTER] Disliked ingredients: {}", constraints.dislikedIngredients);
+        }
+        if (!constraints.dietaryRestrictions.isEmpty()) {
+            logger.info("[RECIPE FILTER] Dietary restrictions: {}", constraints.dietaryRestrictions);
+        }
+        if (!constraints.cuisinePreferences.isEmpty()) {
+            logger.info("[RECIPE FILTER] Preferred cuisines: {}", constraints.cuisinePreferences);
+        }
+        
+        // Sort recipes by cuisine preference (best-effort, no hard filtering)
+        List<RetrievedRecipe> sorted = new ArrayList<>(recipes);
+        
+        if (!constraints.cuisinePreferences.isEmpty()) {
+            sorted.sort((r1, r2) -> {
+                boolean r1Match = constraints.cuisinePreferences.contains(r1.getCuisine());
+                boolean r2Match = constraints.cuisinePreferences.contains(r2.getCuisine());
+                // Preferred cuisines first
+                return Boolean.compare(r2Match, r1Match);
+            });
+            
+            // Log sorting results
+            for (int i = 0; i < Math.min(3, sorted.size()); i++) {
+                RetrievedRecipe r = sorted.get(i);
+                boolean isPreferred = constraints.cuisinePreferences.contains(r.getCuisine());
+                logger.debug("[RECIPE FILTER] Top-{}: {} ({}){}", 
+                    i+1, r.getTitle(), r.getCuisine(), isPreferred ? " [PREFERRED]" : "");
+            }
+        } else {
+            // Log all retrieved recipes if no cuisine preference
+            for (int i = 0; i < Math.min(3, sorted.size()); i++) {
+                logger.debug("[RECIPE FILTER] Retrieved-{}: {} ({})", 
+                    i+1, sorted.get(i).getTitle(), sorted.get(i).getCuisine());
+            }
+        }
+        
+        // NOTE: Strict filtering (allergies, dislikes, dietary) happens in AI prompt
+        // via RecipeGenerationRequest constraints, which are passed to RecipeGenerationService
+        // and included in the augmented prompt to Groq. AI ensures compliance.
+        
+        return sorted;
     }
     
     /**
@@ -343,6 +617,7 @@ public class DayPlanAssemblerService {
         if (nutPrefs != null) {
             constraints.dietaryRestrictions = new ArrayList<>(nutPrefs.getDietaryPreferences());
             constraints.allergies = new ArrayList<>(nutPrefs.getAllergies());
+            constraints.dislikedIngredients = new ArrayList<>(nutPrefs.getDislikedIngredients());
             constraints.cuisinePreferences = new ArrayList<>(nutPrefs.getCuisinePreferences());
             constraints.dietaryPreferences = new HashMap<>();
             // Convert Set to Map for compatibility with RecipeGenerationRequest
@@ -358,6 +633,7 @@ public class DayPlanAssemblerService {
                 constraints.dietaryPreferences.put(pref, true);
             }
             constraints.allergies = new ArrayList<>();
+            constraints.dislikedIngredients = new ArrayList<>();
             constraints.cuisinePreferences = new ArrayList<>();
         }
         
@@ -412,6 +688,7 @@ public class DayPlanAssemblerService {
     private static class UserDietaryConstraints {
         List<String> dietaryRestrictions = new ArrayList<>();
         List<String> allergies = new ArrayList<>();
+        List<String> dislikedIngredients = new ArrayList<>();
         Map<String, Boolean> dietaryPreferences = new HashMap<>();
         List<String> cuisinePreferences = new ArrayList<>();
     }

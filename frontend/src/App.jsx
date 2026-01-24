@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate, Link, useNavigate, useLocation } from "react-router-dom";
 import { api } from "./lib/api";
 import { setTokens, clearTokens, getAccessToken, getRefreshToken } from "./lib/tokens";
+import { UserProvider } from "./contexts/UserContext";
 import OAuthCallback from "./OAuthCallback";
 import Home from "./pages/Home";
 import Register from "./pages/Register";
@@ -19,6 +20,7 @@ import Forgot from "./pages/Forgot";
 import Reset from "./pages/Reset";
 import Log from "./pages/Log";
 import { DebugMealPlanPage } from "./pages/DebugMealPlanPage";
+import { MealPlanPage } from "./pages/MealPlanPage";
 
 // Root component wraps router so inner shell can use hooks
 export default function App(){
@@ -546,7 +548,8 @@ function AppShell() {
     go: (path) => navigate(path), oauthUrl, api, tempToken,
   };
   return (
-    <div style={{ padding: 16, fontFamily: 'Arial, sans-serif' }}>
+    <UserProvider>
+      <div style={{ padding: 16, fontFamily: 'Arial, sans-serif' }}>
       <header style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
         <h1 style={{ margin: 0, fontSize: 18 }}>Numbers-Don't-Lie</h1>
         <nav style={{ marginLeft: 12, display: 'flex', gap: 8 }}>
@@ -560,7 +563,7 @@ function AppShell() {
           <Link to="/profile">Profile</Link>
           <Link to="/security">Security</Link>
           <Link to="/privacy">Privacy</Link>
-          <Link to="/debug/meal-plan">Meal Plan</Link>
+            <Link to="/meals/today">Meal Plan</Link>
         </nav>
         <div style={{ marginLeft: 'auto' }}>
           {accessToken ? (
@@ -593,6 +596,7 @@ function AppShell() {
           {/* Debug routes (read-only) */}
           <Route path="/debug/meal-plans" element={<DebugMealPlanPage />} />
           <Route path="/debug/meal-plan" element={<DebugMealPlanPage />} />
+            <Route path="/meals/today" element={<MealPlanPage />} />
           <Route
             path="/oauth-callback"
             element={
@@ -610,5 +614,6 @@ function AppShell() {
         </Routes>
       </main>
     </div>
+    </UserProvider>
   );
 }
