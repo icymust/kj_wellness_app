@@ -23,6 +23,7 @@ export function MealPlanPage() {
   const [nutritionSummary, setNutritionSummary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [replacingMealId, setReplacingMealId] = useState(null);
 
   // Get userId from shared context (persisted in localStorage)
   const { userId, setUserId } = useUser();
@@ -99,6 +100,56 @@ export function MealPlanPage() {
 
     loadMealPlan();
   }, [userId]);
+
+  const handleReplaceMeal = async (mealId) => {
+    if (!mealId) {
+      console.warn('[MEAL_REPLACE] Skip: mealId is missing');
+      return;
+    }
+    try {
+      setReplacingMealId(mealId);
+      
+      console.log(`[MEAL_REPLACE] Replacing meal ${mealId}`);
+      const response = await fetch(`http://localhost:5173/api/meal-plans/meals/${mealId}/replace`, {
+        method: 'POST'
+      });
+      
+      if (!response.ok) {
+        if (response.status === 404) {
+          throw new Error('Meal not found');
+        } else if (response.status === 409) {
+          throw new Error('No alternative recipes available');
+        } else {
+          throw new Error(`Failed to replace meal (${response.status})`);
+        }
+      }
+      
+      const updatedMeal = await response.json();
+      console.log(`[MEAL_REPLACE] Success: ${updatedMeal.custom_meal_name}`);
+      
+      // Update meal in current day plan
+      setDayPlan(prevPlan => ({
+        ...prevPlan,
+        meals: prevPlan.meals.map(m => m.id === mealId ? updatedMeal : m)
+      }));
+      
+      // Refetch nutrition summary
+      const now = new Date();
+      const today = now.toLocaleDateString('en-CA');
+      const nutritionResponse = await fetch(
+        `http://localhost:5173/api/meal-plans/day/nutrition?userId=${userId}&date=${today}`
+      );
+      if (nutritionResponse.ok) {
+        const nutritionData = await nutritionResponse.json();
+        setNutritionSummary(nutritionData);
+      }
+    } catch (err) {
+      console.error('[MEAL_REPLACE] Error:', err);
+      alert(`Failed to replace meal: ${err.message}`);
+    } finally {
+      setReplacingMealId(null);
+    }
+  };
 
   if (loading) {
     return (
@@ -233,6 +284,44 @@ export function MealPlanPage() {
 
               {meal.custom_meal_name && (
                 <p className="meal-name">{meal.custom_meal_name}</p>
+              )}
+              
+              {/* Replace Button */}
+              {meal.id ? (
+                <button 
+                  className="replace-meal-button"
+                  onClick={() => handleReplaceMeal(meal.id)}
+                  disabled={replacingMealId === meal.id}
+                  style={{
+                    marginTop: '10px',
+                    padding: '8px 16px',
+                    backgroundColor: replacingMealId === meal.id ? '#ccc' : '#4CAF50',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: replacingMealId === meal.id ? 'not-allowed' : 'pointer',
+                    fontSize: '14px'
+                  }}
+                >
+                  {replacingMealId === meal.id ? 'Replacing...' : 'Replace Meal'}
+                </button>
+              ) : (
+                <button
+                  className="replace-meal-button"
+                  disabled
+                  style={{
+                    marginTop: '10px',
+                    padding: '8px 16px',
+                    backgroundColor: '#ccc',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'not-allowed',
+                    fontSize: '14px'
+                  }}
+                >
+                  🔒 Недоступно (нет ID)
+                </button>
               )}
 
               {meal.ingredients && meal.ingredients.length > 0 && (

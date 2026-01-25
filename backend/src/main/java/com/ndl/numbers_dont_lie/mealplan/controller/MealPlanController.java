@@ -9,9 +9,16 @@ import com.ndl.numbers_dont_lie.entity.UserEntity;
 import com.ndl.numbers_dont_lie.mealplan.dto.DailyNutritionSummary;
 import com.ndl.numbers_dont_lie.mealplan.dto.WeeklyPlanResponse;
 import com.ndl.numbers_dont_lie.mealplan.entity.DayPlan;
+import com.ndl.numbers_dont_lie.mealplan.entity.Meal;
 import com.ndl.numbers_dont_lie.mealplan.entity.MealPlanVersion;
 import com.ndl.numbers_dont_lie.mealplan.entity.VersionReason;
+import com.ndl.numbers_dont_lie.mealplan.entity.MealPlan;
+import com.ndl.numbers_dont_lie.mealplan.entity.PlanDuration;
+import com.ndl.numbers_dont_lie.mealplan.repository.DayPlanRepository;
+import com.ndl.numbers_dont_lie.mealplan.repository.MealPlanRepository;
+import com.ndl.numbers_dont_lie.mealplan.repository.MealPlanVersionRepository;
 import com.ndl.numbers_dont_lie.mealplan.service.DayPlanAssemblerService;
+import com.ndl.numbers_dont_lie.mealplan.service.MealReplacementService;
 import com.ndl.numbers_dont_lie.mealplan.service.NutritionSummaryService;
 import com.ndl.numbers_dont_lie.mealplan.service.WeeklyMealPlanService;
 import com.ndl.numbers_dont_lie.profile.entity.ProfileEntity;
@@ -21,10 +28,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.http.HttpStatus;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -32,6 +38,7 @@ import java.time.ZoneId;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * STEP 6.4: Production Meal Plan API
@@ -56,6 +63,10 @@ public class MealPlanController {
     private final AiStrategyService aiStrategyService;
     private final UserRepository userRepository;
     private final ProfileRepository profileRepository;
+    private final MealReplacementService mealReplacementService;
+    private final DayPlanRepository dayPlanRepository;
+    private final MealPlanRepository mealPlanRepository;
+    private final MealPlanVersionRepository mealPlanVersionRepository;
     
     public MealPlanController(
             DayPlanAssemblerService dayPlanAssemblerService,
@@ -63,13 +74,21 @@ public class MealPlanController {
             WeeklyMealPlanService weeklyMealPlanService,
             AiStrategyService aiStrategyService,
             UserRepository userRepository,
-            ProfileRepository profileRepository) {
+            ProfileRepository profileRepository,
+            MealReplacementService mealReplacementService,
+            DayPlanRepository dayPlanRepository,
+            MealPlanRepository mealPlanRepository,
+            MealPlanVersionRepository mealPlanVersionRepository) {
         this.dayPlanAssemblerService = dayPlanAssemblerService;
         this.nutritionSummaryService = nutritionSummaryService;
         this.weeklyMealPlanService = weeklyMealPlanService;
         this.aiStrategyService = aiStrategyService;
         this.userRepository = userRepository;
         this.profileRepository = profileRepository;
+        this.mealReplacementService = mealReplacementService;
+        this.dayPlanRepository = dayPlanRepository;
+        this.mealPlanRepository = mealPlanRepository;
+        this.mealPlanVersionRepository = mealPlanVersionRepository;
     }
     
     /**
@@ -82,6 +101,7 @@ public class MealPlanController {
      * @return DayPlan with meals (auto-generated if needed)
      */
     @GetMapping("/day")
+    @Transactional
     public ResponseEntity<DayPlan> getDayPlan(
             @RequestParam(name = "userId") Long userId,
             @RequestParam(name = "date", required = false)
@@ -93,6 +113,12 @@ public class MealPlanController {
         }
         
         logger.info("[MEAL_PLAN] Fetching day plan for userId={}, date={}", userId, date);
+        // 1) try existing persistent day plan
+        Optional<DayPlan> existingPlan = dayPlanRepository.findByUserIdAndDate(userId, date);
+        if (existingPlan.isPresent()) {
+            logger.info("[MEAL_PLAN] Returning persisted plan with id={} and {} meals", existingPlan.get().getId(), existingPlan.get().getMeals().size());
+            return ResponseEntity.ok(existingPlan.get());
+        }
         
         try {
             // Create temporary MealPlanVersion for assembly
@@ -107,10 +133,13 @@ public class MealPlanController {
                     date,
                     tempVersion
             );
+
+            // Persist minimal plan so meals have IDs for downstream actions
+            DayPlan saved = persistDayPlan(userId, date, dayPlan);
             
-            logger.info("[MEAL_PLAN] Successfully loaded plan for userId={}, date={}, meals={}", 
-                userId, date, dayPlan.getMeals().size());
-            return ResponseEntity.ok(dayPlan);
+            logger.info("[MEAL_PLAN] Successfully loaded plan for userId={}, date={}, meals={}, persistedId={}", 
+                userId, date, saved.getMeals().size(), saved.getId());
+            return ResponseEntity.ok(saved);
             
         } catch (IllegalStateException e) {
             // Check if this is "AI strategy not found" error
@@ -165,6 +194,34 @@ public class MealPlanController {
             fallbackPlan.setMeals(java.util.Collections.emptyList());
             return ResponseEntity.ok(fallbackPlan);
         }
+    }
+
+    /**
+     * Persist assembled DayPlan to the database to ensure meals have IDs.
+     * Creates minimal MealPlan + MealPlanVersion if they do not exist.
+     */
+    private DayPlan persistDayPlan(Long userId, LocalDate date, DayPlan assembled) {
+        // If any meal already has ID, assume persisted elsewhere
+        boolean hasIds = assembled.getMeals().stream().anyMatch(m -> m.getId() != null);
+        if (hasIds && assembled.getId() != null) {
+            return assembled;
+        }
+
+        // Create or reuse MealPlan (duration DAILY, timezone default UTC)
+        MealPlan mealPlan = mealPlanRepository.findFirstByUserId(userId)
+                .orElseGet(() -> mealPlanRepository.save(new MealPlan(userId, PlanDuration.DAILY, "UTC")));
+
+        // Create new version
+        MealPlanVersion version = new MealPlanVersion(mealPlan, 1, VersionReason.INITIAL_GENERATION);
+        version = mealPlanVersionRepository.save(version);
+
+        // Attach assembled day plan to version and user
+        assembled.setMealPlanVersion(version);
+        assembled.setUserId(userId);
+
+        DayPlan saved = dayPlanRepository.save(assembled);
+        logger.info("[MEAL_PLAN] Persisted day plan id={}, meals={} for userId={}", saved.getId(), saved.getMeals().size(), userId);
+        return saved;
     }
     
     /**
@@ -330,6 +387,36 @@ public class MealPlanController {
             structureResult.getTotalCaloriesDistributed());
         
         logger.info("[AI BOOTSTRAP] Auto-bootstrap completed successfully for userId={}", userId);
+    }
+    
+    /**
+     * Replace a single meal in a day plan with an alternative recipe.
+     * 
+     * Respects user dietary preferences and ensures variety within the day.
+     * The meal type (breakfast/lunch/dinner/snack) remains unchanged.
+     * Nutrition summary will recalculate automatically on next fetch.
+     * 
+     * @param mealId ID of meal to replace
+     * @return Updated Meal object
+     */
+    @PostMapping("/meals/{mealId}/replace")
+    public ResponseEntity<Meal> replaceMeal(@PathVariable Long mealId) {
+        logger.info("[MEAL_API] Replace meal request: mealId={}", mealId);
+        
+        try {
+            Meal replacedMeal = mealReplacementService.replaceMeal(mealId);
+            logger.info("[MEAL_API] Meal replaced successfully: {}", replacedMeal.getCustomMealName());
+            return ResponseEntity.ok(replacedMeal);
+            
+        } catch (IllegalArgumentException e) {
+            logger.error("[MEAL_API] Meal not found: mealId={}", mealId);
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+            
+        } catch (IllegalStateException e) {
+            logger.error("[MEAL_API] No alternative recipe found for mealId={}: {}", mealId, e.getMessage());
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(null); // 409 Conflict - cannot find suitable replacement
+        }
     }
     
     /**
