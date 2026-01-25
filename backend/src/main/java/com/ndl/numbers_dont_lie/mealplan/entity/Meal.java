@@ -59,6 +59,10 @@ public class Meal {
     @JsonProperty("custom_meal_name")
     private String customMealName; // Nullable - for meals without recipes
 
+    @Column(name = "calorie_target", nullable = true)
+    @JsonProperty("calorie_target")
+    private Integer calorieTarget; // Target calories for this meal slot (used for nutrition summary)
+
     public Meal() {
     }
 
@@ -119,5 +123,13 @@ public class Meal {
 
     public void setCustomMealName(String customMealName) {
         this.customMealName = customMealName;
+    }
+
+    public Integer getCalorieTarget() {
+        return calorieTarget;
+    }
+
+    public void setCalorieTarget(Integer calorieTarget) {
+        this.calorieTarget = calorieTarget;
     }
 }

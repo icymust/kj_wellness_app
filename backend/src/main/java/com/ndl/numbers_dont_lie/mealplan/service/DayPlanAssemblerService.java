@@ -212,9 +212,23 @@ public class DayPlanAssemblerService {
         String timezone = profile.getTimezone() != null ? profile.getTimezone() : "UTC";
         ZoneId zoneId = ZoneId.of(timezone);
         
-        // Step 4: Generate meals for each slot
-        List<AiMealStructureResult.MealSlot> mealSlots = mealStructure.getMeals();
-        logger.info("Generating {} meals for date {}", mealSlots.size(), date);
+        // Step 4: Generate meals for each slot (expand based on profile counts)
+        List<AiMealStructureResult.MealSlot> mealSlots = expandMealSlots(
+            mealStructure.getMeals(), 
+            constraints.breakfastCount,
+            constraints.lunchCount,
+            constraints.dinnerCount,
+            constraints.snackCount
+        );
+        logger.info("[MEAL_STRUCTURE] Expanded to {} total meal slots for date {}", mealSlots.size(), date);
+        
+        // Log each slot with its calorie target
+        logger.info("[MEAL_STRUCTURE_DEBUG] === Expanded slots breakdown ===");
+        for (AiMealStructureResult.MealSlot slot : mealSlots) {
+            logger.info("[MEAL_STRUCTURE_DEBUG] Slot: {}[{}] calorieTarget={}", 
+                slot.getMealType(), slot.getIndex(), slot.getCalorieTarget());
+        }
+        logger.info("[MEAL_STRUCTURE_DEBUG] === End slots ===");
         
         List<Meal> generatedMeals = new ArrayList<>();
         Set<String> usedRecipeTitles = new HashSet<>();
@@ -275,6 +289,64 @@ public class DayPlanAssemblerService {
         return dayPlan;
     }
     
+    private List<AiMealStructureResult.MealSlot> expandMealSlots(
+            List<AiMealStructureResult.MealSlot> baseSlots,
+            int breakfastCount,
+            int lunchCount,
+            int dinnerCount,
+            int snackCount) {
+        
+        logger.info("[MEAL_STRUCTURE] === BEFORE EXPANSION ===");
+        logger.info("[MEAL_STRUCTURE] Base slots from AI (count = {}):", baseSlots.size());
+        for (AiMealStructureResult.MealSlot slot : baseSlots) {
+            logger.info("[MEAL_STRUCTURE]   - {}: calorieTarget={}", slot.getMealType(), slot.getCalorieTarget());
+        }
+        logger.info("[MEAL_STRUCTURE] Profile counts: breakfast={}, lunch={}, dinner={}, snack={}",
+            breakfastCount, lunchCount, dinnerCount, snackCount);
+        
+        List<AiMealStructureResult.MealSlot> expanded = new ArrayList<>();
+        
+        for (AiMealStructureResult.MealSlot baseSlot : baseSlots) {
+            String mealType = baseSlot.getMealType().toLowerCase();
+            int count = 1;
+            
+            switch (mealType) {
+                case "breakfast" -> count = breakfastCount;
+                case "lunch" -> count = lunchCount;
+                case "dinner" -> count = dinnerCount;
+                case "snack" -> count = snackCount;
+            }
+            
+            logger.info("[MEAL_STRUCTURE] Generating {} slots for {}", count, mealType);
+            
+            if (count == 0) {
+                continue;
+            }
+            
+            for (int i = 0; i < count; i++) {
+                AiMealStructureResult.MealSlot slot = new AiMealStructureResult.MealSlot();
+                slot.setMealType(baseSlot.getMealType());
+                slot.setIndex(i);
+                
+                int caloriePerSlot = baseSlot.getCalorieTarget() / count;
+                slot.setCalorieTarget(caloriePerSlot);
+                logger.info("[MEAL_STRUCTURE] Expanded slot: {}[{}] = {} cal", mealType, i, caloriePerSlot);
+                slot.setMacroFocus(baseSlot.getMacroFocus());
+                
+                String timingNote = baseSlot.getTimingNote();
+                if (count > 1) {
+                    timingNote = (timingNote != null ? timingNote : mealType) + " " + (i + 1);
+                }
+                slot.setTimingNote(timingNote);
+                
+                expanded.add(slot);
+            }
+        }
+        
+        logger.info("[MEAL_STRUCTURE] Total slots after expansion: {}", expanded.size());
+        return expanded;
+    }
+
     /**
      * Generate a single meal for a meal slot.
      * 
@@ -968,6 +1040,11 @@ public class DayPlanAssemblerService {
         // Create Meal entity
         Meal meal = new Meal(dayPlan, mealType, slot.getIndex(), plannedTime);
         
+        // Store calorie target for nutrition calculation
+        meal.setCalorieTarget(slot.getCalorieTarget());
+        logger.info("[MEAL_CREATION] Created meal: {}[{}] with calorieTarget={}, title={}", 
+            slot.getMealType(), slot.getIndex(), slot.getCalorieTarget(), generatedRecipe.getTitle());
+        
         // For now, store recipe as custom meal name
         // In future, this will reference a persisted Recipe entity
         meal.setCustomMealName(generatedRecipe.getTitle());
@@ -990,6 +1067,9 @@ public class DayPlanAssemblerService {
         MealType mealType = convertToMealType(slot.getMealType());
         
         Meal meal = new Meal(dayPlan, mealType, slot.getIndex(), plannedTime);
+        meal.setCalorieTarget(slot.getCalorieTarget());
+        logger.info("[MEAL_CREATION] Created placeholder meal: {}[{}] with calorieTarget={}", 
+            slot.getMealType(), slot.getIndex(), slot.getCalorieTarget());
         meal.setCustomMealName("[Placeholder - Generation Failed]");
         
         return meal;
@@ -1017,6 +1097,10 @@ public class DayPlanAssemblerService {
                 constraints.dietaryPreferences.put(pref, true);
             }
             constraints.snackCount = nutPrefs.getSnackCount();
+            // Read meal counts from profile
+            constraints.breakfastCount = nutPrefs.getBreakfastCount() != null ? nutPrefs.getBreakfastCount() : 1;
+            constraints.lunchCount = nutPrefs.getLunchCount() != null ? nutPrefs.getLunchCount() : 1;
+            constraints.dinnerCount = nutPrefs.getDinnerCount() != null ? nutPrefs.getDinnerCount() : 1;
         } else {
             // Fallback to UserEntity JSON fields
             constraints.dietaryRestrictions = parseCsvField(user.getDietaryRestrictionsJson());
@@ -1086,5 +1170,8 @@ public class DayPlanAssemblerService {
         Map<String, Boolean> dietaryPreferences = new HashMap<>();
         List<String> cuisinePreferences = new ArrayList<>();
         Integer snackCount;
+        int breakfastCount = 1;
+        int lunchCount = 1;
+        int dinnerCount = 1;
     }
 }

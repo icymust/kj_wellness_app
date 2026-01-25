@@ -81,11 +81,14 @@ public class NutritionSummaryService {
             return createEmptySummary(dayPlan, "No nutritional targets set");
         }
         
-        // Step 2: Get targets
+        // Step 2: Get targets from profile
         Integer targetCalories = preferences.getCalorieTarget();
         Integer targetProtein = preferences.getProteinTarget();
         Integer targetCarbs = preferences.getCarbsTarget();
         Integer targetFats = preferences.getFatsTarget();
+        
+        logger.info("[NUTRITION_TARGETS] User {} targets: calories={}, protein={}, carbs={}, fats={}",
+            userId, targetCalories, targetProtein, targetCarbs, targetFats);
         
         if (targetCalories == null || targetCalories == 0) {
             logger.warn("[NUTRITION-SUMMARY] User has no calorie target set");
@@ -141,11 +144,15 @@ public class NutritionSummaryService {
     }
 
     /**
-     * Read-only aggregation of existing DayPlan/Meal data. Since Meal currently does not
-     * persist nutrition, uses MVP estimation based on meal count and daily targets.
+     * Read-only aggregation of existing DayPlan/Meal data.
      * 
-     * Estimation Strategy:
-     * - Divide daily calorie target equally across all meals
+     * NEW BEHAVIOR (Fixed):
+     * - Single source of truth: DayPlan.meals and their calorieTargets
+     * - Total daily calories = SUM(meal.calorieTarget for all slots)
+     * - When meal slots change, nutrition recalculates automatically
+     * 
+     * MVP Estimation Strategy:
+     * - Use SUM of meal slot targets as actual daily total calories
      * - Apply standard macro ratios: protein=25%, carbs=45%, fats=30%
      * - Convert to grams: protein/carbs = calories / 4, fats = calories / 9
      * - Flag result as estimated for transparency
@@ -164,36 +171,54 @@ public class NutritionSummaryService {
 
         int mealCount = dayPlan.getMeals().size();
         
-        // No nutrition stored on Meal yet; use estimation
-        if (mealCount > 0 && targetCalories != null && targetCalories > 0) {
-            logger.debug("[NUTRITION] Using MVP estimation: {} meals, {} cal target", 
-                mealCount, targetCalories);
+        // Step 1: Calculate total calories from actual meal slots
+        logger.info("[NUTRITION] Recalculating summary from {} meal slots", mealCount);
+        
+        if (mealCount > 0) {
+            // Sum calorieTarget from all meal slots
+            totalCalories = 0.0;
+            logger.info("[NUTRITION] === Starting meal loop for {} meals ===", mealCount);
+            for (Meal meal : dayPlan.getMeals()) {
+                Integer calTarget = meal.getCalorieTarget();
+                logger.info("[NUTRITION] MEAL #{}: type={}, index={}, calorieTarget={}", 
+                    dayPlan.getMeals().indexOf(meal), meal.getMealType(), meal.getIndex(), calTarget);
+                if (calTarget != null && calTarget > 0) {
+                    totalCalories += calTarget;
+                    logger.info("[NUTRITION]   → Added {} cal, running total: {} cal", calTarget, (int)totalCalories);
+                } else {
+                    logger.warn("[NUTRITION]   → SKIPPED (null or 0)");
+                }
+            }
+            logger.info("[NUTRITION] === End meal loop ===");
+            logger.info("[NUTRITION] Total calories = {} (sum of slot targets)", Math.round(totalCalories));
             
-            // Estimate calories per meal (equal distribution)
-            double caloriesPerMeal = targetCalories.doubleValue() / mealCount;
-            totalCalories = targetCalories.doubleValue();
-            
-            // Apply standard macro ratios:
-            // Protein: 25% of calories ÷ 4 cal/g = grams
-            // Carbs: 45% of calories ÷ 4 cal/g = grams
-            // Fats: 30% of calories ÷ 9 cal/g = grams
-            totalProtein = (totalCalories * 0.25) / 4.0;
-            totalCarbs = (totalCalories * 0.45) / 4.0;
-            totalFats = (totalCalories * 0.30) / 9.0;
-            
-            isEstimated = true;
-            
-            logger.debug("[NUTRITION] Estimated totals: cal={}, pro={}g, carb={}g, fat={}g",
-                Math.round(totalCalories), Math.round(totalProtein), 
-                Math.round(totalCarbs), Math.round(totalFats));
+            // Step 2: Apply standard macro ratios to actual total
+            if (totalCalories > 0) {
+                // Protein: 25% of calories ÷ 4 cal/g = grams
+                // Carbs: 45% of calories ÷ 4 cal/g = grams
+                // Fats: 30% of calories ÷ 9 cal/g = grams
+                totalProtein = (totalCalories * 0.25) / 4.0;
+                totalCarbs = (totalCalories * 0.45) / 4.0;
+                totalFats = (totalCalories * 0.30) / 9.0;
+                
+                isEstimated = true;
+                
+                logger.debug("[NUTRITION] Estimated macros: pro={}g (25%), carb={}g (45%), fat={}g (30%)",
+                    Math.round(totalProtein), Math.round(totalCarbs), Math.round(totalFats));
+            }
         } else {
-            logger.debug("[NUTRITION] No meals or no target, returning zeros");
+            logger.debug("[NUTRITION] No meal slots, returning zeros");
         }
 
-        double targetCal = targetCalories != null ? targetCalories.doubleValue() : 0.0;
-        double targetPro = targetProtein != null ? targetProtein.doubleValue() : 0.0;
-        double targetCarb = targetCarbs != null ? targetCarbs.doubleValue() : 0.0;
-        double targetFat = targetFats != null ? targetFats.doubleValue() : 0.0;
+        // Step 3: Use profile targets for comparison (may be null or different from calculated total)
+        double targetCal = targetCalories != null ? targetCalories.doubleValue() : totalCalories;
+        double targetPro = targetProtein != null ? targetProtein.doubleValue() : totalProtein;
+        double targetCarb = targetCarbs != null ? targetCarbs.doubleValue() : totalCarbs;
+        double targetFat = targetFats != null ? targetFats.doubleValue() : totalFats;
+        
+        logger.info("[NUTRITION_SUMMARY] Totals: cal={}, pro={}g, carb={}g, fat={}g | Targets: cal={}, pro={}g, carb={}g, fat={}g",
+            Math.round(totalCalories), Math.round(totalProtein), Math.round(totalCarbs), Math.round(totalFats),
+            Math.round(targetCal), Math.round(targetPro), Math.round(targetCarb), Math.round(targetFat));
 
         DailyNutritionSummary summary = new DailyNutritionSummary();
         summary.setTotalCalories(totalCalories);
