@@ -1042,8 +1042,9 @@ public class DayPlanAssemblerService {
         
         // Store calorie target for nutrition calculation
         meal.setCalorieTarget(slot.getCalorieTarget());
-        logger.info("[MEAL_CREATION] Created meal: {}[{}] with calorieTarget={}, title={}", 
-            slot.getMealType(), slot.getIndex(), slot.getCalorieTarget(), generatedRecipe.getTitle());
+        meal.setPlannedCalories(slot.getCalorieTarget()); // Initialize from slot
+        logger.info("[MEAL_CREATION] Created meal: {}[{}] with calorieTarget={}, plannedCalories={}, title={}", 
+            slot.getMealType(), slot.getIndex(), slot.getCalorieTarget(), slot.getCalorieTarget(), generatedRecipe.getTitle());
         
         // For now, store recipe as custom meal name
         // In future, this will reference a persisted Recipe entity
@@ -1068,8 +1069,9 @@ public class DayPlanAssemblerService {
         
         Meal meal = new Meal(dayPlan, mealType, slot.getIndex(), plannedTime);
         meal.setCalorieTarget(slot.getCalorieTarget());
-        logger.info("[MEAL_CREATION] Created placeholder meal: {}[{}] with calorieTarget={}", 
-            slot.getMealType(), slot.getIndex(), slot.getCalorieTarget());
+        meal.setPlannedCalories(slot.getCalorieTarget()); // Initialize from slot
+        logger.info("[MEAL_CREATION] Created placeholder meal: {}[{}] with calorieTarget={}, plannedCalories={}", 
+            slot.getMealType(), slot.getIndex(), slot.getCalorieTarget(), slot.getCalorieTarget());
         meal.setCustomMealName("[Placeholder - Generation Failed]");
         
         return meal;

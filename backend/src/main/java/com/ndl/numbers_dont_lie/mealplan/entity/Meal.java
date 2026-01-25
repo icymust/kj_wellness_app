@@ -63,6 +63,10 @@ public class Meal {
     @JsonProperty("calorie_target")
     private Integer calorieTarget; // Target calories for this meal slot (used for nutrition summary)
 
+    @Column(name = "planned_calories", nullable = true)
+    @JsonProperty("planned_calories")
+    private Integer plannedCalories; // Actual calories for this meal (sum of planned calories = daily total)
+
     public Meal() {
     }
 
@@ -131,5 +135,13 @@ public class Meal {
 
     public void setCalorieTarget(Integer calorieTarget) {
         this.calorieTarget = calorieTarget;
+    }
+
+    public Integer getPlannedCalories() {
+        return plannedCalories;
+    }
+
+    public void setPlannedCalories(Integer plannedCalories) {
+        this.plannedCalories = plannedCalories;
     }
 }
