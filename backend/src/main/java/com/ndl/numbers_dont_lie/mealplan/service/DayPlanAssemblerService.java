@@ -223,6 +223,12 @@ public class DayPlanAssemblerService {
         
         for (AiMealStructureResult.MealSlot slot : mealSlots) {
             try {
+                // Respect snack suppression: if snackCount is 0, skip snack slots entirely
+                if ("snack".equalsIgnoreCase(slot.getMealType()) && constraints.snackCount != null && constraints.snackCount == 0) {
+                    logger.info("Skipping snack generation because snackCount=0");
+                    continue;
+                }
+
                 Meal meal = generateMealForSlot(
                     user, 
                     strategy, 
@@ -233,10 +239,13 @@ public class DayPlanAssemblerService {
                     zoneId,
                     usedRecipeTitles
                 );
-                generatedMeals.add(meal);
-                successCount++;
-                logger.info("Successfully generated meal: {} (index {})", 
-                    slot.getMealType(), slot.getIndex());
+
+                if (meal != null) {
+                    generatedMeals.add(meal);
+                    successCount++;
+                    logger.info("Successfully generated meal: {} (index {})", 
+                        slot.getMealType(), slot.getIndex());
+                }
             } catch (Exception e) {
                 logger.error("Failed to generate meal for slot: {} (index {}). Error: {}", 
                     slot.getMealType(), slot.getIndex(), e.getMessage(), e);
@@ -292,19 +301,29 @@ public class DayPlanAssemblerService {
             user.getId(), constraints.allergies, constraints.dislikedIngredients, 
             constraints.dietaryRestrictions, constraints.cuisinePreferences);
         
-        // Step 1: Build recipe query for RAG
+        // Step 1: Try to select from database first
+        Recipe dbRecipe = selectDatabaseRecipeForSlot(slot, constraints, usedRecipeTitles, Double.valueOf(slot.getCalorieTarget()));
+        if (dbRecipe != null) {
+            GeneratedRecipe dbGenerated = convertRecipeToGeneratedRecipe(dbRecipe);
+            if (dbGenerated.getTitle() != null) {
+                usedRecipeTitles.add(dbGenerated.getTitle().toLowerCase());
+            }
+            return convertToMeal(dbGenerated, slot, dayPlan, date, zoneId);
+        }
+
+        logger.warn("[RECIPE_FALLBACK] No suitable DB recipe found. Falling back to AI for {}", slot.getMealType());
+
+        // Step 2: Build recipe query for RAG (AI fallback)
         RecipeQuery query = buildRecipeQuery(slot, constraints);
-        
-        // Step 2: Retrieve similar recipes (STEP 4.3.1)
         List<RetrievedRecipe> retrievedRecipes = recipeRetrievalService.retrieve(query, 5);
         logger.debug("Retrieved {} similar recipes for {}", retrievedRecipes.size(), slot.getMealType());
-        
-        // Step 3: Filter recipes based on user preferences
+
+        // Step 3: Filter retrieved recipes based on user preferences (soft)
         List<RetrievedRecipe> filteredRecipes = filterRecipesByPreferences(
             retrievedRecipes, constraints, slot.getMealType());
         logger.info("[PREFERENCES] Filtered {} → {} recipes (allergies/dislikes/dietary)", 
             retrievedRecipes.size(), filteredRecipes.size());
-        
+
         // Step 4: Build recipe generation request
         RecipeGenerationRequest request = new RecipeGenerationRequest();
         request.setUserId(String.valueOf(user.getId()));
@@ -316,11 +335,11 @@ public class DayPlanAssemblerService {
         request.setDietaryPreferences(constraints.dietaryPreferences);
         request.setTargetCalories(slot.getCalorieTarget());
         request.setServings(1); // Default to 1 serving
-        
+
         // Step 5: Generate recipe (STEP 4.3.2)
         GeneratedRecipe generatedRecipe = recipeGenerationService.generate(request);
         logger.debug("Generated recipe: {}", generatedRecipe.getTitle());
-        
+
         // Step 5.5: EXPLICIT RECIPE FILTERING - Apply strict constraints to generated recipe
         GeneratedRecipe filteredRecipe = applyExplicitRecipeFiltering(
             generatedRecipe, 
@@ -333,11 +352,9 @@ public class DayPlanAssemblerService {
         if (filteredRecipe.getTitle() != null) {
             usedRecipeTitles.add(filteredRecipe.getTitle().toLowerCase());
         }
-        
+
         // Step 6: Convert to Meal entity
-        Meal meal = convertToMeal(filteredRecipe, slot, dayPlan, date, zoneId);
-        
-        return meal;
+        return convertToMeal(filteredRecipe, slot, dayPlan, date, zoneId);
     }
     
     /**
@@ -599,6 +616,50 @@ public class DayPlanAssemblerService {
         return selectBestRecipeCandidate(eligible, constraints, targetCalories, usedRecipeTitles);
     }
 
+    /**
+     * Select the best database recipe for a given meal slot (DB-first strategy).
+     */
+    private Recipe selectDatabaseRecipeForSlot(
+            AiMealStructureResult.MealSlot slot,
+            UserDietaryConstraints constraints,
+            Set<String> usedRecipeTitles,
+            Double targetCalories) {
+
+        com.ndl.numbers_dont_lie.recipe.entity.MealType recipeMealType;
+        try {
+            recipeMealType = com.ndl.numbers_dont_lie.recipe.entity.MealType.valueOf(slot.getMealType().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            logger.warn("[RECIPE_DECISION] Invalid meal type for DB selection: {}", slot.getMealType());
+            return null;
+        }
+
+        List<Recipe> candidates = recipeRepository.findByMeal(recipeMealType);
+        if (candidates.isEmpty()) {
+            logger.info("[RECIPE_DECISION] No DB candidates for mealType={}", slot.getMealType());
+            return null;
+        }
+
+        List<Recipe> eligible = new ArrayList<>();
+        for (Recipe recipe : candidates) {
+            boolean duplicate = recipe.getTitle() != null && usedRecipeTitles.stream()
+                    .anyMatch(t -> t.equalsIgnoreCase(recipe.getTitle()));
+            if (duplicate) {
+                logger.debug("[RECIPE_DECISION] Skip duplicate title: {}", recipe.getTitle());
+                continue;
+            }
+            if (isRecipeSafeForConstraints(recipe, constraints)) {
+                eligible.add(recipe);
+            }
+        }
+
+        if (eligible.isEmpty()) {
+            logger.info("[RECIPE_DECISION] No eligible DB recipes after filtering for {}", slot.getMealType());
+            return null;
+        }
+
+        return selectBestRecipeCandidate(eligible, constraints, targetCalories, usedRecipeTitles);
+    }
+
     private Recipe selectBestRecipeCandidate(
             List<Recipe> candidates,
             UserDietaryConstraints constraints,
@@ -622,7 +683,7 @@ public class DayPlanAssemblerService {
         return best.recipe;
     }
 
-    private ScoredCandidate scoreCandidate(
+        private ScoredCandidate scoreCandidate(
             Recipe recipe,
             UserDietaryConstraints constraints,
             Double targetCalories,
@@ -646,7 +707,7 @@ public class DayPlanAssemblerService {
             reasons.add("cuisine unknown");
         }
 
-        // Macro / calorie alignment (neutral if data unavailable)
+        // Macro / calorie alignment (neutral for now, as DB recipes lack calorie data)
         if (targetCalories != null) {
             reasons.add("calorie target " + targetCalories.intValue() + " (data unavailable, neutral)");
         }
@@ -869,7 +930,7 @@ public class DayPlanAssemblerService {
     /**
      * Build a RecipeQuery for retrieving similar recipes.
      */
-    private RecipeQuery buildRecipeQuery(
+        private RecipeQuery buildRecipeQuery(
             AiMealStructureResult.MealSlot slot,
             UserDietaryConstraints constraints) {
         
@@ -955,6 +1016,7 @@ public class DayPlanAssemblerService {
             for (String pref : nutPrefs.getDietaryPreferences()) {
                 constraints.dietaryPreferences.put(pref, true);
             }
+            constraints.snackCount = nutPrefs.getSnackCount();
         } else {
             // Fallback to UserEntity JSON fields
             constraints.dietaryRestrictions = parseCsvField(user.getDietaryRestrictionsJson());
@@ -966,6 +1028,7 @@ public class DayPlanAssemblerService {
             constraints.allergies = new ArrayList<>();
             constraints.dislikedIngredients = new ArrayList<>();
             constraints.cuisinePreferences = new ArrayList<>();
+            constraints.snackCount = null;
         }
         
         return constraints;
@@ -1022,5 +1085,6 @@ public class DayPlanAssemblerService {
         List<String> dislikedIngredients = new ArrayList<>();
         Map<String, Boolean> dietaryPreferences = new HashMap<>();
         List<String> cuisinePreferences = new ArrayList<>();
+        Integer snackCount;
     }
 }

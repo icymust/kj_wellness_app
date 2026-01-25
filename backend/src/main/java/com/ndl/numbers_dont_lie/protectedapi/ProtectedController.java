@@ -40,6 +40,7 @@ public class ProtectedController {
                 return ResponseEntity.status(403).body(Map.of("error", "Email not verified"));
             }
             return ResponseEntity.ok(Map.of(
+                    "id", user.getId(),
                     "email", user.getEmail(),
                     "emailVerified", true
             ));

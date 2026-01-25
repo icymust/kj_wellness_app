@@ -15,6 +15,8 @@
 import React, { useState, useEffect } from 'react';
 import '../styles/MealPlan.css';
 import { useUser } from '../contexts/UserContext';
+import { getAccessToken } from '../lib/tokens';
+import { api } from '../lib/api';
 
 export function MealPlanPage() {
   const [dayPlan, setDayPlan] = useState(null);
@@ -23,11 +25,37 @@ export function MealPlanPage() {
   const [error, setError] = useState(null);
 
   // Get userId from shared context (persisted in localStorage)
-  // TODO: Replace with actual userId from auth when authentication is implemented
-  const { userId } = useUser();
+  const { userId, setUserId } = useUser();
+
+  // Resolve userId lazily via /protected/me if we have a token but no cached id
+  useEffect(() => {
+    const fillUserId = async () => {
+      if (userId) return;
+      const token = getAccessToken();
+      if (!token) return;
+      try {
+        const data = await api.me(token);
+        const payload = data?.user || data;
+        const resolvedId = payload?.id;
+        console.log('[USER_CONTEXT] /protected/me payload', payload);
+        if (resolvedId) {
+          setUserId(resolvedId);
+          console.log(`[USER_CONTEXT] Resolved userId from /protected/me: ${resolvedId}`);
+        }
+      } catch (err) {
+        console.warn('Auto-resolve userId failed', err);
+      }
+    };
+    fillUserId();
+  }, [userId, setUserId]);
 
   useEffect(() => {
     const loadMealPlan = async () => {
+      if (!userId) {
+        setError('Нет активного пользователя. Войдите, чтобы увидеть план.');
+        setLoading(false);
+        return;
+      }
       try {
         setLoading(true);
         setError(null);
@@ -37,10 +65,10 @@ export function MealPlanPage() {
         const today = now.toLocaleDateString('en-CA'); // YYYY-MM-DD in local TZ
 
         // Fetch day plan from production API
-        const dayResponse = await fetch(
-          `http://localhost:5173/api/meal-plans/day?userId=${userId}&date=${today}`
-        );
-        if (!dayResponse.ok) throw new Error('Failed to load meal plan');
+        const dayUrl = `http://localhost:5173/api/meal-plans/day?userId=${userId}&date=${today}`;
+        console.log('[MEAL_PLAN] Fetching day plan', dayUrl);
+        const dayResponse = await fetch(dayUrl);
+        if (!dayResponse.ok) throw new Error(`Failed to load meal plan (${dayResponse.status})`);
         const dayData = await dayResponse.json();
         setDayPlan(dayData);
 

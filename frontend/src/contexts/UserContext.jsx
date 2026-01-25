@@ -13,15 +13,21 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 const UserContext = createContext(null);
 
 export function UserProvider({ children }) {
-  // Initialize from localStorage, fallback to 2
+  // Initialize from localStorage if present; otherwise stay null until login populates
   const [userId, setUserId] = useState(() => {
     const stored = localStorage.getItem('currentUserId');
-    return stored ? parseInt(stored, 10) : 2;
+    if (!stored) return null;
+    const parsed = parseInt(stored, 10);
+    return Number.isFinite(parsed) ? parsed : null;
   });
 
-  // Persist to localStorage whenever userId changes
+  // Persist to localStorage whenever userId changes; remove when cleared
   useEffect(() => {
-    localStorage.setItem('currentUserId', String(userId));
+    if (userId == null) {
+      localStorage.removeItem('currentUserId');
+    } else {
+      localStorage.setItem('currentUserId', String(userId));
+    }
   }, [userId]);
 
   return (

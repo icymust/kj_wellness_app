@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate, Link, useNavigate, useLocation } from "react-router-dom";
 import { api } from "./lib/api";
 import { setTokens, clearTokens, getAccessToken, getRefreshToken } from "./lib/tokens";
-import { UserProvider } from "./contexts/UserContext";
+import { UserProvider, useUser } from "./contexts/UserContext";
 import OAuthCallback from "./OAuthCallback";
 import Home from "./pages/Home";
 import Register from "./pages/Register";
@@ -25,15 +25,18 @@ import { MealPlanPage } from "./pages/MealPlanPage";
 // Root component wraps router so inner shell can use hooks
 export default function App(){
   return (
-    <Router>
-      <AppShell />
-    </Router>
+    <UserProvider>
+      <Router>
+        <AppShell />
+      </Router>
+    </UserProvider>
   );
 }
 
 function AppShell() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { userId, setUserId } = useUser();
 
   // minimal auth state
   // Инициализируем сразу из localStorage, чтобы при первом рендере защищённых роутов
@@ -122,6 +125,16 @@ function AppShell() {
   });
   const [consentLoaded, setConsentLoaded] = useState(false);
 
+  // Load user profile data (/protected/me) and cache id
+  const loadMe = async (tokenArg) => {
+    if (!tokenArg && !accessToken) return null;
+    const result = await api.me(tokenArg || accessToken);
+    const payload = result?.user || result;
+    setMe(payload);
+    if (payload?.id) setUserId(payload.id);
+    return payload;
+  };
+
   // small helpers / placeholders so pages can call them without crashing
   const handleRegister = async (e) => {
     e?.preventDefault?.();
@@ -197,6 +210,7 @@ function AppShell() {
         setAccessToken(res.accessToken);
         setRefreshToken(res.refreshToken || null);
         setTokens(res.accessToken, res.refreshToken || null);
+        await loadMe(res.accessToken);
         navigate('/profile'); // redirect after login
       } else {
         setLoginError('Unknown server response');
@@ -220,6 +234,7 @@ function AppShell() {
         setNeed2fa(false); setTempToken(null); setTwofaCode("");
         localStorage.removeItem('pre2faTempToken');
         localStorage.removeItem('pre2faFlag');
+        await loadMe(r.accessToken);
         navigate('/profile');
       } else {
         setTwofaError('Response missing token');
@@ -233,7 +248,7 @@ function AppShell() {
 
   const handleLogout = () => {
     clearTokens();
-    setAccessToken(null); setRefreshToken(null); setMe(null);
+    setAccessToken(null); setRefreshToken(null); setMe(null); setUserId(null);
   };
 
   const handleRefresh = async () => {
@@ -253,12 +268,25 @@ function AppShell() {
   const handleMe = async () => {
     if (!accessToken) return;
     try {
-      const r = await api.me(accessToken);
-      setMe(r.user || r);
+      await loadMe(accessToken);
     } catch (err) {
       console.warn('me failed', err);
     }
   };
+
+  // Keep userId in sync when token already present (page reload)
+  useEffect(() => {
+    if (accessToken && !userId) {
+      loadMe(accessToken).catch((err) => console.warn('Auto /me failed', err));
+    }
+  }, [accessToken, userId]);
+
+  // Clear stale userId when tokens are absent
+  useEffect(() => {
+    if (!accessToken && userId != null) {
+      setUserId(null);
+    }
+  }, [accessToken, userId]);
 
   // Profile handlers
   const loadProfile = async () => {
@@ -548,8 +576,7 @@ function AppShell() {
     go: (path) => navigate(path), oauthUrl, api, tempToken,
   };
   return (
-    <UserProvider>
-      <div style={{ padding: 16, fontFamily: 'Arial, sans-serif' }}>
+    <div style={{ padding: 16, fontFamily: 'Arial, sans-serif' }}>
       <header style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
         <h1 style={{ margin: 0, fontSize: 18 }}>Numbers-Don't-Lie</h1>
         <nav style={{ marginLeft: 12, display: 'flex', gap: 8 }}>
@@ -605,6 +632,7 @@ function AppShell() {
                   setAccessToken(access);
                   setRefreshToken(refresh);
                   setTokens(access, refresh);
+                  loadMe(access).catch((err) => console.warn('OAuth /me failed', err));
                   navigate('/profile');
                 }}
               />
@@ -614,6 +642,5 @@ function AppShell() {
         </Routes>
       </main>
     </div>
-    </UserProvider>
   );
 }
