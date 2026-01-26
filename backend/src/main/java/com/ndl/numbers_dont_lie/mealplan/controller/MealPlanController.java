@@ -121,8 +121,14 @@ public class MealPlanController {
         // 1) try existing persistent day plan (with meals eagerly loaded)
         Optional<DayPlan> existingPlan = dayPlanRepository.findByUserIdAndDateWithMeals(userId, date);
         if (existingPlan.isPresent()) {
-            logger.info("[MEAL_PLAN] Returning persisted plan with id={} and {} meals", existingPlan.get().getId(), existingPlan.get().getMeals().size());
-            return ResponseEntity.ok(existingPlan.get());
+            DayPlan plan = existingPlan.get();
+            logger.info("[MEAL_PLAN] Returning persisted plan with id={} and {} meals", plan.getId(), plan.getMeals().size());
+            // DEBUG: Log each meal's recipe_id
+            for (Meal meal : plan.getMeals()) {
+                logger.info("[MEAL_PLAN_DEBUG] Meal: type={}, recipe_id={}, custom_name={}, id={}", 
+                    meal.getMealType(), meal.getRecipeId(), meal.getCustomMealName(), meal.getId());
+            }
+            return ResponseEntity.ok(plan);
         }
         
         try {
@@ -144,6 +150,11 @@ public class MealPlanController {
             
             logger.info("[MEAL_PLAN] Successfully loaded plan for userId={}, date={}, meals={}, persistedId={}", 
                 userId, date, saved.getMeals().size(), saved.getId());
+            // DEBUG: Log each meal's recipe_id
+            for (Meal meal : saved.getMeals()) {
+                logger.info("[MEAL_PLAN_DEBUG] Generated Meal: type={}, recipe_id={}, custom_name={}, id={}", 
+                    meal.getMealType(), meal.getRecipeId(), meal.getCustomMealName(), meal.getId());
+            }
             return ResponseEntity.ok(saved);
             
         } catch (IllegalStateException e) {

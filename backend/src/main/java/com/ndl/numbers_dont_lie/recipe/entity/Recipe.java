@@ -38,7 +38,7 @@ public class Recipe {
     private Long id; // database ID
 
     @Column(nullable = false, unique = true, length = 16)
-    @JsonProperty("id")
+    @JsonProperty("stable_id")
     private String stableId; // stable external ID (e.g., "r00001")
 
     @Column(nullable = false)
@@ -79,7 +79,7 @@ public class Recipe {
     @JsonProperty("img")
     private String imageUrl;
 
-    @ElementCollection(fetch = FetchType.LAZY)
+    @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "recipe_dietary_tags", joinColumns = @JoinColumn(name = "recipe_id"))
     @Column(name = "tag", length = 64)
     @JsonProperty("dietary_tags")
@@ -91,11 +91,11 @@ public class Recipe {
     @Column(name = "embedding", columnDefinition = "real[]")
     private float[] embedding; // vector for RAG search (populated later)
 
-    @OneToMany(mappedBy = "recipe", fetch = FetchType.LAZY, cascade = jakarta.persistence.CascadeType.ALL, orphanRemoval = true)
+    @OneToMany(mappedBy = "recipe", fetch = FetchType.EAGER, cascade = jakarta.persistence.CascadeType.ALL, orphanRemoval = true)
     @JsonProperty("ingredients")
     private List<RecipeIngredient> ingredients = new ArrayList<>();
 
-    @OneToMany(mappedBy = "recipe", fetch = FetchType.LAZY, cascade = jakarta.persistence.CascadeType.ALL, orphanRemoval = true)
+    @OneToMany(mappedBy = "recipe", fetch = FetchType.EAGER, cascade = jakarta.persistence.CascadeType.ALL, orphanRemoval = true)
     @JsonProperty("preparation")
     private List<PreparationStep> preparationSteps = new ArrayList<>();
 

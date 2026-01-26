@@ -13,6 +13,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import '../styles/MealPlan.css';
 import { useUser } from '../contexts/UserContext';
 import { getAccessToken } from '../lib/tokens';
@@ -20,6 +21,7 @@ import { api } from '../lib/api';
 import { CustomMealComponent } from '../components/CustomMealComponent';
 
 export function MealPlanPage() {
+  const navigate = useNavigate();
   const [dayPlan, setDayPlan] = useState(null);
   const [nutritionSummary, setNutritionSummary] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -381,7 +383,9 @@ export function MealPlanPage() {
       <div className="meals-section">
         <h2>Your Meals</h2>
         <div className="meals-list">
-          {dayPlan.meals.map((meal, index) => (
+          {dayPlan.meals.map((meal, index) => {
+            console.log(`[MEAL_DEBUG] index=${index}, recipe_id=${meal.recipe_id}, custom_meal_name=${meal.custom_meal_name}, full_meal=`, meal);
+            return (
             <div key={index} className="meal-card">
               <div className="meal-header">
                 <h3 className="meal-type">{meal.meal_type}</h3>
@@ -394,43 +398,72 @@ export function MealPlanPage() {
                 <p className="meal-name">{meal.custom_meal_name}</p>
               )}
               
-              {/* Replace Button */}
-              {meal.id ? (
-                <button 
-                  className="replace-meal-button"
-                  onClick={() => handleReplaceMeal(meal.id)}
-                  disabled={replacingMealId === meal.id}
-                  style={{
-                    marginTop: '10px',
-                    padding: '8px 16px',
-                    backgroundColor: replacingMealId === meal.id ? '#ccc' : '#4CAF50',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: replacingMealId === meal.id ? 'not-allowed' : 'pointer',
-                    fontSize: '14px'
-                  }}
-                >
-                  {replacingMealId === meal.id ? 'Replacing...' : 'Replace Meal'}
-                </button>
-              ) : (
+              {/* Button Container */}
+              <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                {/* Replace Button */}
+                {meal.id ? (
+                  <button 
+                    className="replace-meal-button"
+                    onClick={() => handleReplaceMeal(meal.id)}
+                    disabled={replacingMealId === meal.id}
+                    style={{
+                      padding: '8px 16px',
+                      backgroundColor: replacingMealId === meal.id ? '#ccc' : '#4CAF50',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: replacingMealId === meal.id ? 'not-allowed' : 'pointer',
+                      fontSize: '14px',
+                      flex: 1
+                    }}
+                  >
+                    {replacingMealId === meal.id ? 'Replacing...' : 'Regenerate'}
+                  </button>
+                ) : (
+                  <button
+                    className="replace-meal-button"
+                    disabled
+                    style={{
+                      padding: '8px 16px',
+                      backgroundColor: '#ccc',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'not-allowed',
+                      fontSize: '14px',
+                      flex: 1
+                    }}
+                  >
+                    🔒 Недоступно (нет ID)
+                  </button>
+                )}
+
+                {/* View Recipe Button */}
                 <button
-                  className="replace-meal-button"
-                  disabled
+                  className="view-recipe-button"
+                  onClick={() => {
+                    console.log('[VIEW_RECIPE_CLICK] meal.recipe_id=', meal.recipe_id);
+                    console.log('[VIEW_RECIPE_CLICK] Navigating to:', meal.recipe_id ? `/recipes/${meal.recipe_id}` : '/recipes/unknown');
+                    if (meal.recipe_id) {
+                      navigate(`/recipes/${meal.recipe_id}`);
+                    } else {
+                      navigate('/recipes/unknown');
+                    }
+                  }}
                   style={{
-                    marginTop: '10px',
                     padding: '8px 16px',
-                    backgroundColor: '#ccc',
+                    backgroundColor: '#2196F3',
                     color: 'white',
                     border: 'none',
                     borderRadius: '4px',
-                    cursor: 'not-allowed',
-                    fontSize: '14px'
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    flex: 1
                   }}
                 >
-                  🔒 Недоступно (нет ID)
+                  View recipe
                 </button>
-              )}
+              </div>
 
               {meal.ingredients && meal.ingredients.length > 0 && (
                 <div className="meal-section">
@@ -454,7 +487,8 @@ export function MealPlanPage() {
                 </div>
               )}
             </div>
-          ))}
+            );
+          })}
         </div>
         
         {/* Custom Meals Section - Isolated from generated meals */}

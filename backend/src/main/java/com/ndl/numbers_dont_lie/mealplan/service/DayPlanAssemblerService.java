@@ -374,13 +374,15 @@ public class DayPlanAssemblerService {
             constraints.dietaryRestrictions, constraints.cuisinePreferences);
         
         // Step 1: Try to select from database first
+        logger.info("[RECIPE_SELECTION] Attempting to select DB recipe for {}", slot.getMealType());
         Recipe dbRecipe = selectDatabaseRecipeForSlot(slot, constraints, usedRecipeTitles, Double.valueOf(slot.getCalorieTarget()));
         if (dbRecipe != null) {
+            logger.info("[RECIPE_SELECTION] SUCCESS - Selected DB recipe: {} (stableId={})", dbRecipe.getTitle(), dbRecipe.getStableId());
             GeneratedRecipe dbGenerated = convertRecipeToGeneratedRecipe(dbRecipe);
             if (dbGenerated.getTitle() != null) {
                 usedRecipeTitles.add(dbGenerated.getTitle().toLowerCase());
             }
-            return convertToMeal(dbGenerated, slot, dayPlan, date, zoneId);
+            return convertToMeal(dbGenerated, slot, dayPlan, date, zoneId, dbRecipe.getStableId());
         }
 
         logger.warn("[RECIPE_FALLBACK] No suitable DB recipe found. Falling back to AI for {}", slot.getMealType());
@@ -426,7 +428,7 @@ public class DayPlanAssemblerService {
         }
 
         // Step 6: Convert to Meal entity
-        return convertToMeal(filteredRecipe, slot, dayPlan, date, zoneId);
+        return convertToMeal(filteredRecipe, slot, dayPlan, date, zoneId, null);
     }
     
     /**
@@ -706,6 +708,7 @@ public class DayPlanAssemblerService {
         }
 
         List<Recipe> candidates = recipeRepository.findByMeal(recipeMealType);
+        logger.info("[RECIPE_DECISION] Found {} candidate recipes for mealType={}", candidates.size(), slot.getMealType());
         if (candidates.isEmpty()) {
             logger.info("[RECIPE_DECISION] No DB candidates for mealType={}", slot.getMealType());
             return null;
@@ -721,6 +724,9 @@ public class DayPlanAssemblerService {
             }
             if (isRecipeSafeForConstraints(recipe, constraints)) {
                 eligible.add(recipe);
+                logger.debug("[RECIPE_DECISION] Recipe eligible: {}", recipe.getTitle());
+            } else {
+                logger.debug("[RECIPE_DECISION] Recipe rejected by constraints: {}", recipe.getTitle());
             }
         }
 
@@ -729,6 +735,7 @@ public class DayPlanAssemblerService {
             return null;
         }
 
+        logger.info("[RECIPE_DECISION] {} eligible recipes, selecting best candidate", eligible.size());
         return selectBestRecipeCandidate(eligible, constraints, targetCalories, usedRecipeTitles);
     }
 
@@ -737,12 +744,15 @@ public class DayPlanAssemblerService {
             UserDietaryConstraints constraints,
             Double targetCalories,
             Set<String> usedRecipeTitles) {
+        logger.info("[RECIPE_DECISION] selectBestRecipeCandidate called with {} candidates", candidates.size());
         List<ScoredCandidate> scored = new ArrayList<>();
         for (Recipe candidate : candidates) {
             scored.add(scoreCandidate(candidate, constraints, targetCalories, usedRecipeTitles));
         }
         scored.sort(Comparator.comparingDouble(ScoredCandidate::score).reversed());
         ScoredCandidate best = scored.get(0);
+        logger.info("[RECIPE_DECISION] Best recipe selected: {} (stableId={}, score={})", 
+            best.recipe.getTitle(), best.recipe.getStableId(), formatScore(best.score));
         for (ScoredCandidate entry : scored) {
             if (entry == best) {
                 logger.info("[RECIPE_DECISION] Selected {} score={} reasons={}",
@@ -1028,7 +1038,11 @@ public class DayPlanAssemblerService {
             AiMealStructureResult.MealSlot slot,
             DayPlan dayPlan,
             LocalDate date,
-            ZoneId zoneId) {
+            ZoneId zoneId,
+            String recipeStableId) {
+        
+        logger.info("[MEAL_CREATION] convertToMeal called: title={}, mealType={}, recipeStableId={}", 
+            generatedRecipe.getTitle(), slot.getMealType(), recipeStableId);
         
         // Determine meal time based on type
         LocalTime mealTime = getMealTime(slot.getMealType(), slot.getIndex());
@@ -1045,6 +1059,14 @@ public class DayPlanAssemblerService {
         meal.setPlannedCalories(slot.getCalorieTarget()); // Initialize from slot
         logger.info("[MEAL_CREATION] Created meal: {}[{}] with calorieTarget={}, plannedCalories={}, title={}", 
             slot.getMealType(), slot.getIndex(), slot.getCalorieTarget(), slot.getCalorieTarget(), generatedRecipe.getTitle());
+        
+        // Store recipe stable ID if this meal references a DB recipe
+        if (recipeStableId != null) {
+            meal.setRecipeId(recipeStableId);
+            logger.info("[MEAL_CREATION] ✓ SET recipe_id={} on meal", recipeStableId);
+        } else {
+            logger.info("[MEAL_CREATION] ✗ recipe_id is NULL - AI generated meal");
+        }
         
         // For now, store recipe as custom meal name
         // In future, this will reference a persisted Recipe entity

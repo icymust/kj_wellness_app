@@ -26,7 +26,7 @@ public class Ingredient {
     private Long id; // database ID
 
     @Column(nullable = false, unique = true, length = 16)
-    @JsonProperty("id")
+    @JsonProperty("stable_id")
     private String stableId; // stable external ID (e.g., "ing0974b137")
 
     @Column(nullable = false)

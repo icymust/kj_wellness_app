@@ -23,6 +23,8 @@ public class SecurityConfig {
       .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
         // debug endpoints (no authentication required) - must be before auth/** to override OAuth2
         .requestMatchers("/api/debug/**").permitAll()
+        // recipe read endpoints (no authentication required)
+        .requestMatchers("/api/recipes/**").permitAll()
       // TEMPORARY: production meal plan endpoints (no authentication required)
       // TODO: Remove when authentication is implemented
       .requestMatchers("/api/meal-plans/**").permitAll()
@@ -31,7 +33,7 @@ public class SecurityConfig {
       .requestMatchers(HttpMethod.PUT, "/profile/**").permitAll()
       .requestMatchers("/auth/**","/health","/login/**","/oauth2/**","/oauth-callback/**").permitAll()
       // dev/test helpers (non-sensitive): allow temporarily for local verification
-      // .requestMatchers("/dev/**").permitAll()
+      .requestMatchers("/dev/**").permitAll()
       .anyRequest().authenticated()
     )
       .oauth2Login(o -> o

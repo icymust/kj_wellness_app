@@ -25,7 +25,7 @@ public class RecipeIngredient {
     @JsonIgnore
     private Recipe recipe;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "ingredient_id", nullable = false)
     private Ingredient ingredient;
 
@@ -55,6 +55,13 @@ public class RecipeIngredient {
     }
 
     public Ingredient getIngredient() {
+        return ingredient;
+    }
+
+    @JsonProperty("ingredient")
+    private Ingredient serializeIngredient() {
+        // Return null to break circular reference
+        // Frontend can load ingredients separately if needed
         return ingredient;
     }
 
