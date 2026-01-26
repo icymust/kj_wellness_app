@@ -21,6 +21,8 @@ import com.ndl.numbers_dont_lie.mealplan.service.DayPlanAssemblerService;
 import com.ndl.numbers_dont_lie.mealplan.service.MealReplacementService;
 import com.ndl.numbers_dont_lie.mealplan.service.NutritionSummaryService;
 import com.ndl.numbers_dont_lie.mealplan.service.WeeklyMealPlanService;
+import com.ndl.numbers_dont_lie.mealplan.service.CustomMealService;
+import com.ndl.numbers_dont_lie.mealplan.dto.AddCustomMealRequest;
 import com.ndl.numbers_dont_lie.profile.entity.ProfileEntity;
 import com.ndl.numbers_dont_lie.profile.repository.ProfileRepository;
 import com.ndl.numbers_dont_lie.repository.UserRepository;
@@ -67,6 +69,7 @@ public class MealPlanController {
     private final DayPlanRepository dayPlanRepository;
     private final MealPlanRepository mealPlanRepository;
     private final MealPlanVersionRepository mealPlanVersionRepository;
+    private final CustomMealService customMealService;
     
     public MealPlanController(
             DayPlanAssemblerService dayPlanAssemblerService,
@@ -78,7 +81,8 @@ public class MealPlanController {
             MealReplacementService mealReplacementService,
             DayPlanRepository dayPlanRepository,
             MealPlanRepository mealPlanRepository,
-            MealPlanVersionRepository mealPlanVersionRepository) {
+            MealPlanVersionRepository mealPlanVersionRepository,
+            CustomMealService customMealService) {
         this.dayPlanAssemblerService = dayPlanAssemblerService;
         this.nutritionSummaryService = nutritionSummaryService;
         this.weeklyMealPlanService = weeklyMealPlanService;
@@ -89,6 +93,7 @@ public class MealPlanController {
         this.dayPlanRepository = dayPlanRepository;
         this.mealPlanRepository = mealPlanRepository;
         this.mealPlanVersionRepository = mealPlanVersionRepository;
+        this.customMealService = customMealService;
     }
     
     /**
@@ -113,8 +118,8 @@ public class MealPlanController {
         }
         
         logger.info("[MEAL_PLAN] Fetching day plan for userId={}, date={}", userId, date);
-        // 1) try existing persistent day plan
-        Optional<DayPlan> existingPlan = dayPlanRepository.findByUserIdAndDate(userId, date);
+        // 1) try existing persistent day plan (with meals eagerly loaded)
+        Optional<DayPlan> existingPlan = dayPlanRepository.findByUserIdAndDateWithMeals(userId, date);
         if (existingPlan.isPresent()) {
             logger.info("[MEAL_PLAN] Returning persisted plan with id={} and {} meals", existingPlan.get().getId(), existingPlan.get().getMeals().size());
             return ResponseEntity.ok(existingPlan.get());
@@ -247,20 +252,32 @@ public class MealPlanController {
         logger.info("[MEAL_PLAN] Fetching nutrition summary for userId={}, date={}", userId, date);
         
         try {
-            // Create temporary MealPlanVersion for assembly
-            MealPlanVersion tempVersion = new MealPlanVersion();
-            tempVersion.setVersionNumber(0);
-            tempVersion.setCreatedAt(LocalDateTime.now());
-            tempVersion.setReason(VersionReason.INITIAL_GENERATION);
+            // 1) First, check if we have an existing day plan in DB (with meals eagerly loaded)
+            Optional<DayPlan> existingPlan = dayPlanRepository.findByUserIdAndDateWithMeals(userId, date);
             
-            // Generate DayPlan with meals
-            DayPlan dayPlan = dayPlanAssemblerService.assembleDayPlan(
-                    userId,
-                    date,
-                    tempVersion
-            );
+            DayPlan dayPlan;
+            if (existingPlan.isPresent()) {
+                // Use existing plan - no need to regenerate
+                dayPlan = existingPlan.get();
+                logger.info("[MEAL_PLAN] Using existing plan id={} with {} meals for nutrition summary", 
+                    dayPlan.getId(), dayPlan.getMeals().size());
+            } else {
+                // No existing plan - try to generate one
+                logger.info("[MEAL_PLAN] No existing plan found, attempting to generate for nutrition summary");
+                
+                MealPlanVersion tempVersion = new MealPlanVersion();
+                tempVersion.setVersionNumber(0);
+                tempVersion.setCreatedAt(LocalDateTime.now());
+                tempVersion.setReason(VersionReason.INITIAL_GENERATION);
+                
+                dayPlan = dayPlanAssemblerService.assembleDayPlan(
+                        userId,
+                        date,
+                        tempVersion
+                );
+            }
             
-            // Generate nutrition summary
+            // 2) Generate nutrition summary from day plan
             DailyNutritionSummary summary = nutritionSummaryService.generateSummary(dayPlan);
             
             logger.info("[MEAL_PLAN] Nutrition summary generated for userId={}, date={}", userId, date);
@@ -416,6 +433,191 @@ public class MealPlanController {
             logger.error("[MEAL_API] No alternative recipe found for mealId={}: {}", mealId, e.getMessage());
             return ResponseEntity.status(HttpStatus.CONFLICT)
                     .body(null); // 409 Conflict - cannot find suitable replacement
+        }
+    }
+    
+    /**
+     * Add a custom meal to a day plan.
+     * 
+     * POST /api/meals/custom
+     * 
+     * Input JSON:
+     * {
+     *   "date": "YYYY-MM-DD",
+     *   "meal_type": "breakfast|lunch|dinner|snack",
+     *   "name": "Custom Meal Name"
+     * }
+     * 
+     * Behavior:
+     * - Creates a new custom meal for the specified date
+     * - Marks meal with is_custom=true
+     * - Does NOT affect generated meals
+     * - Does NOT trigger regeneration
+     * - Does NOT affect nutrition summary calculations
+     * 
+     * @param userId User ID (from request param)
+     * @param request AddCustomMealRequest with date, meal_type, name
+     * @return Created Meal object
+     */
+    @PostMapping("/meals/custom")
+    @Transactional
+    public ResponseEntity<?> addCustomMeal(
+            @RequestParam(name = "userId") Long userId,
+            @RequestBody AddCustomMealRequest request) {
+        logger.info("[CUSTOM_MEAL_API] POST /meals/custom userId={}, request={}", userId, request);
+        
+        try {
+            Meal customMeal = customMealService.addCustomMeal(userId, request);
+            logger.info("[CUSTOM_MEAL_API] Custom meal added successfully: id={}, name='{}'", 
+                customMeal.getId(), customMeal.getCustomMealName());
+            return ResponseEntity.status(HttpStatus.CREATED).body(customMeal);
+            
+        } catch (IllegalArgumentException e) {
+            logger.warn("[CUSTOM_MEAL_API] Invalid request: {}", e.getMessage());
+            return ResponseEntity.badRequest().body(
+                Map.of("error", e.getMessage())
+            );
+        } catch (Exception e) {
+            logger.error("[CUSTOM_MEAL_API] Unexpected error: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
+                Map.of("error", "Failed to add custom meal")
+            );
+        }
+    }
+    
+    /**
+     * Delete a custom meal.
+     * 
+     * DELETE /api/meals/custom/{mealId}
+     * 
+     * Rules:
+     * - Only allows deletion if meal is marked as is_custom=true
+     * - Deletion does NOT trigger regeneration
+     * - Other meals in day plan remain unchanged
+     * 
+     * @param mealId Meal ID to delete
+     * @param userId User ID (from request param)
+     * @return 204 No Content if successful
+     */
+    @DeleteMapping("/meals/custom/{mealId}")
+    @Transactional
+    public ResponseEntity<?> deleteCustomMeal(
+            @PathVariable Long mealId,
+            @RequestParam(name = "userId") Long userId) {
+        logger.info("[CUSTOM_MEAL_API] DELETE /meals/custom/{} userId={}", mealId, userId);
+        
+        try {
+            customMealService.deleteCustomMeal(mealId, userId);
+            logger.info("[CUSTOM_MEAL_API] Custom meal deleted successfully: id={}", mealId);
+            return ResponseEntity.noContent().build();
+            
+        } catch (IllegalArgumentException e) {
+            logger.warn("[CUSTOM_MEAL_API] Invalid request: {}", e.getMessage());
+            return ResponseEntity.badRequest().body(
+                Map.of("error", e.getMessage())
+            );
+        } catch (Exception e) {
+            logger.error("[CUSTOM_MEAL_API] Unexpected error: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
+                Map.of("error", "Failed to delete custom meal")
+            );
+        }
+    }
+    
+    /**
+     * Refresh meal plan for a specific date.
+     * 
+     * Called when user updates profile and wants to see updated meal plan.
+     * Deletes existing plan and regenerates based on current profile.
+     * 
+     * POST /api/meal-plans/day/refresh?userId=X&date=YYYY-MM-DD
+     * 
+     * @param userId User ID
+     * @param date Date to refresh (defaults to today if omitted)
+     * @return Newly generated DayPlan with updated meals
+     */
+    @PostMapping("/day/refresh")
+    @Transactional
+    public ResponseEntity<DayPlan> refreshDayPlan(
+            @RequestParam(name = "userId") Long userId,
+            @RequestParam(name = "date", required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+            LocalDate date) {
+        // Use provided date or default to today
+        if (date == null) {
+            date = LocalDate.now();
+        }
+        
+        logger.info("[MEAL_PLAN] REFRESH requested for userId={}, date={}", userId, date);
+        
+        try {
+            // 1) Delete existing day plan to force regeneration (with meals)
+            Optional<DayPlan> existingPlan = dayPlanRepository.findByUserIdAndDateWithMeals(userId, date);
+            if (existingPlan.isPresent()) {
+                logger.info("[MEAL_PLAN] Deleting existing plan id={} for refresh", existingPlan.get().getId());
+                dayPlanRepository.delete(existingPlan.get());
+            }
+            
+            // 2) Create temporary MealPlanVersion for assembly
+            MealPlanVersion tempVersion = new MealPlanVersion();
+            tempVersion.setVersionNumber(0);
+            tempVersion.setCreatedAt(LocalDateTime.now());
+            tempVersion.setReason(VersionReason.INITIAL_GENERATION);
+            
+            // 3) Generate fresh DayPlan based on current profile
+            DayPlan dayPlan = dayPlanAssemblerService.assembleDayPlan(
+                    userId,
+                    date,
+                    tempVersion
+            );
+            
+            // 4) Persist refreshed plan
+            DayPlan saved = persistDayPlan(userId, date, dayPlan);
+            
+            logger.info("[MEAL_PLAN] REFRESH SUCCESS! Generated {} meals for userId={}, date={}", 
+                saved.getMeals().size(), userId, date);
+            return ResponseEntity.ok(saved);
+            
+        } catch (IllegalStateException e) {
+            // Check if this is "AI strategy not found" error
+            if (e.getMessage() != null && e.getMessage().contains("AI strategy not found")) {
+                logger.info("[MEAL_PLAN] REFRESH: Auto-generating AI strategy for userId={}", userId);
+                
+                try {
+                    // Auto-bootstrap: Generate AI strategy
+                    bootstrapAiForUser(userId);
+                    
+                    // Retry generating DayPlan
+                    MealPlanVersion tempVersion = new MealPlanVersion();
+                    tempVersion.setVersionNumber(0);
+                    tempVersion.setCreatedAt(LocalDateTime.now());
+                    tempVersion.setReason(VersionReason.INITIAL_GENERATION);
+                    
+                    DayPlan dayPlan = dayPlanAssemblerService.assembleDayPlan(
+                            userId,
+                            date,
+                            tempVersion
+                    );
+                    
+                    DayPlan saved = persistDayPlan(userId, date, dayPlan);
+                    
+                    logger.info("[MEAL_PLAN] REFRESH with auto-bootstrap SUCCESS! Generated {} meals", 
+                        saved.getMeals().size());
+                    return ResponseEntity.ok(saved);
+                    
+                } catch (Exception bootstrapError) {
+                    logger.error("[MEAL_PLAN] REFRESH with auto-bootstrap FAILED: {}", 
+                        bootstrapError.getMessage(), bootstrapError);
+                    return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
+                }
+            }
+            
+            logger.error("[MEAL_PLAN] REFRESH FAILED with IllegalStateException: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
+            
+        } catch (Exception e) {
+            logger.error("[MEAL_PLAN] REFRESH FAILED with unexpected error: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
         }
     }
     

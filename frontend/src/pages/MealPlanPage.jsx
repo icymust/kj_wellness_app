@@ -17,6 +17,7 @@ import '../styles/MealPlan.css';
 import { useUser } from '../contexts/UserContext';
 import { getAccessToken } from '../lib/tokens';
 import { api } from '../lib/api';
+import { CustomMealComponent } from '../components/CustomMealComponent';
 
 export function MealPlanPage() {
   const [dayPlan, setDayPlan] = useState(null);
@@ -24,6 +25,7 @@ export function MealPlanPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [replacingMealId, setReplacingMealId] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   // Get userId from shared context (persisted in localStorage)
   const { userId, setUserId } = useUser();
@@ -50,33 +52,84 @@ export function MealPlanPage() {
     fillUserId();
   }, [userId, setUserId]);
 
-  useEffect(() => {
-    const loadMealPlan = async () => {
-      if (!userId) {
-        setError('Нет активного пользователя. Войдите, чтобы увидеть план.');
-        setLoading(false);
-        return;
-      }
+  /**
+   * Load meal plan for a specific date
+   */
+  const loadMealPlan = async (dateToLoad = null) => {
+    if (!userId) {
+      setError('Нет активного пользователя. Войдите, чтобы увидеть план.');
+      setLoading(false);
+      return;
+    }
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Use local date to avoid UTC off-by-one issues
+      const now = new Date();
+      const today = dateToLoad || now.toLocaleDateString('en-CA'); // YYYY-MM-DD in local TZ
+
+      // Fetch day plan from production API
+      const dayUrl = `http://localhost:5173/api/meal-plans/day?userId=${userId}&date=${today}`;
+      console.log('[MEAL_PLAN] Fetching day plan', dayUrl);
+      const dayResponse = await fetch(dayUrl);
+      if (!dayResponse.ok) throw new Error(`Failed to load meal plan (${dayResponse.status})`);
+      const dayData = await dayResponse.json();
+      setDayPlan(dayData);
+
+      // Log successful load
+      console.log(`[MEAL_PLAN] Loaded plan for userId = ${userId}`);
+
+      // Fetch nutrition summary from production API
       try {
-        setLoading(true);
-        setError(null);
+        const nutritionResponse = await fetch(
+          `http://localhost:5173/api/meal-plans/day/nutrition?userId=${userId}&date=${today}`
+        );
+        if (nutritionResponse.ok) {
+          const nutritionData = await nutritionResponse.json();
+          setNutritionSummary(nutritionData);
+        } else if (nutritionResponse.status === 400) {
+          console.warn('[MealPlanPage] Nutrition unavailable, using fallback');
+          setNutritionSummary({ nutrition_estimated: true, unavailable: true });
+        }
+      } catch (nutritionErr) {
+        console.warn('Nutrition summary unavailable', nutritionErr);
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-        // Use local date to avoid UTC off-by-one issues
-        const now = new Date();
-        const today = now.toLocaleDateString('en-CA'); // YYYY-MM-DD in local TZ
+  useEffect(() => {
+    loadMealPlan();
+  }, [userId]);
 
-        // Fetch day plan from production API
-        const dayUrl = `http://localhost:5173/api/meal-plans/day?userId=${userId}&date=${today}`;
-        console.log('[MEAL_PLAN] Fetching day plan', dayUrl);
-        const dayResponse = await fetch(dayUrl);
-        if (!dayResponse.ok) throw new Error(`Failed to load meal plan (${dayResponse.status})`);
-        const dayData = await dayResponse.json();
-        setDayPlan(dayData);
-
-        // Log successful load
-        console.log(`[MEAL_PLAN] Loaded plan for userId = ${userId}`);
-
-        // Fetch nutrition summary from production API
+  /**
+   * Refresh meal plan - called manually by user when profile changes
+   */
+  const handleRefreshMealPlan = async () => {
+    if (!userId) return;
+    
+    console.log('[MEAL_PLAN] Manual refresh triggered by user');
+    setRefreshing(true);
+    try {
+      const now = new Date();
+      const today = now.toLocaleDateString('en-CA'); // YYYY-MM-DD in local TZ
+      
+      // Call dedicated refresh endpoint that regenerates plan based on current profile
+      const refreshResponse = await fetch(
+        `http://localhost:5173/api/meal-plans/day/refresh?userId=${userId}&date=${today}`,
+        { method: 'POST' }
+      );
+      
+      if (refreshResponse.ok) {
+        const refreshedPlan = await refreshResponse.json();
+        setDayPlan(refreshedPlan);
+        console.log('[MEAL_PLAN] Refresh SUCCESS! Got plan with', refreshedPlan?.meals?.length, 'meals');
+        
+        // Also refresh nutrition summary
         try {
           const nutritionResponse = await fetch(
             `http://localhost:5173/api/meal-plans/day/nutrition?userId=${userId}&date=${today}`
@@ -84,22 +137,65 @@ export function MealPlanPage() {
           if (nutritionResponse.ok) {
             const nutritionData = await nutritionResponse.json();
             setNutritionSummary(nutritionData);
-          } else if (nutritionResponse.status === 400) {
-            console.warn('[MealPlanPage] Nutrition unavailable, using fallback');
-            setNutritionSummary({ nutrition_estimated: true, unavailable: true });
+            console.log('[MEAL_PLAN] Nutrition summary refreshed');
           }
         } catch (nutritionErr) {
-          console.warn('Nutrition summary unavailable', nutritionErr);
+          console.warn('[MEAL_PLAN] Error refreshing nutrition:', nutritionErr);
         }
-      } catch (err) {
-        setError(err.message);
-      } finally {
-        setLoading(false);
+      } else {
+        console.error('[MEAL_PLAN] Refresh failed:', refreshResponse.status);
+        setError('Не удалось обновить план питания');
       }
-    };
+    } catch (err) {
+      console.error('[MEAL_PLAN] Error during refresh:', err);
+      setError('Ошибка при обновлении плана');
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
-    loadMealPlan();
-  }, [userId]);
+  /**
+   * Refresh the meal plan - used after adding/deleting custom meals
+   */
+  const refreshMealPlan = async () => {
+    if (!userId) return;
+    
+    try {
+      const now = new Date();
+      const today = now.toLocaleDateString('en-CA');
+      
+      // Fetch current day plan (without regeneration)
+      const dayResponse = await fetch(
+        `http://localhost:5173/api/meal-plans/day?userId=${userId}&date=${today}`
+      );
+      if (dayResponse.ok) {
+        const dayData = await dayResponse.json();
+        setDayPlan(dayData);
+        console.log('[MEAL_PLAN] Refreshed day plan after custom meal action');
+      }
+      
+      // Also refresh nutrition summary
+      const nutritionResponse = await fetch(
+        `http://localhost:5173/api/meal-plans/day/nutrition?userId=${userId}&date=${today}`
+      );
+      if (nutritionResponse.ok) {
+        const nutritionData = await nutritionResponse.json();
+        setNutritionSummary(nutritionData);
+      }
+    } catch (err) {
+      console.error('[MEAL_PLAN] Error refreshing plan:', err);
+    }
+  };
+
+  const handleCustomMealAdded = () => {
+    console.log('[MEAL_PLAN] Custom meal added, refreshing...');
+    refreshMealPlan();
+  };
+
+  const handleCustomMealDeleted = () => {
+    console.log('[MEAL_PLAN] Custom meal deleted, refreshing...');
+    refreshMealPlan();
+  };
 
   const handleReplaceMeal = async (mealId) => {
     if (!mealId) {
@@ -222,10 +318,22 @@ export function MealPlanPage() {
 
   return (
     <div className="meal-plan-page">
-      {/* Header */}
+      {/* Header with Refresh Button */}
       <div className="meal-plan-header">
-        <h1>Today's Meal Plan</h1>
-        <p className="meal-plan-date">{formatDate(dayPlan.date)}</p>
+        <div className="meal-plan-header-content">
+          <div>
+            <h1>Today's Meal Plan</h1>
+            <p className="meal-plan-date">{formatDate(dayPlan.date)}</p>
+          </div>
+          <button
+            className="btn-refresh-meal-plan"
+            onClick={handleRefreshMealPlan}
+            disabled={refreshing || loading}
+            title="Refresh meal plan based on profile changes"
+          >
+            {refreshing ? '🔄 Updating...' : '🔄 Refresh Plan'}
+          </button>
+        </div>
       </div>
 
       {/* Nutrition Summary */}
@@ -348,6 +456,14 @@ export function MealPlanPage() {
             </div>
           ))}
         </div>
+        
+        {/* Custom Meals Section - Isolated from generated meals */}
+        <CustomMealComponent 
+          dayPlan={dayPlan}
+          userId={userId}
+          onMealAdded={handleCustomMealAdded}
+          onMealDeleted={handleCustomMealDeleted}
+        />
       </div>
     </div>
   );

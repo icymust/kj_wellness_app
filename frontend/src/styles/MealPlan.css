@@ -14,6 +14,13 @@
   border-bottom: 2px solid #e0e0e0;
 }
 
+.meal-plan-header-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+}
+
 .meal-plan-header h1 {
   margin: 0 0 10px 0;
   font-size: 32px;
@@ -25,6 +32,36 @@
   margin: 0;
   font-size: 16px;
   color: #666;
+}
+
+.btn-refresh-meal-plan {
+  padding: 10px 20px;
+  background-color: #2196f3;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s, transform 0.1s;
+  white-space: nowrap;
+  margin-top: 5px;
+}
+
+.btn-refresh-meal-plan:hover:not(:disabled) {
+  background-color: #1976d2;
+  transform: translateY(-2px);
+  box-shadow: 0 2px 8px rgba(33, 150, 243, 0.3);
+}
+
+.btn-refresh-meal-plan:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.btn-refresh-meal-plan:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+  opacity: 0.7;
 }
 
 /* States */
@@ -287,5 +324,16 @@
 
   .meal-calories {
     align-self: flex-start;
+  }
+
+  /* Responsive header for mobile */
+  .meal-plan-header-content {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .btn-refresh-meal-plan {
+    width: 100%;
+    margin-top: 10px;
   }
 }

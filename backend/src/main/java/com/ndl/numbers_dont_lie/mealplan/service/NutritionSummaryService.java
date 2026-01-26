@@ -184,6 +184,13 @@ public class NutritionSummaryService {
             logger.info("[NUTRITION] Planned calories per meal:");
             
             for (Meal meal : dayPlan.getMeals()) {
+                // IMPORTANT: Skip custom meals from nutrition calculations
+                if (meal.getIsCustom()) {
+                    logger.info("[NUTRITION] Ignoring custom meal id={} name='{}'", 
+                        meal.getId(), meal.getCustomMealName());
+                    continue;
+                }
+                
                 Integer plannedCal = meal.getPlannedCalories();
                 if (plannedCal == null || plannedCal == 0) {
                     // Fallback to calorieTarget if plannedCalories not set

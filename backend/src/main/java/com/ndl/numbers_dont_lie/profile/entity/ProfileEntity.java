@@ -22,9 +22,9 @@ public class ProfileEntity {
   private Double  weightKg;         // 20..500
   private Double  targetWeightKg;   // цель по весу (кг)
   @Column(length = 24)  private String activityLevel;  // low|moderate|high
-  @Column(length = 32)  private String goal;           // weight_loss|muscle_gain|general_fitness
-  @Column(length = 32)  private String mealFrequency;  // THREE_MEALS|FOUR_MEALS|FIVE_MEALS
-  @Column(length = 32)  private String timezone;       // IANA timezone (e.g., "Europe/Tallinn")
+  @Column(length = 64)  private String goal;           // weight_loss|muscle_gain|general_fitness
+  @Column(length = 64)  private String mealFrequency;  // THREE_MEALS|FOUR_MEALS|FIVE_MEALS
+  @Column(length = 64)  private String timezone;       // IANA timezone (e.g., "Europe/Tallinn")
 
   public Long getId() { return id; }
   public UserEntity getUser() { return user; }
