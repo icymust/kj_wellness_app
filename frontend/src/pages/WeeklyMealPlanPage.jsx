@@ -82,6 +82,15 @@ export function WeeklyMealPlanPage() {
       const data = await response.json();
       setWeeklyPlan(data);
 
+      // Debug: log meal IDs
+      if (data.days && data.days.length > 0) {
+        const firstDay = data.days[0];
+        if (firstDay.meals && firstDay.meals.length > 0) {
+          console.log('[WEEK_PLAN_PAGE] Sample meal object:', firstDay.meals[0]);
+          console.log('[WEEK_PLAN_PAGE] Meal ID field:', firstDay.meals[0].id);
+        }
+      }
+
       console.log(`[WEEK_PLAN_PAGE] Loaded weekly plan for userId=${userId} startDate=${today}`);
     } catch (err) {
       console.error('[WEEK_PLAN_PAGE] Error loading weekly plan:', err);
@@ -126,6 +135,59 @@ export function WeeklyMealPlanPage() {
       setRefreshing(false);
     }
   };
+
+  /**
+   * Replace a meal with a new one
+   */
+  // NOTE: In weekly plan, meals don't have IDs yet (they're transient), so replacement is not available.
+  // This function is kept for future when weekly plan meals are persisted.
+  /*
+  const handleReplaceMeal = async (mealId) => {
+    console.log('[MEAL_REPLACE] Button clicked, mealId:', mealId, 'type:', typeof mealId);
+    
+    if (!mealId) {
+      console.warn('[MEAL_REPLACE] Skip: mealId is missing');
+      return;
+    }
+    
+    try {
+      setReplacingMealId(mealId);
+      console.log(`[MEAL_REPLACE] Replacing meal ${mealId}`);
+      
+      const response = await fetch(`http://localhost:5173/api/meal-plans/meals/${mealId}/replace`, {
+        method: 'POST'
+      });
+      
+      if (!response.ok) {
+        if (response.status === 404) {
+          throw new Error('Meal not found');
+        } else if (response.status === 409) {
+          throw new Error('No alternative recipes available');
+        } else {
+          throw new Error(`Failed to replace meal (${response.status})`);
+        }
+      }
+      
+      const updatedMeal = await response.json();
+      console.log(`[MEAL_REPLACE] Success: ${updatedMeal.custom_meal_name}`);
+      
+      // Update meal in weekly plan
+      setWeeklyPlan(prevPlan => ({
+        ...prevPlan,
+        days: prevPlan.days.map(day => ({
+          ...day,
+          meals: day.meals.map(m => m.id === mealId ? updatedMeal : m)
+        }))
+      }));
+      
+    } catch (err) {
+      console.error(`[MEAL_REPLACE] Error: ${err.message}`);
+      setError(`Failed to replace meal: ${err.message}`);
+    } finally {
+      setReplacingMealId(null);
+    }
+  };
+  */
 
   if (loading) {
     return (
@@ -285,15 +347,26 @@ export function WeeklyMealPlanPage() {
                     <h3 className="meal-type-label">{formatMealType(mealGroup.type)}</h3>
                     <div className="meals-list">
                       {mealGroup.meals.map((meal, mealIndex) => (
-                        <div key={mealIndex} className="meal-item">
-                          <span className="meal-name">
-                            {meal.custom_meal_name || meal.customMealName || meal.meal_name || '(Meal)'}
-                          </span>
-                          {(meal.calorie_target || meal.calorieTarget) && (
-                            <span className="meal-calories">
-                              {Math.round(meal.calorie_target || meal.calorieTarget)} kcal
+                        <div key={mealIndex} className="meal-item-wrapper">
+                          <div className="meal-item">
+                            <span className="meal-name">
+                              {meal.custom_meal_name || meal.customMealName || meal.meal_name || '(Meal)'}
                             </span>
-                          )}
+                            {(meal.calorie_target || meal.calorieTarget) && (
+                              <span className="meal-calories">
+                                {Math.round(meal.calorie_target || meal.calorieTarget)} kcal
+                              </span>
+                            )}
+                          </div>
+                          <div className="meal-actions">
+                            <button
+                              className="meal-btn meal-btn-info"
+                              onClick={() => navigate(`/recipes/${meal.recipe_id || meal.recipeId || 'unknown'}`)}
+                              title="View recipe details"
+                            >
+                              ?
+                            </button>
+                          </div>
                         </div>
                       ))}
                     </div>

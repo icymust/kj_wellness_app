@@ -241,6 +241,13 @@
   gap: 8px;
 }
 
+.meal-item-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+}
+
 .meal-item {
   display: flex;
   justify-content: space-between;
@@ -249,11 +256,14 @@
   background-color: #f9f9f9;
   border-radius: 4px;
   font-size: 14px;
+  flex: 1;
+  min-width: 0;
 }
 
 .meal-name {
   color: #333;
-  flex: 1;
+  flex: 1 1 auto;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -262,8 +272,59 @@
 .meal-calories {
   color: #999;
   font-size: 12px;
-  margin-left: 10px;
   white-space: nowrap;
+  flex-shrink: 0;
+  margin-left: 10px;
+}
+
+.meal-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.meal-btn {
+  padding: 4px 8px;
+  border: none;
+  border-radius: 4px;
+  background-color: #2196f3;
+  color: white;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  min-width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  z-index: 10;
+  pointer-events: auto;
+}
+
+.meal-btn-info {
+  background-color: #2196f3;
+}
+
+.meal-btn-info:hover:not(:disabled) {
+  background-color: #1976d2;
+  box-shadow: 0 2px 8px rgba(33, 150, 243, 0.3);
+}
+
+.meal-btn-replace {
+  background-color: #4caf50;
+}
+
+.meal-btn-replace:hover:not(:disabled) {
+  background-color: #45a049;
+  box-shadow: 0 2px 8px rgba(76, 175, 80, 0.3);
+}
+
+.meal-btn:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+  opacity: 0.7;
 }
 
 /* No Meals Message */
@@ -353,11 +414,17 @@
   }
 
   .meal-item {
-    flex-direction: column;
-    align-items: flex-start;
+    flex-wrap: wrap;
   }
 
   .meal-calories {
     margin: 5px 0 0 0;
+  }
+
+  .meal-actions {
+    order: 3;
+    width: 100%;
+    margin-top: 5px;
+    justify-content: flex-end;
   }
 }
