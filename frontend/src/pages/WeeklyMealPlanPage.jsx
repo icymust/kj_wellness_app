@@ -26,6 +26,7 @@ export function WeeklyMealPlanPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [replacingMeal, setReplacingMeal] = useState(null);
 
   // Resolve userId from /protected/me if needed
   useEffect(() => {
@@ -138,56 +139,60 @@ export function WeeklyMealPlanPage() {
 
   /**
    * Replace a meal with a new one
+   * Calls backend endpoint to generate a fresh meal for the specific date and meal type
    */
-  // NOTE: In weekly plan, meals don't have IDs yet (they're transient), so replacement is not available.
-  // This function is kept for future when weekly plan meals are persisted.
-  /*
-  const handleReplaceMeal = async (mealId) => {
-    console.log('[MEAL_REPLACE] Button clicked, mealId:', mealId, 'type:', typeof mealId);
+  const handleReplaceMeal = async (date, mealType) => {
+    console.log('[MEAL_REPLACE] Button clicked, date:', date, 'mealType:', mealType);
     
-    if (!mealId) {
-      console.warn('[MEAL_REPLACE] Skip: mealId is missing');
+    if (!date || !mealType) {
+      console.warn('[MEAL_REPLACE] Skip: date or mealType is missing');
       return;
     }
     
     try {
-      setReplacingMealId(mealId);
-      console.log(`[MEAL_REPLACE] Replacing meal ${mealId}`);
+      const key = `${date}-${mealType}`;
+      setReplacingMeal(key);
+      console.log(`[MEAL_REPLACE] Replacing meal for ${date} ${mealType}`);
       
-      const response = await fetch(`http://localhost:5173/api/meal-plans/meals/${mealId}/replace`, {
-        method: 'POST'
-      });
+      // Call backend endpoint to generate a new meal
+      const response = await fetch(
+        `http://localhost:5173/api/meal-plans/week/meals/replace?userId=${userId}&date=${date}&mealType=${mealType}`,
+        { method: 'POST' }
+      );
       
       if (!response.ok) {
-        if (response.status === 404) {
-          throw new Error('Meal not found');
-        } else if (response.status === 409) {
-          throw new Error('No alternative recipes available');
-        } else {
-          throw new Error(`Failed to replace meal (${response.status})`);
-        }
+        throw new Error(`Failed to replace meal (${response.status})`);
       }
       
-      const updatedMeal = await response.json();
-      console.log(`[MEAL_REPLACE] Success: ${updatedMeal.custom_meal_name}`);
+      const newMeal = await response.json();
+      console.log(`[MEAL_REPLACE] Success: ${newMeal.custom_meal_name || newMeal.customMealName}`);
       
-      // Update meal in weekly plan
+      // Update only the specific meal in the weekly plan
       setWeeklyPlan(prevPlan => ({
         ...prevPlan,
-        days: prevPlan.days.map(day => ({
-          ...day,
-          meals: day.meals.map(m => m.id === mealId ? updatedMeal : m)
-        }))
+        days: prevPlan.days.map(day => {
+          if (day.date !== date) return day;
+          
+          return {
+            ...day,
+            meals: day.meals.map(meal => {
+              const currentMealType = (meal.meal_type || meal.mealType || '').toUpperCase();
+              if (currentMealType === mealType.toUpperCase()) {
+                return newMeal;
+              }
+              return meal;
+            })
+          };
+        })
       }));
       
     } catch (err) {
       console.error(`[MEAL_REPLACE] Error: ${err.message}`);
       setError(`Failed to replace meal: ${err.message}`);
     } finally {
-      setReplacingMealId(null);
+      setReplacingMeal(null);
     }
   };
-  */
 
   if (loading) {
     return (
@@ -365,6 +370,14 @@ export function WeeklyMealPlanPage() {
                               title="View recipe details"
                             >
                               ?
+                            </button>
+                            <button
+                              className="meal-btn meal-btn-replace"
+                              onClick={() => handleReplaceMeal(day.date, meal.meal_type || meal.mealType)}
+                              disabled={replacingMeal === `${day.date}-${meal.meal_type || meal.mealType}`}
+                              title="Replace this meal"
+                            >
+                              ↻
                             </button>
                           </div>
                         </div>

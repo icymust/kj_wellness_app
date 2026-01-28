@@ -10,6 +10,7 @@ import com.ndl.numbers_dont_lie.mealplan.dto.DailyNutritionSummary;
 import com.ndl.numbers_dont_lie.mealplan.dto.WeeklyPlanResponse;
 import com.ndl.numbers_dont_lie.mealplan.entity.DayPlan;
 import com.ndl.numbers_dont_lie.mealplan.entity.Meal;
+import com.ndl.numbers_dont_lie.mealplan.entity.MealType;
 import com.ndl.numbers_dont_lie.mealplan.entity.MealPlanVersion;
 import com.ndl.numbers_dont_lie.mealplan.entity.VersionReason;
 import com.ndl.numbers_dont_lie.mealplan.entity.MealPlan;
@@ -642,6 +643,72 @@ public class MealPlanController {
         } catch (Exception e) {
             logger.error("[MEAL_PLAN] REFRESH FAILED with unexpected error: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
+        }
+    }
+    
+    /**
+     * Replace a single meal in weekly plan by date and meal type.
+     * 
+     * POST /api/meal-plans/week/meals/replace?userId=X&date=YYYY-MM-DD&mealType=BREAKFAST
+     * 
+     * Since weekly plan meals are transient (not persisted with IDs), we identify them by
+     * date and meal type. This endpoint generates a fresh meal for that slot.
+     * 
+     * @param userId User ID
+     * @param date Date of the meal to replace
+     * @param mealType Type of meal (BREAKFAST, LUNCH, DINNER, SNACK)
+     * @return New Meal object (transient, no ID)
+     */
+    @PostMapping("/week/meals/replace")
+    public ResponseEntity<?> replaceWeeklyMeal(
+            @RequestParam(name = "userId") Long userId,
+            @RequestParam(name = "date") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam(name = "mealType") String mealType) {
+        
+        logger.info("[WEEK_MEAL_REPLACE] Replace request: userId={}, date={}, mealType={}", 
+            userId, date, mealType);
+        
+        try {
+            // Parse meal type
+            MealType type;
+            try {
+                type = MealType.valueOf(mealType.toUpperCase());
+            } catch (IllegalArgumentException e) {
+                logger.warn("[WEEK_MEAL_REPLACE] Invalid meal type: {}", mealType);
+                return ResponseEntity.badRequest().body(Map.of(
+                    "error", "Invalid meal type",
+                    "message", "mealType must be one of: BREAKFAST, LUNCH, DINNER, SNACK",
+                    "provided", mealType
+                ));
+            }
+            
+            // Generate a fresh meal for this date/type
+            // We'll use the day plan assembler to generate just one meal
+            MealPlanVersion tempVersion = new MealPlanVersion();
+            tempVersion.setVersionNumber(0);
+            tempVersion.setCreatedAt(LocalDateTime.now());
+            tempVersion.setReason(VersionReason.MEAL_REGENERATION);
+            
+            // Generate full day plan (we'll extract the requested meal)
+            DayPlan dayPlan = dayPlanAssemblerService.assembleDayPlan(userId, date, tempVersion);
+            
+            // Find the meal with matching type
+            Meal newMeal = dayPlan.getMeals().stream()
+                .filter(m -> m.getMealType() == type)
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("No meal found for type: " + type));
+            
+            logger.info("[WEEK_MEAL_REPLACE] Generated new meal: {} for {}", 
+                newMeal.getCustomMealName(), type);
+            
+            return ResponseEntity.ok(newMeal);
+            
+        } catch (Exception e) {
+            logger.error("[WEEK_MEAL_REPLACE] Failed to replace meal: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of(
+                "error", "Failed to replace meal",
+                "message", e.getMessage()
+            ));
         }
     }
     

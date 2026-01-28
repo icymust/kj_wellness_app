@@ -10,7 +10,8 @@ public enum VersionReason {
     INITIAL_GENERATION("initial_generation"),
     REGENERATED("regenerated"),
     RESTORED("restored"),
-    MANUAL_CHANGE("manual_change");
+    MANUAL_CHANGE("manual_change"),
+    MEAL_REGENERATION("meal_regeneration");
 
     private final String jsonValue;
 
