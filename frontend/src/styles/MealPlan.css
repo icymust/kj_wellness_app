@@ -34,9 +34,16 @@
   color: #666;
 }
 
-.btn-refresh-meal-plan {
+.meal-plan-header-buttons {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+}
+
+.btn-refresh-meal-plan,
+.btn-weekly-plan {
   padding: 10px 20px;
-  background-color: #2196f3;
   color: white;
   border: none;
   border-radius: 6px;
@@ -48,17 +55,33 @@
   margin-top: 5px;
 }
 
+.btn-refresh-meal-plan {
+  background-color: #2196f3;
+}
+
+.btn-weekly-plan {
+  background-color: #4caf50;
+}
+
 .btn-refresh-meal-plan:hover:not(:disabled) {
   background-color: #1976d2;
   transform: translateY(-2px);
   box-shadow: 0 2px 8px rgba(33, 150, 243, 0.3);
 }
 
-.btn-refresh-meal-plan:active:not(:disabled) {
+.btn-weekly-plan:hover:not(:disabled) {
+  background-color: #45a049;
+  transform: translateY(-2px);
+  box-shadow: 0 2px 8px rgba(76, 175, 80, 0.3);
+}
+
+.btn-refresh-meal-plan:active:not(:disabled),
+.btn-weekly-plan:active:not(:disabled) {
   transform: translateY(0);
 }
 
-.btn-refresh-meal-plan:disabled {
+.btn-refresh-meal-plan:disabled,
+.btn-weekly-plan:disabled {
   background-color: #ccc;
   cursor: not-allowed;
   opacity: 0.7;

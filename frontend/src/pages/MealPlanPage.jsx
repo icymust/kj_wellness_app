@@ -327,14 +327,23 @@ export function MealPlanPage() {
             <h1>Today's Meal Plan</h1>
             <p className="meal-plan-date">{formatDate(dayPlan.date)}</p>
           </div>
-          <button
-            className="btn-refresh-meal-plan"
-            onClick={handleRefreshMealPlan}
-            disabled={refreshing || loading}
-            title="Refresh meal plan based on profile changes"
-          >
-            {refreshing ? '🔄 Updating...' : '🔄 Refresh Plan'}
-          </button>
+          <div className="meal-plan-header-buttons">
+            <button
+              className="btn-refresh-meal-plan"
+              onClick={handleRefreshMealPlan}
+              disabled={refreshing || loading}
+              title="Refresh meal plan based on profile changes"
+            >
+              {refreshing ? '🔄 Updating...' : '🔄 Refresh Plan'}
+            </button>
+            <button
+              className="btn-weekly-plan"
+              onClick={() => navigate('/meals/week')}
+              title="View your weekly meal plan"
+            >
+              📅 Weekly Plan
+            </button>
+          </div>
         </div>
       </div>
 

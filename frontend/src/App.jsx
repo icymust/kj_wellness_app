@@ -21,6 +21,7 @@ import Reset from "./pages/Reset";
 import Log from "./pages/Log";
 import { DebugMealPlanPage } from "./pages/DebugMealPlanPage";
 import { MealPlanPage } from "./pages/MealPlanPage";
+import { WeeklyMealPlanPage } from "./pages/WeeklyMealPlanPage";
 import { RecipePage } from "./pages/RecipePage";
 
 // Root component wraps router so inner shell can use hooks
@@ -625,6 +626,7 @@ function AppShell() {
           <Route path="/debug/meal-plans" element={<DebugMealPlanPage />} />
           <Route path="/debug/meal-plan" element={<DebugMealPlanPage />} />
           <Route path="/meals/today" element={<MealPlanPage />} />
+          <Route path="/meals/week" element={<WeeklyMealPlanPage />} />
           <Route path="/recipes/:recipeId" element={<RecipePage />} />
           <Route
             path="/oauth-callback"

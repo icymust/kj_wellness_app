@@ -240,7 +240,7 @@ public class WeeklyMealPlanService {
 
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public WeeklyPlanResponse generateWeeklyPlanPreview(Long userId, LocalDate startDate) {
-        logger.info("[WEEK_PLAN] Generating week for userId={} startDate={}", userId, startDate);
+        logger.info("[WEEK_PLAN] Generating weekly plan for userId={} startDate={}", userId, startDate);
 
         UserEntity user = userRepository.findById(userId)
             .orElseThrow(() -> new IllegalStateException("User not found: " + userId));
@@ -258,12 +258,19 @@ public class WeeklyMealPlanService {
         List<DayPlan> dayPlans = new ArrayList<>();
         List<DailyNutritionSummary> dailySummaries = new ArrayList<>();
         Set<String> weekUsedTitles = new java.util.HashSet<>();
+        Set<String> usedRecipeIds = new java.util.HashSet<>();
 
         for (int dayOffset = 0; dayOffset < 7; dayOffset++) {
             LocalDate currentDate = startDate.plusDays(dayOffset);
             try {
-                DayPlan dayPlan = dayPlanAssembler.assembleDayPlan(userId, currentDate, tempVersion);
+                logger.info("[WEEK_PLAN] Used recipes so far: {}", usedRecipeIds.size());
+                DayPlan dayPlan = dayPlanAssembler.assembleDayPlan(userId, currentDate, tempVersion, null, usedRecipeIds);
+                
+                // Collect recipe IDs from generated meals
                 dayPlan.getMeals().forEach(meal -> {
+                    if (meal.getRecipeId() != null) {
+                        usedRecipeIds.add(meal.getRecipeId());
+                    }
                     String title = meal.getCustomMealName();
                     if (title != null && weekUsedTitles.stream().anyMatch(t -> t.equalsIgnoreCase(title))) {
                         logger.info("[WEEK_PLAN] Repeat title across week: {} on {}", title, currentDate);
@@ -271,9 +278,10 @@ public class WeeklyMealPlanService {
                         weekUsedTitles.add(title.toLowerCase());
                     }
                 });
+                
+                logger.info("[WEEK_PLAN] Generated day {} with {} meals", currentDate, dayPlan.getMeals().size());
                 dayPlans.add(dayPlan);
                 dailySummaries.add(nutritionSummaryService.generateSummary(dayPlan));
-                logger.info("[WEEK_PLAN] Day {} generated with {} meals", currentDate, dayPlan.getMeals().size());
             } catch (Exception e) {
                 logger.error("[WEEK_PLAN] Failed to generate day {}: {}", currentDate, e.getMessage(), e);
                 DayPlan placeholderDay = createPlaceholderDayPlan(tempVersion, currentDate);
@@ -285,15 +293,26 @@ public class WeeklyMealPlanService {
             }
         }
 
+        LocalDate endDate = startDate.plusDays(6);
         WeeklyNutritionSummary weeklySummary = aggregateWeeklyNutrition(dailySummaries);
-        return new WeeklyPlanResponse(dayPlans, weeklySummary);
+        logger.info("[WEEK_PLAN] Weekly plan complete (7 days)");
+        
+        // DEBUG: Log meals before serialization
+        for (DayPlan day : dayPlans) {
+            logger.info("[WEEK_PLAN_DEBUG] Day {} has {} meals", day.getDate(), day.getMeals().size());
+            for (Meal meal : day.getMeals()) {
+                logger.info("[WEEK_PLAN_DEBUG]   Meal: type={}, recipeId={}, name={}", 
+                    meal.getMealType(), meal.getRecipeId(), meal.getCustomMealName());
+            }
+        }
+        
+        return new WeeklyPlanResponse(startDate, endDate, dayPlans, weeklySummary);
     }
 
     private WeeklyNutritionSummary aggregateWeeklyNutrition(List<DailyNutritionSummary> dailySummaries) {
         WeeklyNutritionSummary weekly = new WeeklyNutritionSummary();
         double totalCal = 0, totalPro = 0, totalCarb = 0, totalFat = 0;
         double targetCal = 0, targetPro = 0, targetCarb = 0, targetFat = 0;
-        boolean estimated = false;
 
         for (DailyNutritionSummary day : dailySummaries) {
             totalCal += safe(day.getTotalCalories());
@@ -304,9 +323,6 @@ public class WeeklyMealPlanService {
             targetPro += safe(day.getTargetProtein());
             targetCarb += safe(day.getTargetCarbs());
             targetFat += safe(day.getTargetFats());
-            if (Boolean.TRUE.equals(day.isNutritionEstimated())) {
-                estimated = true;
-            }
         }
 
         weekly.setTotalCalories(totalCal);
@@ -321,7 +337,7 @@ public class WeeklyMealPlanService {
         weekly.setProteinPercentage(percent(totalPro, targetPro));
         weekly.setCarbsPercentage(percent(totalCarb, targetCarb));
         weekly.setFatsPercentage(percent(totalFat, targetFat));
-        weekly.setNutritionEstimated(estimated);
+        weekly.setNutritionEstimated(true);
         return weekly;
     }
 

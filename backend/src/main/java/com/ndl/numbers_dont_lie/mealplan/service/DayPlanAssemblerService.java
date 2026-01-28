@@ -135,7 +135,7 @@ public class DayPlanAssemblerService {
      */
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public DayPlan assembleDayPlan(Long userId, LocalDate date, MealPlanVersion mealPlanVersion) {
-        return assembleDayPlan(userId, date, mealPlanVersion, null);
+        return assembleDayPlan(userId, date, mealPlanVersion, null, null);
     }
 
     /**
@@ -151,6 +151,20 @@ public class DayPlanAssemblerService {
      * @return A new or updated DayPlan
      */
     public DayPlan assembleDayPlan(Long userId, LocalDate date, MealPlanVersion mealPlanVersion, DayPlan existingDayPlan) {
+        return assembleDayPlan(userId, date, mealPlanVersion, existingDayPlan, null);
+    }
+
+    /**
+     * Assemble a day plan with optional recipe exclusion for weekly uniqueness.
+     * 
+     * @param userId The user ID
+     * @param date The date for the meal plan
+     * @param mealPlanVersion The meal plan version
+     * @param existingDayPlan Optional existing day plan to check for context changes
+     * @param excludeRecipeIds Optional set of recipe stable IDs (String) to avoid (for weekly uniqueness)
+     * @return A new or updated DayPlan
+     */
+    public DayPlan assembleDayPlan(Long userId, LocalDate date, MealPlanVersion mealPlanVersion, DayPlan existingDayPlan, Set<String> excludeRecipeIds) {
         logger.info("Starting DayPlan assembly for userId={}, date={}", userId, date);
         
         // Step 1: Fetch prerequisites
@@ -251,7 +265,8 @@ public class DayPlanAssemblerService {
                     dayPlan, 
                     date, 
                     zoneId,
-                    usedRecipeTitles
+                    usedRecipeTitles,
+                    excludeRecipeIds
                 );
 
                 if (meal != null) {
@@ -366,7 +381,8 @@ public class DayPlanAssemblerService {
             DayPlan dayPlan,
             LocalDate date,
             ZoneId zoneId,
-            Set<String> usedRecipeTitles) {
+            Set<String> usedRecipeTitles,
+            Set<String> excludeRecipeIds) {
         
         logger.debug("Generating meal for slot: {} (index {})", slot.getMealType(), slot.getIndex());
         logger.info("[PREFERENCES] Loaded for userId={}: allergies={}, disliked={}, dietary={}, cuisines={}", 
@@ -375,7 +391,7 @@ public class DayPlanAssemblerService {
         
         // Step 1: Try to select from database first
         logger.info("[RECIPE_SELECTION] Attempting to select DB recipe for {}", slot.getMealType());
-        Recipe dbRecipe = selectDatabaseRecipeForSlot(slot, constraints, usedRecipeTitles, Double.valueOf(slot.getCalorieTarget()));
+        Recipe dbRecipe = selectDatabaseRecipeForSlot(slot, constraints, usedRecipeTitles, Double.valueOf(slot.getCalorieTarget()), excludeRecipeIds);
         if (dbRecipe != null) {
             logger.info("[RECIPE_SELECTION] SUCCESS - Selected DB recipe: {} (stableId={})", dbRecipe.getTitle(), dbRecipe.getStableId());
             GeneratedRecipe dbGenerated = convertRecipeToGeneratedRecipe(dbRecipe);
@@ -697,7 +713,8 @@ public class DayPlanAssemblerService {
             AiMealStructureResult.MealSlot slot,
             UserDietaryConstraints constraints,
             Set<String> usedRecipeTitles,
-            Double targetCalories) {
+            Double targetCalories,
+            Set<String> excludeRecipeIds) {
 
         com.ndl.numbers_dont_lie.recipe.entity.MealType recipeMealType;
         try {
@@ -720,6 +737,11 @@ public class DayPlanAssemblerService {
                     .anyMatch(t -> t.equalsIgnoreCase(recipe.getTitle()));
             if (duplicate) {
                 logger.debug("[RECIPE_DECISION] Skip duplicate title: {}", recipe.getTitle());
+                continue;
+            }
+            // WEEKLY UNIQUENESS: Skip recipes already used this week
+            if (excludeRecipeIds != null && recipe.getStableId() != null && excludeRecipeIds.contains(recipe.getStableId())) {
+                logger.debug("[RECIPE_DECISION] Skip already used in week: {} (stableId={})", recipe.getTitle(), recipe.getStableId());
                 continue;
             }
             if (isRecipeSafeForConstraints(recipe, constraints)) {

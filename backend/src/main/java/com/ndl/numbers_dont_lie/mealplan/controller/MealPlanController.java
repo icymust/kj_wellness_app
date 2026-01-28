@@ -319,22 +319,35 @@ public class MealPlanController {
      * Returns day plans plus aggregated weekly nutrition summary.
      */
     @GetMapping("/week")
-    public ResponseEntity<WeeklyPlanResponse> getWeeklyPlan(
+    public ResponseEntity<?> getWeeklyPlan(
             @RequestParam(name = "userId") Long userId,
-            @RequestParam(name = "startDate", required = false)
+            @RequestParam(name = "startDate", required = true)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
             LocalDate startDate) {
+        
+        // Validation: startDate is required
         if (startDate == null) {
-            startDate = LocalDate.now();
+            logger.warn("[WEEK_PLAN] Missing required parameter: startDate");
+            return ResponseEntity.badRequest().body(Map.of(
+                "error", "Missing required parameter: startDate",
+                "message", "startDate must be provided in ISO-8601 format (YYYY-MM-DD)",
+                "example", "/api/meal-plans/week?userId=2&startDate=2026-01-24"
+            ));
         }
 
-        logger.info("[WEEK_PLAN] Fetching week plan for userId={} startDate={}", userId, startDate);
+        logger.info("[WEEK_PLAN] Generating weekly plan for userId={} startDate={}", userId, startDate);
         try {
             WeeklyPlanResponse response = weeklyMealPlanService.generateWeeklyPlanPreview(userId, startDate);
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             logger.error("[WEEK_PLAN] Failed to generate week plan: {}", e.getMessage(), e);
-            WeeklyPlanResponse fallback = new WeeklyPlanResponse(java.util.Collections.emptyList(), new com.ndl.numbers_dont_lie.mealplan.dto.WeeklyNutritionSummary());
+            LocalDate endDate = startDate.plusDays(6);
+            WeeklyPlanResponse fallback = new WeeklyPlanResponse(
+                startDate, 
+                endDate, 
+                java.util.Collections.emptyList(), 
+                new com.ndl.numbers_dont_lie.mealplan.dto.WeeklyNutritionSummary()
+            );
             return ResponseEntity.ok(fallback);
         }
     }

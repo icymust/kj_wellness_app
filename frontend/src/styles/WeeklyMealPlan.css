@@ -1,0 +1,363 @@
+/* Weekly Meal Plan Page Styles */
+
+.weekly-meal-plan-page {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 20px;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+/* Header */
+.weekly-header {
+  margin-bottom: 30px;
+  padding-bottom: 20px;
+  border-bottom: 2px solid #e0e0e0;
+}
+
+.weekly-header-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+}
+
+.weekly-header h1 {
+  margin: 0 0 10px 0;
+  font-size: 32px;
+  color: #333;
+  font-weight: 600;
+}
+
+.weekly-date-range {
+  margin: 0;
+  font-size: 16px;
+  color: #666;
+  font-weight: 500;
+}
+
+.weekly-header-buttons {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+}
+
+.btn-refresh-weekly-plan,
+.btn-day-plan {
+  padding: 10px 20px;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s, transform 0.1s;
+  white-space: nowrap;
+}
+
+.btn-refresh-weekly-plan {
+  background-color: #2196f3;
+}
+
+.btn-day-plan {
+  background-color: #4caf50;
+}
+
+.btn-refresh-weekly-plan:hover:not(:disabled) {
+  background-color: #1976d2;
+  transform: translateY(-2px);
+  box-shadow: 0 2px 8px rgba(33, 150, 243, 0.3);
+}
+
+.btn-day-plan:hover:not(:disabled) {
+  background-color: #45a049;
+  transform: translateY(-2px);
+  box-shadow: 0 2px 8px rgba(76, 175, 80, 0.3);
+}
+
+.btn-refresh-weekly-plan:active:not(:disabled),
+.btn-day-plan:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.btn-refresh-weekly-plan:disabled,
+.btn-day-plan:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.btn-back {
+  padding: 10px 20px;
+  background-color: #f0f0f0;
+  color: #333;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  white-space: nowrap;
+}
+
+.btn-back:hover {
+  background-color: #e0e0e0;
+}
+
+/* Nutrition Summary */
+.weekly-nutrition-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 15px;
+  margin-bottom: 40px;
+  padding: 20px;
+  background-color: #f9f9f9;
+  border-radius: 8px;
+}
+
+.nutrition-card {
+  padding: 15px;
+  background-color: white;
+  border-radius: 6px;
+  border: 1px solid #e0e0e0;
+}
+
+.nutrition-stat {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  font-size: 14px;
+}
+
+.nutrition-stat .label {
+  color: #666;
+  font-weight: 500;
+}
+
+.nutrition-stat .value {
+  font-size: 18px;
+  font-weight: 600;
+  color: #333;
+}
+
+.nutrition-stat .target {
+  font-size: 12px;
+  color: #999;
+}
+
+.nutrition-bar {
+  width: 100%;
+  height: 8px;
+  background-color: #e0e0e0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.nutrition-progress {
+  height: 100%;
+  background: linear-gradient(90deg, #2196f3, #1976d2);
+  border-radius: 4px;
+}
+
+.nutrition-note {
+  grid-column: 1 / -1;
+  margin: 10px 0 0 0;
+  font-size: 12px;
+  color: #999;
+  text-align: center;
+}
+
+/* Weekly Days List */
+.weekly-days {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 20px;
+}
+
+.day-card {
+  background: white;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  transition: box-shadow 0.2s;
+}
+
+.day-card:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.day-header {
+  padding: 15px;
+  background: linear-gradient(135deg, #f5f5f5, #efefef);
+  border-bottom: 1px solid #e0e0e0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.day-date {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #333;
+}
+
+.day-hash {
+  font-size: 11px;
+  color: #999;
+  background-color: #f0f0f0;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: monospace;
+}
+
+/* Day Meals */
+.day-meals {
+  padding: 15px;
+}
+
+.meal-group {
+  margin-bottom: 15px;
+}
+
+.meal-group:last-child {
+  margin-bottom: 0;
+}
+
+.meal-type-label {
+  margin: 0 0 10px 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #2196f3;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.meals-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.meal-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px;
+  background-color: #f9f9f9;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.meal-name {
+  color: #333;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meal-calories {
+  color: #999;
+  font-size: 12px;
+  margin-left: 10px;
+  white-space: nowrap;
+}
+
+/* No Meals Message */
+.no-meals {
+  padding: 20px 15px;
+  text-align: center;
+  color: #999;
+  font-size: 14px;
+  background-color: #f9f9f9;
+}
+
+.no-meals p {
+  margin: 0;
+}
+
+/* Loading & Error States */
+.loading,
+.error-message,
+.no-data {
+  text-align: center;
+  padding: 40px 20px;
+  color: #666;
+  font-size: 16px;
+}
+
+.error-message,
+.no-data {
+  background-color: #f9f9f9;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  margin: 20px 0;
+}
+
+.error-message button,
+.no-data button {
+  margin-top: 15px;
+  padding: 10px 20px;
+  background-color: #2196f3;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.error-message button:hover,
+.no-data button:hover {
+  background-color: #1976d2;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .weekly-meal-plan-page {
+    padding: 15px;
+  }
+
+  .weekly-header-content {
+    flex-direction: column;
+  }
+
+  .btn-back {
+    width: 100%;
+  }
+
+  .weekly-days {
+    grid-template-columns: 1fr;
+  }
+
+  .weekly-header h1 {
+    font-size: 24px;
+  }
+
+  .weekly-nutrition-summary {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .weekly-header h1 {
+    font-size: 20px;
+  }
+
+  .day-date {
+    font-size: 16px;
+  }
+
+  .meal-item {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .meal-calories {
+    margin: 5px 0 0 0;
+  }
+}
