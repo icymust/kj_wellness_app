@@ -1,0 +1,256 @@
+/* Replace Meal Page Styles */
+
+.replace-meal-page {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #333;
+  overflow: hidden;
+}
+
+/* Header */
+.replace-header {
+  background: white;
+  padding: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.replace-header-content {
+  flex: 1;
+}
+
+.replace-header h1 {
+  margin: 0;
+  font-size: 28px;
+  color: #333;
+}
+
+.current-meal {
+  margin: 8px 0 0 0;
+  font-size: 16px;
+  color: #666;
+}
+
+.meal-type {
+  font-size: 14px;
+  color: #999;
+  margin-left: 8px;
+}
+
+.btn-cancel {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 6px;
+  background-color: #e0e0e0;
+  color: #333;
+  font-size: 16px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.btn-cancel:hover {
+  background-color: #d0d0d0;
+}
+
+/* Search */
+.replace-search {
+  padding: 16px 20px;
+  background: rgba(255, 255, 255, 0.95);
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.replace-search input {
+  flex: 1;
+  padding: 10px 16px;
+  border: 2px solid #e0e0e0;
+  border-radius: 6px;
+  font-size: 16px;
+  transition: border-color 0.3s;
+}
+
+.replace-search input:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+.recipe-count {
+  font-size: 14px;
+  color: #999;
+  white-space: nowrap;
+}
+
+/* Recipe List */
+.recipe-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.recipe-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.recipe-list::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.recipe-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+}
+
+.recipe-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.5);
+}
+
+/* No Recipes */
+.no-recipes {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.no-recipes p {
+  font-size: 18px;
+  margin: 0;
+}
+
+/* Recipe Card */
+.recipe-card {
+  background: white;
+  border-radius: 8px;
+  padding: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+  transition: box-shadow 0.3s, transform 0.2s;
+  cursor: pointer;
+}
+
+.recipe-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transform: translateY(-2px);
+}
+
+.recipe-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.recipe-title {
+  margin: 0 0 8px 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #333;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recipe-summary {
+  margin: 0 0 10px 0;
+  font-size: 14px;
+  color: #666;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.recipe-info {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.recipe-meta {
+  padding: 4px 8px;
+  background: #f5f5f5;
+  border-radius: 4px;
+  color: #666;
+  white-space: nowrap;
+}
+
+/* Select Button */
+.btn-select {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 6px;
+  background-color: #4caf50;
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.3s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.btn-select:hover:not(:disabled) {
+  background-color: #45a049;
+}
+
+.btn-select:disabled {
+  background-color: #cccccc;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* Status messages */
+.loading,
+.error-message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: white;
+  text-align: center;
+  padding: 20px;
+}
+
+.loading {
+  font-size: 20px;
+}
+
+.error-message {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.error-message p {
+  margin: 0 0 20px 0;
+  font-size: 18px;
+}
+
+.error-message button {
+  padding: 12px 24px;
+  border: none;
+  border-radius: 6px;
+  background-color: #4caf50;
+  color: white;
+  font-size: 16px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.error-message button:hover {
+  background-color: #45a049;
+}

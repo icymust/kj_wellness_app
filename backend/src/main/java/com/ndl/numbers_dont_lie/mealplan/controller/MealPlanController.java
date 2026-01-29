@@ -18,6 +18,9 @@ import com.ndl.numbers_dont_lie.mealplan.entity.PlanDuration;
 import com.ndl.numbers_dont_lie.mealplan.repository.DayPlanRepository;
 import com.ndl.numbers_dont_lie.mealplan.repository.MealPlanRepository;
 import com.ndl.numbers_dont_lie.mealplan.repository.MealPlanVersionRepository;
+import com.ndl.numbers_dont_lie.mealplan.repository.MealRepository;
+import com.ndl.numbers_dont_lie.recipe.repository.RecipeRepository;
+import com.ndl.numbers_dont_lie.recipe.entity.Recipe;
 import com.ndl.numbers_dont_lie.mealplan.service.DayPlanAssemblerService;
 import com.ndl.numbers_dont_lie.mealplan.service.MealReplacementService;
 import com.ndl.numbers_dont_lie.mealplan.service.NutritionSummaryService;
@@ -71,6 +74,8 @@ public class MealPlanController {
     private final MealPlanRepository mealPlanRepository;
     private final MealPlanVersionRepository mealPlanVersionRepository;
     private final CustomMealService customMealService;
+    private final MealRepository mealRepository;
+    private final RecipeRepository recipeRepository;
     
     public MealPlanController(
             DayPlanAssemblerService dayPlanAssemblerService,
@@ -83,7 +88,9 @@ public class MealPlanController {
             DayPlanRepository dayPlanRepository,
             MealPlanRepository mealPlanRepository,
             MealPlanVersionRepository mealPlanVersionRepository,
-            CustomMealService customMealService) {
+            CustomMealService customMealService,
+            MealRepository mealRepository,
+            RecipeRepository recipeRepository) {
         this.dayPlanAssemblerService = dayPlanAssemblerService;
         this.nutritionSummaryService = nutritionSummaryService;
         this.weeklyMealPlanService = weeklyMealPlanService;
@@ -95,6 +102,8 @@ public class MealPlanController {
         this.mealPlanRepository = mealPlanRepository;
         this.mealPlanVersionRepository = mealPlanVersionRepository;
         this.customMealService = customMealService;
+        this.mealRepository = mealRepository;
+        this.recipeRepository = recipeRepository;
     }
     
     /**
@@ -705,6 +714,116 @@ public class MealPlanController {
             
         } catch (Exception e) {
             logger.error("[WEEK_MEAL_REPLACE] Failed to replace meal: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of(
+                "error", "Failed to replace meal",
+                "message", e.getMessage()
+            ));
+        }
+    }
+    
+    /**
+     * Get a specific meal by ID.
+     * 
+     * GET /api/meals/{mealId}
+     * 
+     * @param mealId ID of the meal
+     * @return Meal object
+     */
+    @GetMapping("/{mealId}")
+    public ResponseEntity<?> getMealById(@PathVariable Long mealId) {
+        try {
+            Optional<Meal> mealOpt = mealRepository.findById(mealId);
+            if (!mealOpt.isPresent()) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of(
+                    "error", "Meal not found",
+                    "mealId", mealId
+                ));
+            }
+            return ResponseEntity.ok(mealOpt.get());
+        } catch (Exception e) {
+            logger.error("[GET_MEAL] Failed to get meal {}: {}", mealId, e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of(
+                "error", "Failed to get meal",
+                "message", e.getMessage()
+            ));
+        }
+    }
+    
+    /**
+     * Replace a meal with a recipe from the database.
+     * 
+     * PUT /api/meals/{mealId}/replace
+     * Body: { "recipeId": "r00001" }
+     * 
+     * This endpoint allows users to replace ONE existing meal with a recipe selected from the database.
+     * It preserves the meal type, day plan, and calorie target while updating the recipe.
+     * 
+     * @param mealId ID of the meal to replace
+     * @param request Body with recipeId
+     * @return Updated Meal object
+     */
+    @PutMapping("/{mealId}/replace")
+    @Transactional
+    public ResponseEntity<?> replaceMealWithRecipe(
+            @PathVariable Long mealId,
+            @RequestBody Map<String, String> request) {
+        
+        logger.info("[MEAL_REPLACE] Requested replace for mealId={}", mealId);
+        
+        try {
+            String recipeId = request.get("recipeId");
+            if (recipeId == null || recipeId.isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of(
+                    "error", "Missing recipeId",
+                    "message", "Body must contain 'recipeId' field"
+                ));
+            }
+            
+            // Load meal by ID
+            Optional<Meal> mealOpt = mealRepository.findById(mealId);
+            if (!mealOpt.isPresent()) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of(
+                    "error", "Meal not found",
+                    "mealId", mealId
+                ));
+            }
+            
+            Meal oldMeal = mealOpt.get();
+            String oldRecipeId = oldMeal.getRecipeId();
+            String oldMealName = oldMeal.getCustomMealName();
+            
+            // Load recipe by stable ID
+            Optional<Recipe> recipeOpt = recipeRepository.findByStableId(recipeId);
+            if (!recipeOpt.isPresent()) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of(
+                    "error", "Recipe not found",
+                    "recipeId", recipeId
+                ));
+            }
+            
+            Recipe newRecipe = recipeOpt.get();
+            
+            // Update meal
+            oldMeal.setRecipeId(newRecipe.getStableId());
+            oldMeal.setCustomMealName(newRecipe.getTitle());
+            // Keep calorie target unchanged
+            
+            // Save updated meal
+            Meal savedMeal = mealRepository.save(oldMeal);
+            
+            logger.info("[MEAL_REPLACE] Old recipe={}, New recipe={}", oldRecipeId, newRecipe.getStableId());
+            logger.info("[MEAL_REPLACE] Replace completed successfully");
+            
+            return ResponseEntity.ok(savedMeal);
+            
+        } catch (IllegalArgumentException e) {
+            logger.error("[MEAL_REPLACE] Invalid argument: {}", e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of(
+                "error", "Invalid argument",
+                "message", e.getMessage()
+            ));
+        } catch (Exception e) {
+            logger.error("[MEAL_REPLACE] Failed to replace meal: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of(
                 "error", "Failed to replace meal",
                 "message", e.getMessage()

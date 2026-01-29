@@ -408,7 +408,7 @@ export function MealPlanPage() {
               )}
               
               {/* Button Container */}
-              <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+              <div style={{ display: 'flex', gap: '10px', marginTop: '10px', flexWrap: 'wrap' }}>
                 {/* Replace Button */}
                 {meal.id ? (
                   <button 
@@ -423,7 +423,8 @@ export function MealPlanPage() {
                       borderRadius: '4px',
                       cursor: replacingMealId === meal.id ? 'not-allowed' : 'pointer',
                       fontSize: '14px',
-                      flex: 1
+                      flex: 1,
+                      minWidth: '120px'
                     }}
                   >
                     {replacingMealId === meal.id ? 'Replacing...' : 'Regenerate'}
@@ -440,12 +441,34 @@ export function MealPlanPage() {
                       borderRadius: '4px',
                       cursor: 'not-allowed',
                       fontSize: '14px',
-                      flex: 1
+                      flex: 1,
+                      minWidth: '120px'
                     }}
                   >
                     🔒 Недоступно (нет ID)
                   </button>
                 )}
+
+                {/* Replace from List Button */}
+                {meal.id ? (
+                  <button
+                    className="replace-from-list-button"
+                    onClick={() => navigate(`/meals/replace/${meal.id}?returnTo=daily`)}
+                    style={{
+                      padding: '8px 16px',
+                      backgroundColor: '#FF9800',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      fontSize: '14px',
+                      flex: 1,
+                      minWidth: '120px'
+                    }}
+                  >
+                    Choose Recipe
+                  </button>
+                ) : null}
 
                 {/* View Recipe Button */}
                 <button
@@ -467,7 +490,8 @@ export function MealPlanPage() {
                     borderRadius: '4px',
                     cursor: 'pointer',
                     fontSize: '14px',
-                    flex: 1
+                    flex: 1,
+                    minWidth: '120px'
                   }}
                 >
                   View recipe

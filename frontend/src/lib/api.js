@@ -149,4 +149,8 @@ export const api = {
   // Nutritional preferences
   getNutritionalPreferences: (token) => request("/profile/nutritional-preferences", { token }),
   saveNutritionalPreferences: (token, payload) => request("/profile/nutritional-preferences", { method: "PUT", token, body: payload }),
+  // Meal plans and recipes
+  getMealById: (token, mealId) => request(`/api/meal-plans/${mealId}`, { token }),
+  replaceMeal: (token, mealId, body) => request(`/api/meal-plans/${mealId}/replace`, { method: "PUT", token, body }),
+  getRecipes: (token, mealType) => request(`/api/recipes${mealType ? `?meal=${mealType}` : ''}`, { token }),
 };
