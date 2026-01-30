@@ -122,6 +122,80 @@
   border: 1px solid #e0e0e0;
 }
 
+/* Weekly Calorie Trend */
+.weekly-trend-section {
+  background-color: #fff;
+  border-radius: 10px;
+  padding: 20px;
+  margin-bottom: 30px;
+  border: 1px solid #e0e0e0;
+}
+
+.weekly-trend-header h2 {
+  margin: 0 0 4px 0;
+  font-size: 18px;
+  color: #333;
+}
+
+.weekly-trend-subtitle {
+  margin: 0 0 12px 0;
+  color: #777;
+  font-size: 13px;
+}
+
+.weekly-trend-chart {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+  padding: 10px 4px 0 4px;
+}
+
+.trend-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 60px;
+}
+
+.trend-bar {
+  width: 100%;
+  border-radius: 6px;
+  transition: transform 0.15s ease;
+}
+
+.trend-bar.positive {
+  background-color: #e53935;
+}
+
+.trend-bar.negative {
+  background-color: #2e7d32;
+}
+
+.trend-bar:hover {
+  transform: translateY(-3px);
+}
+
+.trend-date {
+  font-size: 11px;
+  color: #666;
+  text-align: center;
+}
+
+.trend-delta {
+  font-size: 12px;
+  font-weight: 600;
+  color: #444;
+}
+
+.weekly-trend-error,
+.weekly-trend-empty {
+  color: #999;
+  font-size: 13px;
+  padding: 6px 0 0 0;
+}
+
 .nutrition-stat {
   display: flex;
   justify-content: space-between;

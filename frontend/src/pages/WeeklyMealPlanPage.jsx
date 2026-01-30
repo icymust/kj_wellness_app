@@ -33,6 +33,8 @@ export function WeeklyMealPlanPage() {
   const [customMealType, setCustomMealType] = useState('breakfast');
   const [customMealLoading, setCustomMealLoading] = useState(false);
   const [customMealError, setCustomMealError] = useState(null);
+  const [trendData, setTrendData] = useState(null);
+  const [trendError, setTrendError] = useState(null);
 
   // Resolve userId from /protected/me if needed
   useEffect(() => {
@@ -88,6 +90,7 @@ export function WeeklyMealPlanPage() {
 
       const data = await response.json();
       setWeeklyPlan(data);
+      await fetchWeeklyTrends(today);
 
       // Debug: log meal IDs
       if (data.days && data.days.length > 0) {
@@ -123,11 +126,29 @@ export function WeeklyMealPlanPage() {
       if (response.ok) {
         const data = await response.json();
         setWeeklyPlan(data);
+        await fetchWeeklyTrends(startDate);
       } else {
         console.error('[WEEK_PLAN_PAGE] Reload failed:', response.status);
       }
     } catch (err) {
       console.error('[WEEK_PLAN_PAGE] Reload error:', err);
+    }
+  };
+
+  const fetchWeeklyTrends = async (startDate) => {
+    if (!userId || !startDate) return;
+    try {
+      setTrendError(null);
+      const trendUrl = `http://localhost:5173/api/meal-plans/week/trends?userId=${userId}&startDate=${startDate}`;
+      const response = await fetch(trendUrl);
+      if (!response.ok) {
+        throw new Error(`Failed to load trends (${response.status})`);
+      }
+      const data = await response.json();
+      setTrendData(data);
+    } catch (err) {
+      console.error('[WEEK_PLAN_PAGE] Trend load error:', err);
+      setTrendError(err.message || 'Failed to load trends');
     }
   };
 
@@ -149,6 +170,7 @@ export function WeeklyMealPlanPage() {
       if (response.ok) {
         const data = await response.json();
         setWeeklyPlan(data);
+        await fetchWeeklyTrends(today);
         console.log('[WEEK_PLAN_PAGE] Refresh SUCCESS!');
       } else {
         console.error('[WEEK_PLAN_PAGE] Refresh failed:', response.status);
@@ -293,6 +315,10 @@ export function WeeklyMealPlanPage() {
   }
 
   const { startDate: responseStartDate, endDate, days, weeklyNutrition } = weeklyPlan;
+  const trendDays = trendData?.days || [];
+  const maxAbsDelta = trendDays.length > 0
+    ? Math.max(...trendDays.map(day => Math.abs(day.delta)))
+    : 0;
 
   return (
     <div className="weekly-meal-plan-page">
@@ -397,6 +423,47 @@ export function WeeklyMealPlanPage() {
           )}
         </div>
       )}
+
+      {/* Weekly Calorie Balance */}
+      <div className="weekly-trend-section">
+        <div className="weekly-trend-header">
+          <h2>Weekly Calorie Balance</h2>
+          <p className="weekly-trend-subtitle">Estimated based on your meal plan</p>
+        </div>
+
+        {trendError && (
+          <div className="weekly-trend-error">
+            {trendError}
+          </div>
+        )}
+
+        {trendDays.length > 0 ? (
+          <div className="weekly-trend-chart">
+            {trendDays.map((day) => {
+              const delta = day.delta || 0;
+              const barHeight = maxAbsDelta > 0
+                ? Math.max(6, Math.round((Math.abs(delta) / maxAbsDelta) * 120))
+                : 6;
+              const barClass = delta > 0 ? 'trend-bar positive' : 'trend-bar negative';
+              return (
+                <div key={day.date} className="trend-day">
+                  <div
+                    className={barClass}
+                    style={{ height: `${barHeight}px` }}
+                    title={`Actual: ${day.actualCalories} kcal / Target: ${day.targetCalories} kcal`}
+                  ></div>
+                  <div className="trend-date">{day.date}</div>
+                  <div className="trend-delta">{delta > 0 ? `+${delta}` : delta}</div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="weekly-trend-empty">
+            No trend data available.
+          </div>
+        )}
+      </div>
 
       {/* Days List */}
       <div className="weekly-days">

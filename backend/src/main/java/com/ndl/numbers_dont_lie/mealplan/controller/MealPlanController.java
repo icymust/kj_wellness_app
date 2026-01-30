@@ -7,6 +7,7 @@ import com.ndl.numbers_dont_lie.ai.dto.AiStrategyRequest;
 import com.ndl.numbers_dont_lie.ai.dto.AiStrategyResult;
 import com.ndl.numbers_dont_lie.entity.UserEntity;
 import com.ndl.numbers_dont_lie.mealplan.dto.DailyNutritionSummary;
+import com.ndl.numbers_dont_lie.mealplan.dto.WeeklyCalorieTrendResponse;
 import com.ndl.numbers_dont_lie.mealplan.dto.WeeklyPlanResponse;
 import com.ndl.numbers_dont_lie.mealplan.entity.DayPlan;
 import com.ndl.numbers_dont_lie.mealplan.entity.Meal;
@@ -19,6 +20,7 @@ import com.ndl.numbers_dont_lie.mealplan.repository.DayPlanRepository;
 import com.ndl.numbers_dont_lie.mealplan.repository.MealPlanRepository;
 import com.ndl.numbers_dont_lie.mealplan.repository.MealPlanVersionRepository;
 import com.ndl.numbers_dont_lie.mealplan.repository.MealRepository;
+import com.ndl.numbers_dont_lie.repository.nutrition.NutritionalPreferencesRepository;
 import com.ndl.numbers_dont_lie.recipe.repository.RecipeRepository;
 import com.ndl.numbers_dont_lie.recipe.entity.Recipe;
 import com.ndl.numbers_dont_lie.mealplan.service.DayPlanAssemblerService;
@@ -78,6 +80,7 @@ public class MealPlanController {
     private final MealRepository mealRepository;
     private final RecipeRepository recipeRepository;
     private final MealMoveService mealMoveService;
+    private final NutritionalPreferencesRepository nutritionalPreferencesRepository;
     
     public MealPlanController(
             DayPlanAssemblerService dayPlanAssemblerService,
@@ -93,7 +96,8 @@ public class MealPlanController {
             CustomMealService customMealService,
             MealRepository mealRepository,
             RecipeRepository recipeRepository,
-            MealMoveService mealMoveService) {
+            MealMoveService mealMoveService,
+            NutritionalPreferencesRepository nutritionalPreferencesRepository) {
         this.dayPlanAssemblerService = dayPlanAssemblerService;
         this.nutritionSummaryService = nutritionSummaryService;
         this.weeklyMealPlanService = weeklyMealPlanService;
@@ -108,6 +112,7 @@ public class MealPlanController {
         this.mealRepository = mealRepository;
         this.recipeRepository = recipeRepository;
         this.mealMoveService = mealMoveService;
+        this.nutritionalPreferencesRepository = nutritionalPreferencesRepository;
     }
     
     /**
@@ -432,6 +437,77 @@ public class MealPlanController {
             );
             return ResponseEntity.ok(fallback);
         }
+    }
+
+    /**
+     * Weekly calorie trend (surplus/deficit) for a 7-day period.
+     * Read-only analytics; does not trigger regeneration or AI.
+     *
+     * GET /api/meal-plans/week/trends?userId=X&startDate=YYYY-MM-DD
+     */
+    @GetMapping("/week/trends")
+    public ResponseEntity<?> getWeeklyCalorieTrends(
+            @RequestParam(name = "userId") Long userId,
+            @RequestParam(name = "startDate", required = true)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+            LocalDate startDate) {
+        if (startDate == null) {
+            return ResponseEntity.badRequest().body(Map.of(
+                "error", "Missing required parameter: startDate",
+                "message", "startDate must be provided in ISO-8601 format (YYYY-MM-DD)"
+            ));
+        }
+
+        logger.info("[WEEK_TREND] Generating calorie trend for userId={} startDate={}", userId, startDate);
+
+        LocalDate endDate = startDate.plusDays(6);
+
+        int targetCalories = nutritionalPreferencesRepository.findByUserId(userId)
+            .map(prefs -> prefs.getCalorieTarget() != null ? prefs.getCalorieTarget() : 0)
+            .orElse(0);
+
+        java.util.List<DayPlan> dayPlans = java.util.Collections.emptyList();
+        java.util.Optional<MealPlan> latestWeeklyPlan = mealPlanRepository
+            .findTopByUserIdAndDurationOrderByIdDesc(userId, PlanDuration.WEEKLY);
+        if (latestWeeklyPlan.isPresent()) {
+            MealPlan plan = latestWeeklyPlan.get();
+            dayPlans = dayPlanRepository.findByMealPlanIdAndDateRangeWithMeals(plan.getId(), startDate, endDate);
+        }
+
+        java.util.Map<LocalDate, DayPlan> byDate = new java.util.HashMap<>();
+        for (DayPlan day : dayPlans) {
+            byDate.put(day.getDate(), day);
+        }
+
+        java.util.List<WeeklyCalorieTrendResponse.DayTrend> trendDays = new java.util.ArrayList<>();
+        for (int dayOffset = 0; dayOffset < 7; dayOffset++) {
+            LocalDate date = startDate.plusDays(dayOffset);
+            DayPlan dayPlan = byDate.get(date);
+            if (dayPlan == null) {
+                DayPlan placeholder = new DayPlan();
+                placeholder.setDate(date);
+                placeholder.setUserId(userId);
+                placeholder.setMeals(java.util.Collections.emptyList());
+                dayPlan = placeholder;
+            }
+
+            int actualCalories = 0;
+            try {
+                DailyNutritionSummary summary = nutritionSummaryService.generateSummary(dayPlan);
+                if (summary != null) {
+                    actualCalories = (int) Math.round(summary.getTotalCalories());
+                }
+            } catch (Exception e) {
+                logger.warn("[WEEK_TREND] Nutrition summary unavailable for date {}: {}", date, e.getMessage());
+                actualCalories = 0;
+            }
+
+            int delta = actualCalories - targetCalories;
+            trendDays.add(new WeeklyCalorieTrendResponse.DayTrend(date, actualCalories, targetCalories, delta));
+        }
+
+        WeeklyCalorieTrendResponse response = new WeeklyCalorieTrendResponse(startDate, endDate, trendDays);
+        return ResponseEntity.ok(response);
     }
 
     /**
