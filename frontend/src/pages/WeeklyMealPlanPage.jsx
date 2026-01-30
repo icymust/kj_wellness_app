@@ -470,8 +470,8 @@ export function WeeklyMealPlanPage() {
             {trendDays.map((day) => {
               const delta = day.delta || 0;
               const barHeight = maxAbsDelta > 0
-                ? Math.max(6, Math.round((Math.abs(delta) / maxAbsDelta) * 120))
-                : 6;
+                ? Math.max(32, Math.round((Math.abs(delta) / maxAbsDelta) * 240))
+                : 48;
               const barClass = delta > 0 ? 'trend-bar positive' : 'trend-bar negative';
               return (
                 <div key={day.date} className="trend-day">

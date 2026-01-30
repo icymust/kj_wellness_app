@@ -29,6 +29,9 @@ export function MealPlanPage() {
   const [replacingMealId, setReplacingMealId] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [generatingMealId, setGeneratingMealId] = useState(null);
+  const [aiNutritionSummary, setAiNutritionSummary] = useState(null);
+  const [aiNutritionLoading, setAiNutritionLoading] = useState(false);
+  const [userGoal, setUserGoal] = useState('general_fitness');
 
   // Get userId from shared context (persisted in localStorage)
   const { userId, setUserId } = useUser();
@@ -108,6 +111,72 @@ export function MealPlanPage() {
   useEffect(() => {
     loadMealPlan();
   }, [userId]);
+
+  useEffect(() => {
+    const loadGoal = async () => {
+      const token = getAccessToken();
+      if (!token) return;
+      try {
+        const data = await api.getProfile(token);
+        const goal = data?.profile?.goal;
+        if (goal) {
+          setUserGoal(goal);
+        }
+      } catch (err) {
+        console.warn('[MEAL_PLAN] Failed to load profile goal', err);
+      }
+    };
+    loadGoal();
+  }, [userId]);
+
+  useEffect(() => {
+    const generateInsights = async () => {
+      if (!nutritionSummary || nutritionSummary.unavailable) {
+        setAiNutritionSummary(null);
+        return;
+      }
+      if (!dayPlan?.date) {
+        return;
+      }
+      setAiNutritionLoading(true);
+
+      try {
+        const response = await fetch('http://localhost:5173/api/ai/nutrition/summary', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId,
+            date: dayPlan.date,
+            userGoal,
+            nutritionSummary: {
+              calories: nutritionSummary.total_calories ?? 0,
+              targetCalories: nutritionSummary.target_calories ?? 0,
+              protein: nutritionSummary.total_protein ?? 0,
+              targetProtein: nutritionSummary.target_protein ?? 0,
+              carbs: nutritionSummary.total_carbs ?? 0,
+              targetCarbs: nutritionSummary.target_carbs ?? 0,
+              fats: nutritionSummary.total_fats ?? 0,
+              targetFats: nutritionSummary.target_fats ?? 0,
+              nutritionEstimated: !!nutritionSummary.nutrition_estimated,
+            },
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to generate nutrition insights');
+        }
+
+        const data = await response.json();
+        setAiNutritionSummary(data?.summary || null);
+      } catch (err) {
+        setAiNutritionSummary(null);
+      } finally {
+        setAiNutritionLoading(false);
+      }
+    };
+
+    generateInsights();
+  }, [nutritionSummary, dayPlan?.date, userGoal, userId]);
 
   /**
    * Refresh meal plan - called manually by user when profile changes
@@ -410,6 +479,16 @@ export function MealPlanPage() {
                 nutritionSummary.total_fats,
                 nutritionSummary.target_fats,
                 'Fats (g)'
+              )}
+            </div>
+          )}
+          {(aiNutritionLoading || aiNutritionSummary) && !nutritionSummary.unavailable && (
+            <div className="ai-nutrition-summary">
+              <h3>AI Nutrition Insights</h3>
+              {aiNutritionLoading ? (
+                <p className="ai-nutrition-loading">Generating nutrition insights…</p>
+              ) : (
+                <p className="ai-nutrition-text">{aiNutritionSummary}</p>
               )}
             </div>
           )}
