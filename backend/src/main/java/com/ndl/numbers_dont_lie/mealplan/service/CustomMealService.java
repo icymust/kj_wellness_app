@@ -4,8 +4,10 @@ import com.ndl.numbers_dont_lie.mealplan.dto.AddCustomMealRequest;
 import com.ndl.numbers_dont_lie.mealplan.entity.DayPlan;
 import com.ndl.numbers_dont_lie.mealplan.entity.Meal;
 import com.ndl.numbers_dont_lie.mealplan.entity.MealType;
+import com.ndl.numbers_dont_lie.mealplan.entity.PlanDuration;
 import com.ndl.numbers_dont_lie.mealplan.repository.DayPlanRepository;
 import com.ndl.numbers_dont_lie.mealplan.repository.MealRepository;
+import com.ndl.numbers_dont_lie.mealplan.repository.MealPlanRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -35,12 +37,15 @@ public class CustomMealService {
     
     private final DayPlanRepository dayPlanRepository;
     private final MealRepository mealRepository;
+    private final MealPlanRepository mealPlanRepository;
     
     public CustomMealService(
             DayPlanRepository dayPlanRepository,
-            MealRepository mealRepository) {
+            MealRepository mealRepository,
+            MealPlanRepository mealPlanRepository) {
         this.dayPlanRepository = dayPlanRepository;
         this.mealRepository = mealRepository;
+        this.mealPlanRepository = mealPlanRepository;
     }
     
     /**
@@ -68,7 +73,7 @@ public class CustomMealService {
      * @throws IllegalArgumentException if inputs invalid
      */
     @Transactional
-    public Meal addCustomMeal(Long userId, AddCustomMealRequest request) {
+    public Meal addCustomMeal(Long userId, AddCustomMealRequest request, PlanDuration preferredDuration) {
         logger.info("[CUSTOM_MEAL] Adding custom meal for userId={}, request={}", userId, request);
         
         // Validate inputs
@@ -91,7 +96,15 @@ public class CustomMealService {
         }
         
         // Load DayPlan for (userId, date)
-        Optional<DayPlan> dayPlanOpt = dayPlanRepository.findByUserIdAndDate(userId, request.getDate());
+        Optional<DayPlan> dayPlanOpt = Optional.empty();
+        if (preferredDuration != null) {
+            dayPlanOpt = findDayPlanForDuration(userId, request.getDate(), preferredDuration);
+        } else {
+            dayPlanOpt = findDayPlanForDuration(userId, request.getDate(), PlanDuration.DAILY);
+            if (dayPlanOpt.isEmpty()) {
+                dayPlanOpt = findDayPlanForDuration(userId, request.getDate(), PlanDuration.WEEKLY);
+            }
+        }
         DayPlan dayPlan;
         
         if (dayPlanOpt.isPresent()) {
@@ -134,6 +147,11 @@ public class CustomMealService {
             request.getName(), customMeal.getId(), userId, request.getDate());
         
         return customMeal;
+    }
+
+    private Optional<DayPlan> findDayPlanForDuration(Long userId, java.time.LocalDate date, PlanDuration duration) {
+        return mealPlanRepository.findTopByUserIdAndDurationOrderByIdDesc(userId, duration)
+            .flatMap(plan -> dayPlanRepository.findByMealPlanIdAndDateWithMeals(plan.getId(), date));
     }
     
     /**

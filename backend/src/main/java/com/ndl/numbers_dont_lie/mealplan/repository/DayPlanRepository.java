@@ -70,4 +70,16 @@ public interface DayPlanRepository extends JpaRepository<DayPlan, Long> {
 			@Param("mealPlanId") Long mealPlanId,
 			@Param("startDate") LocalDate startDate,
 			@Param("endDate") LocalDate endDate);
+
+	/**
+	 * Find a day plan for a specific meal plan and date, with meals eagerly loaded.
+	 */
+	@Query("SELECT dp FROM DayPlan dp " +
+		   "LEFT JOIN FETCH dp.meals " +
+		   "JOIN dp.mealPlanVersion v " +
+		   "JOIN v.mealPlan p " +
+		   "WHERE p.id = :mealPlanId AND dp.date = :date")
+	Optional<DayPlan> findByMealPlanIdAndDateWithMeals(
+			@Param("mealPlanId") Long mealPlanId,
+			@Param("date") LocalDate date);
 }

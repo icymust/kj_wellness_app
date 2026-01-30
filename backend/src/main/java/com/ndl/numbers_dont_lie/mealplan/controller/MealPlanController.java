@@ -648,11 +648,26 @@ public class MealPlanController {
     @Transactional
     public ResponseEntity<?> addCustomMeal(
             @RequestParam(name = "userId") Long userId,
+            @RequestParam(name = "duration", required = false) String duration,
             @RequestBody AddCustomMealRequest request) {
         logger.info("[CUSTOM_MEAL_API] POST /meals/custom userId={}, request={}", userId, request);
         
         try {
-            Meal customMeal = customMealService.addCustomMeal(userId, request);
+            PlanDuration preferredDuration = null;
+            if (duration != null && !duration.isBlank()) {
+                String normalized = duration.trim().toUpperCase();
+                if ("DAILY".equals(normalized) || "DAY".equals(normalized)) {
+                    preferredDuration = PlanDuration.DAILY;
+                } else if ("WEEKLY".equals(normalized) || "WEEK".equals(normalized)) {
+                    preferredDuration = PlanDuration.WEEKLY;
+                } else {
+                    return ResponseEntity.badRequest().body(
+                        Map.of("error", "Invalid duration: " + duration)
+                    );
+                }
+            }
+
+            Meal customMeal = customMealService.addCustomMeal(userId, request, preferredDuration);
             logger.info("[CUSTOM_MEAL_API] Custom meal added successfully: id={}, name='{}'", 
                 customMeal.getId(), customMeal.getCustomMealName());
             return ResponseEntity.status(HttpStatus.CREATED).body(customMeal);

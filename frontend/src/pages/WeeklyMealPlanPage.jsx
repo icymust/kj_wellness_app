@@ -28,6 +28,11 @@ export function WeeklyMealPlanPage() {
   const [error, setError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [movingMealId, setMovingMealId] = useState(null);
+  const [customMealFormDate, setCustomMealFormDate] = useState(null);
+  const [customMealName, setCustomMealName] = useState('');
+  const [customMealType, setCustomMealType] = useState('breakfast');
+  const [customMealLoading, setCustomMealLoading] = useState(false);
+  const [customMealError, setCustomMealError] = useState(null);
 
   // Resolve userId from /protected/me if needed
   useEffect(() => {
@@ -107,6 +112,25 @@ export function WeeklyMealPlanPage() {
     loadWeeklyPlan();
   }, [userId, loadWeeklyPlan]);
 
+  const reloadWeeklyPlan = async (startDateOverride) => {
+    if (!userId) return;
+    try {
+      const now = new Date();
+      const today = now.toLocaleDateString('en-CA');
+      const startDate = startDateOverride || weeklyPlan?.startDate || today;
+      const weekUrl = `http://localhost:5173/api/meal-plans/week?userId=${userId}&startDate=${startDate}`;
+      const response = await fetch(weekUrl);
+      if (response.ok) {
+        const data = await response.json();
+        setWeeklyPlan(data);
+      } else {
+        console.error('[WEEK_PLAN_PAGE] Reload failed:', response.status);
+      }
+    } catch (err) {
+      console.error('[WEEK_PLAN_PAGE] Reload error:', err);
+    }
+  };
+
   /**
    * Refresh weekly meal plan
    */
@@ -162,6 +186,75 @@ export function WeeklyMealPlanPage() {
       setError(`Failed to move meal: ${err.message}`);
     } finally {
       setMovingMealId(null);
+    }
+  };
+
+  const handleOpenCustomMealForm = (dayDate) => {
+    setCustomMealError(null);
+    setCustomMealName('');
+    setCustomMealType('breakfast');
+    setCustomMealFormDate(dayDate);
+  };
+
+  const handleAddCustomMeal = async (dayDate) => {
+    if (!userId || !dayDate) return;
+    if (!customMealName.trim()) {
+      setCustomMealError('Meal name is required');
+      return;
+    }
+
+    setCustomMealLoading(true);
+    setCustomMealError(null);
+    try {
+      const response = await fetch(
+        `http://localhost:5173/api/meal-plans/meals/custom?userId=${userId}&duration=weekly`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            date: dayDate,
+            meal_type: customMealType,
+            name: customMealName,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to add custom meal');
+      }
+
+      await reloadWeeklyPlan(weeklyPlan?.startDate);
+      setCustomMealName('');
+      setCustomMealFormDate(null);
+    } catch (err) {
+      console.error('[WEEK_PLAN_PAGE] Custom meal add error:', err);
+      setCustomMealError(err.message || 'Failed to add custom meal');
+    } finally {
+      setCustomMealLoading(false);
+    }
+  };
+
+  const handleDeleteCustomMeal = async (mealId) => {
+    if (!userId || !mealId) return;
+    if (!window.confirm('Delete this custom meal?')) return;
+
+    setCustomMealLoading(true);
+    setCustomMealError(null);
+    try {
+      const response = await fetch(
+        `http://localhost:5173/api/meal-plans/meals/custom/${mealId}?userId=${userId}`,
+        { method: 'DELETE' }
+      );
+      if (!response.ok) {
+        throw new Error('Failed to delete custom meal');
+      }
+      await reloadWeeklyPlan(weeklyPlan?.startDate);
+    } catch (err) {
+      console.error('[WEEK_PLAN_PAGE] Custom meal delete error:', err);
+      setCustomMealError(err.message || 'Failed to delete custom meal');
+    } finally {
+      setCustomMealLoading(false);
     }
   };
 
@@ -310,63 +403,132 @@ export function WeeklyMealPlanPage() {
         {days.map((day, index) => (
           <div key={index} className="day-card">
             <div className="day-header">
-              <h2 className="day-date">{day.date}</h2>
+              <div className="day-title-row">
+                <h2 className="day-date">{day.date}</h2>
+                <button
+                  className="day-add-btn"
+                  onClick={() => handleOpenCustomMealForm(day.date)}
+                  title="Add custom meal"
+                >
+                  +
+                </button>
+              </div>
               {day.context_hash && (
                 <span className="day-hash">{day.context_hash.substring(0, 8)}</span>
               )}
             </div>
 
+            {customMealFormDate === day.date && (
+              <div className="custom-meal-inline">
+                {customMealError && <div className="custom-meal-error">{customMealError}</div>}
+                <div className="custom-meal-row">
+                  <input
+                    type="text"
+                    placeholder="Custom meal name"
+                    value={customMealName}
+                    onChange={(e) => setCustomMealName(e.target.value)}
+                    disabled={customMealLoading}
+                    className="custom-meal-input"
+                  />
+                  <select
+                    value={customMealType}
+                    onChange={(e) => setCustomMealType(e.target.value)}
+                    disabled={customMealLoading}
+                    className="custom-meal-select"
+                  >
+                    <option value="breakfast">Breakfast</option>
+                    <option value="lunch">Lunch</option>
+                    <option value="dinner">Dinner</option>
+                    <option value="snack">Snack</option>
+                  </select>
+                  <button
+                    className="custom-meal-btn"
+                    onClick={() => handleAddCustomMeal(day.date)}
+                    disabled={customMealLoading}
+                  >
+                    {customMealLoading ? 'Adding...' : 'Add'}
+                  </button>
+                  <button
+                    className="custom-meal-btn secondary"
+                    onClick={() => setCustomMealFormDate(null)}
+                    disabled={customMealLoading}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
             {day.meals && day.meals.length > 0 ? (
               <div className="day-meals">
                 <div className="meals-list">
-                  {sortMealsByTime(day.meals).map((meal, mealIndex, arr) => (
-                    <div key={meal.id || mealIndex} className="meal-item-wrapper">
-                      <div className="meal-item">
-                        <span className="meal-type-inline">{formatMealType(meal.meal_type || meal.mealType)}</span>
-                        <span className="meal-name">
-                          {meal.custom_meal_name || meal.customMealName || meal.meal_name || '(Meal)'}
-                        </span>
-                        {(meal.calorie_target || meal.calorieTarget) && (
-                          <span className="meal-calories">
-                            {Math.round(meal.calorie_target || meal.calorieTarget)} kcal
+                  {sortMealsByTime(day.meals).map((meal, mealIndex, arr) => {
+                    const isCustom = meal.is_custom || meal.isCustom;
+                    const recipeId = meal.recipe_id || meal.recipeId;
+                    return (
+                      <div key={meal.id || mealIndex} className="meal-item-wrapper">
+                        <div className="meal-item">
+                          <span className="meal-type-inline">{formatMealType(meal.meal_type || meal.mealType)}</span>
+                          <span className="meal-name">
+                            {meal.custom_meal_name || meal.customMealName || meal.meal_name || '(Meal)'}
                           </span>
-                        )}
+                          {(meal.calorie_target || meal.calorieTarget) && (
+                            <span className="meal-calories">
+                              {Math.round(meal.calorie_target || meal.calorieTarget)} kcal
+                            </span>
+                          )}
+                        </div>
+                        <div className="meal-actions">
+                          <button
+                            className="meal-btn meal-btn-move"
+                            onClick={() => handleMoveMeal(day.date, meal.id, 'up')}
+                            disabled={!meal.id || mealIndex === 0 || movingMealId === meal.id}
+                            title="Move up"
+                          >
+                            ↑
+                          </button>
+                          <button
+                            className="meal-btn meal-btn-move"
+                            onClick={() => handleMoveMeal(day.date, meal.id, 'down')}
+                            disabled={!meal.id || mealIndex === arr.length - 1 || movingMealId === meal.id}
+                            title="Move down"
+                          >
+                            ↓
+                          </button>
+                          {!isCustom && (
+                            <button
+                              className="meal-btn meal-btn-info"
+                              onClick={() => navigate(`/recipes/${recipeId || 'unknown'}`)}
+                              disabled={!recipeId}
+                              title="View recipe details"
+                            >
+                              ?
+                            </button>
+                          )}
+                          {!isCustom && (
+                            <button
+                              className="meal-btn meal-btn-choose"
+                              onClick={() => handleChooseRecipe(meal.id)}
+                              disabled={!meal.id}
+                              title={meal.id ? 'Choose another recipe' : 'Meal ID missing'}
+                            >
+                              ≡
+                            </button>
+                          )}
+                          {isCustom && (
+                            <button
+                              className="meal-btn meal-btn-delete"
+                              onClick={() => handleDeleteCustomMeal(meal.id)}
+                              disabled={!meal.id || customMealLoading}
+                              title="Delete custom meal"
+                            >
+                              🗑
+                            </button>
+                          )}
+                        </div>
                       </div>
-                      <div className="meal-actions">
-                        <button
-                          className="meal-btn meal-btn-move"
-                          onClick={() => handleMoveMeal(day.date, meal.id, 'up')}
-                          disabled={!meal.id || mealIndex === 0 || movingMealId === meal.id}
-                          title="Move up"
-                        >
-                          ↑
-                        </button>
-                        <button
-                          className="meal-btn meal-btn-move"
-                          onClick={() => handleMoveMeal(day.date, meal.id, 'down')}
-                          disabled={!meal.id || mealIndex === arr.length - 1 || movingMealId === meal.id}
-                          title="Move down"
-                        >
-                          ↓
-                        </button>
-                        <button
-                          className="meal-btn meal-btn-info"
-                          onClick={() => navigate(`/recipes/${meal.recipe_id || meal.recipeId || 'unknown'}`)}
-                          title="View recipe details"
-                        >
-                          ?
-                        </button>
-                        <button
-                          className="meal-btn meal-btn-choose"
-                          onClick={() => handleChooseRecipe(meal.id)}
-                          disabled={!meal.id}
-                          title={meal.id ? 'Choose another recipe' : 'Meal ID missing'}
-                        >
-                          ≡
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             ) : (
