@@ -41,6 +41,12 @@
   color: #555;
 }
 
+.meta-badge.ai-badge {
+  background-color: #ede7f6;
+  color: #5e35b1;
+  font-weight: 700;
+}
+
 .meta-badge strong {
   color: #333;
   margin-right: 5px;

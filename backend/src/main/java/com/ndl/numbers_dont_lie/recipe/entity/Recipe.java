@@ -79,6 +79,10 @@ public class Recipe {
     @JsonProperty("img")
     private String imageUrl;
 
+    @Column(name = "is_ai_generated", columnDefinition = "boolean default false")
+    @JsonProperty("is_ai_generated")
+    private boolean isAiGenerated = false;
+
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "recipe_dietary_tags", joinColumns = @JoinColumn(name = "recipe_id"))
     @Column(name = "tag", length = 64)
@@ -213,6 +217,14 @@ public class Recipe {
 
     public void setImageUrl(String imageUrl) {
         this.imageUrl = imageUrl;
+    }
+
+    public boolean isAiGenerated() {
+        return isAiGenerated;
+    }
+
+    public void setAiGenerated(boolean aiGenerated) {
+        isAiGenerated = aiGenerated;
     }
 
     public List<String> getDietaryTags() {

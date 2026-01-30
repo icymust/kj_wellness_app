@@ -35,6 +35,7 @@ export function WeeklyMealPlanPage() {
   const [customMealError, setCustomMealError] = useState(null);
   const [trendData, setTrendData] = useState(null);
   const [trendError, setTrendError] = useState(null);
+  const [generatingMealId, setGeneratingMealId] = useState(null);
 
   // Resolve userId from /protected/me if needed
   useEffect(() => {
@@ -208,6 +209,33 @@ export function WeeklyMealPlanPage() {
       setError(`Failed to move meal: ${err.message}`);
     } finally {
       setMovingMealId(null);
+    }
+  };
+
+  const handleGenerateAiRecipe = async (meal) => {
+    if (!meal || !userId) return;
+    const mealType = (meal.meal_type || meal.mealType || '').toString().toUpperCase();
+    if (!mealType) return;
+
+    try {
+      setGeneratingMealId(meal.id || mealType);
+      const response = await fetch('http://localhost:5173/api/ai/recipes/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, mealType, mealId: meal.id })
+      });
+
+      if (!response.ok) {
+        const errBody = await response.json().catch(() => ({}));
+        throw new Error(errBody.error || `Failed to generate AI recipe (${response.status})`);
+      }
+
+      await reloadWeeklyPlan(weeklyPlan?.startDate);
+    } catch (err) {
+      console.error('[AI_RECIPE] Error:', err);
+      setError(`Failed to generate AI recipe: ${err.message}`);
+    } finally {
+      setGeneratingMealId(null);
     }
   };
 
@@ -539,16 +567,16 @@ export function WeeklyMealPlanPage() {
                           <span className="meal-name">
                             {meal.custom_meal_name || meal.customMealName || meal.meal_name || '(Meal)'}
                           </span>
-                          {(meal.calorie_target || meal.calorieTarget) && (
-                            <span className="meal-calories">
-                              {Math.round(meal.calorie_target || meal.calorieTarget)} kcal
-                            </span>
-                          )}
-                        </div>
-                        <div className="meal-actions">
-                          <button
-                            className="meal-btn meal-btn-move"
-                            onClick={() => handleMoveMeal(day.date, meal.id, 'up')}
+                      </div>
+                      <div className="meal-actions">
+                        {(meal.calorie_target || meal.calorieTarget) && (
+                          <span className="meal-calories-inline">
+                            {Math.round(meal.calorie_target || meal.calorieTarget)} kcal
+                          </span>
+                        )}
+                        <button
+                          className="meal-btn meal-btn-move"
+                          onClick={() => handleMoveMeal(day.date, meal.id, 'up')}
                             disabled={!meal.id || mealIndex === 0 || movingMealId === meal.id}
                             title="Move up"
                           >
@@ -572,16 +600,26 @@ export function WeeklyMealPlanPage() {
                               ?
                             </button>
                           )}
-                          {!isCustom && (
-                            <button
-                              className="meal-btn meal-btn-choose"
-                              onClick={() => handleChooseRecipe(meal.id)}
-                              disabled={!meal.id}
-                              title={meal.id ? 'Choose another recipe' : 'Meal ID missing'}
-                            >
-                              ≡
-                            </button>
-                          )}
+                        {!isCustom && (
+                          <button
+                            className="meal-btn meal-btn-choose"
+                            onClick={() => handleChooseRecipe(meal.id)}
+                            disabled={!meal.id}
+                            title={meal.id ? 'Choose another recipe' : 'Meal ID missing'}
+                          >
+                            ≡
+                          </button>
+                        )}
+                        {!isCustom && (
+                          <button
+                            className="meal-btn meal-btn-ai"
+                            onClick={() => handleGenerateAiRecipe(meal)}
+                            disabled={generatingMealId === (meal.id || (meal.meal_type || meal.mealType))}
+                            title="Generate AI recipe"
+                          >
+                            AI
+                          </button>
+                        )}
                           {isCustom && (
                             <button
                               className="meal-btn meal-btn-delete"

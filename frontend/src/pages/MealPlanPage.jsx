@@ -28,6 +28,7 @@ export function MealPlanPage() {
   const [error, setError] = useState(null);
   const [replacingMealId, setReplacingMealId] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [generatingMealId, setGeneratingMealId] = useState(null);
 
   // Get userId from shared context (persisted in localStorage)
   const { userId, setUserId } = useUser();
@@ -246,6 +247,33 @@ export function MealPlanPage() {
       alert(`Failed to replace meal: ${err.message}`);
     } finally {
       setReplacingMealId(null);
+    }
+  };
+
+  const handleGenerateAiRecipe = async (meal) => {
+    if (!meal || !userId) return;
+    const mealType = (meal.meal_type || meal.mealType || '').toString().toUpperCase();
+    if (!mealType) return;
+
+    try {
+      setGeneratingMealId(meal.id || mealType);
+      const response = await fetch('http://localhost:5173/api/ai/recipes/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, mealType })
+      });
+
+      if (!response.ok) {
+        const errBody = await response.json().catch(() => ({}));
+        throw new Error(errBody.error || `Failed to generate AI recipe (${response.status})`);
+      }
+
+      await refreshMealPlan();
+    } catch (err) {
+      console.error('[AI_RECIPE] Error:', err);
+      alert(`Failed to generate AI recipe: ${err.message}`);
+    } finally {
+      setGeneratingMealId(null);
     }
   };
 
@@ -469,6 +497,26 @@ export function MealPlanPage() {
                     Choose Recipe
                   </button>
                 ) : null}
+
+                {/* Generate AI Recipe Button */}
+                <button
+                  className="generate-ai-recipe-button"
+                  onClick={() => handleGenerateAiRecipe(meal)}
+                  disabled={generatingMealId === (meal.id || (meal.meal_type || meal.mealType))}
+                  style={{
+                    padding: '8px 16px',
+                    backgroundColor: '#7B1FA2',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: generatingMealId ? 'not-allowed' : 'pointer',
+                    fontSize: '14px',
+                    flex: 1,
+                    minWidth: '160px'
+                  }}
+                >
+                  {generatingMealId === (meal.id || (meal.meal_type || meal.mealType)) ? 'Generating...' : 'Generate AI Recipe'}
+                </button>
 
                 {/* View Recipe Button */}
                 <button

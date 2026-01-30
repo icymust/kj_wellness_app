@@ -393,27 +393,26 @@
 }
 
 .meal-item-wrapper {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: 1fr;
+  row-gap: 8px;
   padding: 0;
 }
 
 .meal-item {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: 80px minmax(0, 1fr);
   align-items: center;
+  gap: 10px;
   padding: 10px;
   background-color: #f9f9f9;
   border-radius: 4px;
   font-size: 14px;
-  flex: 1;
   min-width: 0;
 }
 
 .meal-name {
   color: #333;
-  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -425,22 +424,22 @@
   font-weight: 700;
   color: #666;
   text-transform: uppercase;
-  margin-right: 8px;
-  flex-shrink: 0;
-}
-
-.meal-calories {
-  color: #999;
-  font-size: 12px;
-  white-space: nowrap;
-  flex-shrink: 0;
-  margin-left: 10px;
+  justify-self: start;
 }
 
 .meal-actions {
   display: flex;
   gap: 6px;
-  flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.meal-calories-inline {
+  color: #999;
+  font-size: 12px;
+  white-space: nowrap;
+  margin-right: 6px;
+  align-self: center;
 }
 
 .meal-btn {
@@ -488,6 +487,15 @@
 .meal-btn-choose:hover:not(:disabled) {
   background-color: #fb8c00;
   box-shadow: 0 2px 8px rgba(255, 152, 0, 0.3);
+}
+
+.meal-btn-ai {
+  background-color: #7B1FA2;
+}
+
+.meal-btn-ai:hover:not(:disabled) {
+  background-color: #6A1B9A;
+  box-shadow: 0 2px 8px rgba(123, 31, 162, 0.3);
 }
 
 .meal-btn-delete {

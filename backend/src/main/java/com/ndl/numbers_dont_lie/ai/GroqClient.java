@@ -20,7 +20,7 @@ import java.util.Map;
  * Reads API key from env GROQ_API_KEY. Does not persist results.
  */
 public class GroqClient {
-    private static final String DEFAULT_MODEL = "llama-3.1-70b-versatile";
+    private static final String DEFAULT_MODEL = "llama-3.3-70b-versatile";
     private final String apiKey;
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -190,17 +190,18 @@ public class GroqClient {
     }
 
     private void handleHttpErrors(HttpResponse<String> response) {
+        String body = response.body();
         if (response.statusCode() == 401) {
-            throw new AiClientException("Groq authentication failed. Check GROQ_API_KEY.");
+            throw new AiClientException("Groq authentication failed. Check GROQ_API_KEY. " + body);
         }
         if (response.statusCode() == 429) {
-            throw new AiClientException("Groq rate limit reached. Please retry later.");
+            throw new AiClientException("Groq rate limit reached. Please retry later. " + body);
         }
         if (response.statusCode() >= 500) {
-            throw new AiClientException("Groq service unavailable. Please try again later.");
+            throw new AiClientException("Groq service unavailable. Please try again later. " + body);
         }
         if (response.statusCode() >= 400) {
-            throw new AiClientException("Groq request error: " + response.statusCode());
+            throw new AiClientException("Groq request error: " + response.statusCode() + " " + body);
         }
     }
 }

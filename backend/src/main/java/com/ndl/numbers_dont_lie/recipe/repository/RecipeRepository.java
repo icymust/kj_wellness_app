@@ -12,4 +12,6 @@ public interface RecipeRepository extends JpaRepository<Recipe, Long> {
     List<Recipe> findByDietaryTagsContaining(String tag);
     List<Recipe> findByTimeMinutesLessThanEqual(Integer maxMinutes);
     List<Recipe> findByTitleContainingIgnoreCase(String keyword);
-    Optional<Recipe> findByStableId(String stableId);}
+    Optional<Recipe> findByStableId(String stableId);
+    Optional<Recipe> findTopByOrderByIdDesc();
+}

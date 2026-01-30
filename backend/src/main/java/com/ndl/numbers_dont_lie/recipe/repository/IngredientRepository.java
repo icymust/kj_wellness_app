@@ -9,4 +9,5 @@ public interface IngredientRepository extends JpaRepository<Ingredient, Long> {
     Optional<Ingredient> findByLabel(String label);
     Optional<Ingredient> findByStableId(String stableId);
     List<Ingredient> findByLabelContainingIgnoreCase(String keyword);
+    Optional<Ingredient> findTopByOrderByIdDesc();
 }

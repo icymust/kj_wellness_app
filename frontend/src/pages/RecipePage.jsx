@@ -143,6 +143,11 @@ export function RecipePage() {
                 <strong>Meal Type:</strong> {recipe.meal}
               </span>
             )}
+            {(recipe.is_ai_generated || recipe.isAiGenerated) && (
+              <span className="meta-badge ai-badge">
+                AI
+              </span>
+            )}
           </div>
           {recipe.dietary_tags && recipe.dietary_tags.length > 0 && (
             <div className="dietary-tags">

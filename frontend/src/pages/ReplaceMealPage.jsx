@@ -196,7 +196,12 @@ export function ReplaceMealPage() {
           filteredRecipes.map((recipe) => (
             <div key={recipe.id} className="recipe-card">
               <div className="recipe-content">
-                <h3 className="recipe-title">{recipe.title}</h3>
+                <h3 className="recipe-title">
+                  {recipe.title}
+                  {(recipe.is_ai_generated || recipe.isAiGenerated) && (
+                    <span className="ai-badge">AI</span>
+                  )}
+                </h3>
                 {recipe.summary && (
                   <p className="recipe-summary">{recipe.summary}</p>
                 )}
