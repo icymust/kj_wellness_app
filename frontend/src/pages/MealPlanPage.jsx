@@ -31,6 +31,9 @@ export function MealPlanPage() {
   const [generatingMealId, setGeneratingMealId] = useState(null);
   const [aiNutritionSummary, setAiNutritionSummary] = useState(null);
   const [aiNutritionLoading, setAiNutritionLoading] = useState(false);
+  const [aiSuggestions, setAiSuggestions] = useState([]);
+  const [aiSuggestionsLoading, setAiSuggestionsLoading] = useState(false);
+  const [dietaryPreferences, setDietaryPreferences] = useState([]);
   const [userGoal, setUserGoal] = useState('general_fitness');
 
   // Get userId from shared context (persisted in localStorage)
@@ -130,6 +133,25 @@ export function MealPlanPage() {
   }, [userId]);
 
   useEffect(() => {
+    const loadDietaryPreferences = async () => {
+      const token = getAccessToken();
+      if (!token) return;
+      try {
+        const data = await api.getNutritionalPreferences(token);
+        const prefs = data?.nutritionalPreferences?.dietaryPreferences;
+        if (Array.isArray(prefs)) {
+          setDietaryPreferences(prefs);
+        } else {
+          setDietaryPreferences([]);
+        }
+      } catch (err) {
+        setDietaryPreferences([]);
+      }
+    };
+    loadDietaryPreferences();
+  }, [userId]);
+
+  useEffect(() => {
     const generateInsights = async () => {
       if (!nutritionSummary || nutritionSummary.unavailable) {
         setAiNutritionSummary(null);
@@ -177,6 +199,63 @@ export function MealPlanPage() {
 
     generateInsights();
   }, [nutritionSummary, dayPlan?.date, userGoal, userId]);
+
+  useEffect(() => {
+    const generateSuggestions = async () => {
+      if (!nutritionSummary || nutritionSummary.unavailable) {
+        setAiSuggestions([]);
+        return;
+      }
+      if (!dayPlan?.date || !dayPlan?.meals) {
+        return;
+      }
+
+      setAiSuggestionsLoading(true);
+      try {
+        const meals = dayPlan.meals.map((meal) => ({
+          mealType: (meal.meal_type || meal.mealType || '').toString().toUpperCase(),
+          name: meal.custom_meal_name || meal.customMealName || meal.title || 'Meal',
+        }));
+
+        const response = await fetch('http://localhost:5173/api/ai/nutrition/suggestions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId,
+            date: dayPlan.date,
+            userGoal,
+            dietaryPreferences,
+            meals,
+            nutritionSummary: {
+              calories: nutritionSummary.total_calories ?? 0,
+              targetCalories: nutritionSummary.target_calories ?? 0,
+              protein: nutritionSummary.total_protein ?? 0,
+              targetProtein: nutritionSummary.target_protein ?? 0,
+              carbs: nutritionSummary.total_carbs ?? 0,
+              targetCarbs: nutritionSummary.target_carbs ?? 0,
+              fats: nutritionSummary.total_fats ?? 0,
+              targetFats: nutritionSummary.target_fats ?? 0,
+              nutritionEstimated: !!nutritionSummary.nutrition_estimated,
+            },
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to generate nutrition suggestions');
+        }
+
+        const data = await response.json();
+        const suggestions = Array.isArray(data?.suggestions) ? data.suggestions : [];
+        setAiSuggestions(suggestions);
+      } catch (err) {
+        setAiSuggestions([]);
+      } finally {
+        setAiSuggestionsLoading(false);
+      }
+    };
+
+    generateSuggestions();
+  }, [nutritionSummary, dayPlan?.date, dayPlan?.meals, userGoal, dietaryPreferences, userId]);
 
   /**
    * Refresh meal plan - called manually by user when profile changes
@@ -489,6 +568,20 @@ export function MealPlanPage() {
                 <p className="ai-nutrition-loading">Generating nutrition insights…</p>
               ) : (
                 <p className="ai-nutrition-text">{aiNutritionSummary}</p>
+              )}
+            </div>
+          )}
+          {(aiSuggestionsLoading || aiSuggestions.length > 0) && !nutritionSummary.unavailable && (
+            <div className="ai-nutrition-suggestions">
+              <h3>AI Nutrition Suggestions</h3>
+              {aiSuggestionsLoading ? (
+                <p className="ai-nutrition-loading">Generating suggestions…</p>
+              ) : (
+                <ul className="ai-nutrition-list">
+                  {aiSuggestions.map((suggestion, idx) => (
+                    <li key={idx}>{suggestion}</li>
+                  ))}
+                </ul>
               )}
             </div>
           )}
