@@ -6,6 +6,7 @@ import com.ndl.numbers_dont_lie.mealplan.dto.WeeklyNutritionSummary;
 import com.ndl.numbers_dont_lie.mealplan.dto.WeeklyPlanResponse;
 import com.ndl.numbers_dont_lie.mealplan.entity.*;
 import com.ndl.numbers_dont_lie.mealplan.repository.MealPlanRepository;
+import com.ndl.numbers_dont_lie.mealplan.repository.MealPlanVersionRepository;
 import com.ndl.numbers_dont_lie.mealplan.service.NutritionSummaryService;
 import com.ndl.numbers_dont_lie.profile.entity.ProfileEntity;
 import com.ndl.numbers_dont_lie.profile.repository.ProfileRepository;
@@ -90,6 +91,7 @@ public class WeeklyMealPlanService {
     
     private final DayPlanAssemblerService dayPlanAssembler;
     private final MealPlanRepository mealPlanRepository;
+    private final MealPlanVersionRepository mealPlanVersionRepository;
     private final UserRepository userRepository;
     private final ProfileRepository profileRepository;
     private final NutritionSummaryService nutritionSummaryService;
@@ -97,11 +99,13 @@ public class WeeklyMealPlanService {
     public WeeklyMealPlanService(
             DayPlanAssemblerService dayPlanAssembler,
             MealPlanRepository mealPlanRepository,
+            MealPlanVersionRepository mealPlanVersionRepository,
             UserRepository userRepository,
             ProfileRepository profileRepository,
             NutritionSummaryService nutritionSummaryService) {
         this.dayPlanAssembler = dayPlanAssembler;
         this.mealPlanRepository = mealPlanRepository;
+        this.mealPlanVersionRepository = mealPlanVersionRepository;
         this.userRepository = userRepository;
         this.profileRepository = profileRepository;
         this.nutritionSummaryService = nutritionSummaryService;
@@ -131,7 +135,7 @@ public class WeeklyMealPlanService {
      * @return Complete MealPlan with 7 DayPlans
      * @throws IllegalStateException if prerequisites not met
      */
-    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    @Transactional
     public MealPlan generateWeeklyPlan(Long userId, LocalDate startDate) {
         logger.info("[WEEK_PLAN] Generating week for userId={} startDate={}", 
             userId, startDate);
@@ -146,13 +150,14 @@ public class WeeklyMealPlanService {
         
         String timezone = profile.getTimezone() != null ? profile.getTimezone() : "UTC";
         
-        // Step 2: Create MealPlan (root aggregate)
+        // Step 2: Create + persist MealPlan (root aggregate)
         MealPlan mealPlan = new MealPlan(userId, PlanDuration.WEEKLY, timezone);
+        mealPlan = mealPlanRepository.save(mealPlan);
         
         // Step 3: Create MealPlanVersion (version 1, initial creation)
         MealPlanVersion version = new MealPlanVersion(
-            mealPlan, 
-            1, 
+            mealPlan,
+            1,
             VersionReason.INITIAL_GENERATION
         );
         
@@ -163,6 +168,7 @@ public class WeeklyMealPlanService {
         int failureCount = 0;
         
         Set<String> weekUsedTitles = new java.util.HashSet<>();
+        Set<String> usedRecipeIds = new java.util.HashSet<>();
 
         for (int dayOffset = 0; dayOffset < 7; dayOffset++) {
             LocalDate currentDate = startDate.plusDays(dayOffset);
@@ -173,10 +179,13 @@ public class WeeklyMealPlanService {
                 // STEP 5.1: Reuse daily assembly logic
                 // This internally uses STEP 4.1 (strategy), STEP 4.2 (structure),
                 // STEP 4.3.1 (RAG), and STEP 4.3.2 (recipe generation)
-                DayPlan dayPlan = dayPlanAssembler.assembleDayPlan(userId, currentDate, version);
+                DayPlan dayPlan = dayPlanAssembler.assembleDayPlan(userId, currentDate, version, null, usedRecipeIds);
 
                 // Soft constraint: log duplicate titles across the week
                 dayPlan.getMeals().forEach(meal -> {
+                    if (meal.getRecipeId() != null) {
+                        usedRecipeIds.add(meal.getRecipeId());
+                    }
                     String title = meal.getCustomMealName();
                     if (title != null && weekUsedTitles.stream().anyMatch(t -> t.equalsIgnoreCase(title))) {
                         logger.info("[WEEK_PLAN] Repeat title across week: {} on {}", title, currentDate);
@@ -199,7 +208,7 @@ public class WeeklyMealPlanService {
                 
                 // Create placeholder DayPlan on failure
                 // Allows partial week to be saved and individual days regenerated later
-                DayPlan placeholderDay = createPlaceholderDayPlan(version, currentDate);
+                DayPlan placeholderDay = createPlaceholderDayPlan(version, currentDate, userId);
                 dayPlans.add(placeholderDay);
                 DailyNutritionSummary emptySummary = new DailyNutritionSummary();
                 emptySummary.setDate(currentDate);
@@ -214,12 +223,14 @@ public class WeeklyMealPlanService {
             version.addDayPlan(dayPlan);
         }
         
-        // Step 6: Link version to MealPlan
+        // Step 6: Link version to MealPlan and persist version + day plans
         mealPlan.setCurrentVersion(version);
         mealPlan.getVersions().add(version);
         version.setMealPlan(mealPlan);
+        MealPlanVersion savedVersion = mealPlanVersionRepository.save(version);
         
-        // Step 7: Persist (cascade saves version and day plans)
+        // Step 7: Update MealPlan currentVersion reference
+        mealPlan.setCurrentVersion(savedVersion);
         MealPlan savedPlan = mealPlanRepository.save(mealPlan);
         WeeklyNutritionSummary weeklySummary = aggregateWeeklyNutrition(dailySummaries);
         logger.info("[WEEK_PLAN] Weekly nutrition: cal={} target={} est={}",
@@ -284,7 +295,7 @@ public class WeeklyMealPlanService {
                 dailySummaries.add(nutritionSummaryService.generateSummary(dayPlan));
             } catch (Exception e) {
                 logger.error("[WEEK_PLAN] Failed to generate day {}: {}", currentDate, e.getMessage(), e);
-                DayPlan placeholderDay = createPlaceholderDayPlan(tempVersion, currentDate);
+                DayPlan placeholderDay = createPlaceholderDayPlan(tempVersion, currentDate, userId);
                 dayPlans.add(placeholderDay);
                 DailyNutritionSummary emptySummary = new DailyNutritionSummary();
                 emptySummary.setDate(currentDate);
@@ -306,6 +317,20 @@ public class WeeklyMealPlanService {
             }
         }
         
+        return new WeeklyPlanResponse(startDate, endDate, dayPlans, weeklySummary);
+    }
+
+    /**
+     * Build a WeeklyPlanResponse from existing day plans (already persisted).
+     * Computes daily and weekly nutrition summaries.
+     */
+    public WeeklyPlanResponse buildWeeklyPlanResponse(LocalDate startDate, List<DayPlan> dayPlans) {
+        List<DailyNutritionSummary> dailySummaries = new ArrayList<>();
+        for (DayPlan dayPlan : dayPlans) {
+            dailySummaries.add(nutritionSummaryService.generateSummary(dayPlan));
+        }
+        WeeklyNutritionSummary weeklySummary = aggregateWeeklyNutrition(dailySummaries);
+        LocalDate endDate = startDate.plusDays(6);
         return new WeeklyPlanResponse(startDate, endDate, dayPlans, weeklySummary);
     }
 
@@ -366,10 +391,11 @@ public class WeeklyMealPlanService {
      * - Enables incremental fixes without full regeneration
      * - User can identify and retry failed days
      */
-    private DayPlan createPlaceholderDayPlan(MealPlanVersion version, LocalDate date) {
+    private DayPlan createPlaceholderDayPlan(MealPlanVersion version, LocalDate date, Long userId) {
         logger.debug("Creating placeholder DayPlan for date: {}", date);
         
         DayPlan placeholder = new DayPlan(version, date);
+        placeholder.setUserId(userId);
         // No meals added - empty list indicates generation failure
         
         return placeholder;

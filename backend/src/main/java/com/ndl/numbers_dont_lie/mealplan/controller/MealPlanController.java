@@ -23,6 +23,7 @@ import com.ndl.numbers_dont_lie.recipe.repository.RecipeRepository;
 import com.ndl.numbers_dont_lie.recipe.entity.Recipe;
 import com.ndl.numbers_dont_lie.mealplan.service.DayPlanAssemblerService;
 import com.ndl.numbers_dont_lie.mealplan.service.MealReplacementService;
+import com.ndl.numbers_dont_lie.mealplan.service.MealMoveService;
 import com.ndl.numbers_dont_lie.mealplan.service.NutritionSummaryService;
 import com.ndl.numbers_dont_lie.mealplan.service.WeeklyMealPlanService;
 import com.ndl.numbers_dont_lie.mealplan.service.CustomMealService;
@@ -76,6 +77,7 @@ public class MealPlanController {
     private final CustomMealService customMealService;
     private final MealRepository mealRepository;
     private final RecipeRepository recipeRepository;
+    private final MealMoveService mealMoveService;
     
     public MealPlanController(
             DayPlanAssemblerService dayPlanAssemblerService,
@@ -90,7 +92,8 @@ public class MealPlanController {
             MealPlanVersionRepository mealPlanVersionRepository,
             CustomMealService customMealService,
             MealRepository mealRepository,
-            RecipeRepository recipeRepository) {
+            RecipeRepository recipeRepository,
+            MealMoveService mealMoveService) {
         this.dayPlanAssemblerService = dayPlanAssemblerService;
         this.nutritionSummaryService = nutritionSummaryService;
         this.weeklyMealPlanService = weeklyMealPlanService;
@@ -104,6 +107,7 @@ public class MealPlanController {
         this.customMealService = customMealService;
         this.mealRepository = mealRepository;
         this.recipeRepository = recipeRepository;
+        this.mealMoveService = mealMoveService;
     }
     
     /**
@@ -129,7 +133,8 @@ public class MealPlanController {
         
         logger.info("[MEAL_PLAN] Fetching day plan for userId={}, date={}", userId, date);
         // 1) try existing persistent day plan (with meals eagerly loaded)
-        Optional<DayPlan> existingPlan = dayPlanRepository.findByUserIdAndDateWithMeals(userId, date);
+        Optional<DayPlan> existingPlan = dayPlanRepository.findByUserIdAndDateWithMealsAndDuration(
+                userId, date, PlanDuration.DAILY);
         if (existingPlan.isPresent()) {
             DayPlan plan = existingPlan.get();
             logger.info("[MEAL_PLAN] Returning persisted plan with id={} and {} meals", plan.getId(), plan.getMeals().size());
@@ -274,7 +279,8 @@ public class MealPlanController {
         
         try {
             // 1) First, check if we have an existing day plan in DB (with meals eagerly loaded)
-            Optional<DayPlan> existingPlan = dayPlanRepository.findByUserIdAndDateWithMeals(userId, date);
+            Optional<DayPlan> existingPlan = dayPlanRepository.findByUserIdAndDateWithMealsAndDuration(
+                    userId, date, PlanDuration.DAILY);
             
             DayPlan dayPlan;
             if (existingPlan.isPresent()) {
@@ -345,17 +351,126 @@ public class MealPlanController {
             ));
         }
 
-        logger.info("[WEEK_PLAN] Generating weekly plan for userId={} startDate={}", userId, startDate);
+        logger.info("[WEEK_PLAN] Loading weekly plan for userId={} startDate={}", userId, startDate);
         try {
-            WeeklyPlanResponse response = weeklyMealPlanService.generateWeeklyPlanPreview(userId, startDate);
-            return ResponseEntity.ok(response);
+            LocalDate endDate = startDate.plusDays(6);
+
+            // 1) Try to load most recent persisted weekly plan from DB
+            java.util.Optional<MealPlan> latestWeeklyPlan = mealPlanRepository
+                .findTopByUserIdAndDurationOrderByIdDesc(userId, PlanDuration.WEEKLY);
+
+            if (latestWeeklyPlan.isPresent()) {
+                MealPlan plan = latestWeeklyPlan.get();
+                java.util.List<DayPlan> persistedDays = dayPlanRepository
+                    .findByMealPlanIdAndDateRangeWithMeals(plan.getId(), startDate, endDate);
+                if (!persistedDays.isEmpty()) {
+                    logger.info("[WEEK_PLAN] Found {} persisted weekly day plans (planId={})", persistedDays.size(), plan.getId());
+
+                    // Fill missing dates with empty placeholders (do not persist)
+                    java.util.Map<LocalDate, DayPlan> byDate = new java.util.HashMap<>();
+                    for (DayPlan day : persistedDays) {
+                        byDate.put(day.getDate(), day);
+                    }
+                    java.util.List<DayPlan> fullWeek = new java.util.ArrayList<>();
+                    for (int dayOffset = 0; dayOffset < 7; dayOffset++) {
+                        LocalDate date = startDate.plusDays(dayOffset);
+                        DayPlan dayPlan = byDate.get(date);
+                        if (dayPlan == null) {
+                            DayPlan placeholder = new DayPlan();
+                            placeholder.setDate(date);
+                            placeholder.setUserId(userId);
+                            placeholder.setMeals(java.util.Collections.emptyList());
+                            dayPlan = placeholder;
+                        }
+                        fullWeek.add(dayPlan);
+                    }
+
+                    WeeklyPlanResponse response = weeklyMealPlanService.buildWeeklyPlanResponse(startDate, fullWeek);
+                    return ResponseEntity.ok(response);
+                }
+            }
+
+            // 2) No persisted weekly plan found → generate and persist a new weekly plan
+            logger.info("[WEEK_PLAN] No persisted weekly plan found, generating new plan");
+            if (aiStrategyService.getCachedStrategy(String.valueOf(userId)) == null ||
+                aiStrategyService.getCachedMealStructure(String.valueOf(userId)) == null) {
+                logger.info("[WEEK_PLAN] AI cache missing, bootstrapping for userId={}", userId);
+                bootstrapAiForUser(userId);
+            }
+            try {
+                MealPlan savedPlan = weeklyMealPlanService.generateWeeklyPlan(userId, startDate);
+                MealPlanVersion currentVersion = savedPlan.getCurrentVersion();
+                java.util.List<DayPlan> dayPlans = currentVersion != null ? currentVersion.getDayPlans() : java.util.Collections.emptyList();
+                dayPlans.sort(java.util.Comparator.comparing(DayPlan::getDate));
+
+                WeeklyPlanResponse response = weeklyMealPlanService.buildWeeklyPlanResponse(startDate, dayPlans);
+                return ResponseEntity.ok(response);
+            } catch (IllegalStateException e) {
+                String message = e.getMessage() != null ? e.getMessage() : "";
+                if (message.contains("AI strategy not found") || message.contains("Meal structure not found")) {
+                    logger.info("[WEEK_PLAN] Missing AI cache, auto-bootstrapping for userId={}", userId);
+                    bootstrapAiForUser(userId);
+
+                    MealPlan savedPlan = weeklyMealPlanService.generateWeeklyPlan(userId, startDate);
+                    MealPlanVersion currentVersion = savedPlan.getCurrentVersion();
+                    java.util.List<DayPlan> dayPlans = currentVersion != null ? currentVersion.getDayPlans() : java.util.Collections.emptyList();
+                    dayPlans.sort(java.util.Comparator.comparing(DayPlan::getDate));
+
+                    WeeklyPlanResponse response = weeklyMealPlanService.buildWeeklyPlanResponse(startDate, dayPlans);
+                    return ResponseEntity.ok(response);
+                }
+                throw e;
+            }
         } catch (Exception e) {
-            logger.error("[WEEK_PLAN] Failed to generate week plan: {}", e.getMessage(), e);
+            logger.error("[WEEK_PLAN] Failed to load week plan: {}", e.getMessage(), e);
             LocalDate endDate = startDate.plusDays(6);
             WeeklyPlanResponse fallback = new WeeklyPlanResponse(
-                startDate, 
-                endDate, 
-                java.util.Collections.emptyList(), 
+                startDate,
+                endDate,
+                java.util.Collections.emptyList(),
+                new com.ndl.numbers_dont_lie.mealplan.dto.WeeklyNutritionSummary()
+            );
+            return ResponseEntity.ok(fallback);
+        }
+    }
+
+    /**
+     * Force regenerate weekly plan (new version).
+     */
+    @PostMapping("/week/refresh")
+    public ResponseEntity<?> refreshWeeklyPlan(
+            @RequestParam(name = "userId") Long userId,
+            @RequestParam(name = "startDate", required = true)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+            LocalDate startDate) {
+        if (startDate == null) {
+            return ResponseEntity.badRequest().body(Map.of(
+                "error", "Missing required parameter: startDate",
+                "message", "startDate must be provided in ISO-8601 format (YYYY-MM-DD)"
+            ));
+        }
+
+        try {
+            if (aiStrategyService.getCachedStrategy(String.valueOf(userId)) == null ||
+                aiStrategyService.getCachedMealStructure(String.valueOf(userId)) == null) {
+                logger.info("[WEEK_PLAN] Refresh: AI cache missing, bootstrapping for userId={}", userId);
+                bootstrapAiForUser(userId);
+            }
+
+            MealPlan savedPlan = weeklyMealPlanService.generateWeeklyPlan(userId, startDate);
+            MealPlanVersion currentVersion = savedPlan.getCurrentVersion();
+            java.util.List<DayPlan> dayPlans = currentVersion != null ? currentVersion.getDayPlans() : java.util.Collections.emptyList();
+            dayPlans.sort(java.util.Comparator.comparing(DayPlan::getDate));
+
+            WeeklyPlanResponse response = weeklyMealPlanService.buildWeeklyPlanResponse(startDate, dayPlans);
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            logger.error("[WEEK_PLAN] Refresh failed: {}", e.getMessage(), e);
+            LocalDate endDate = startDate.plusDays(6);
+            WeeklyPlanResponse fallback = new WeeklyPlanResponse(
+                startDate,
+                endDate,
+                java.util.Collections.emptyList(),
                 new com.ndl.numbers_dont_lie.mealplan.dto.WeeklyNutritionSummary()
             );
             return ResponseEntity.ok(fallback);
@@ -468,6 +583,42 @@ public class MealPlanController {
             return ResponseEntity.status(HttpStatus.CONFLICT)
                     .body(null); // 409 Conflict - cannot find suitable replacement
         }
+    }
+
+    /**
+     * Reorder meals within a day by moving a meal up or down in the time order.
+     *
+     * POST /api/meal-plans/meals/{mealId}/move?direction=up|down
+     *
+     * Swaps planned_time with the adjacent meal to preserve ordering.
+     */
+    @PostMapping("/meals/{mealId}/move")
+    @Transactional
+    public ResponseEntity<?> moveMeal(
+            @PathVariable Long mealId,
+            @RequestParam(name = "direction") String direction) {
+        logger.info("[MEAL_MOVE] Request: mealId={}, direction={}", mealId, direction);
+        DayPlan dayPlan = mealMoveService.moveMeal(mealId, direction);
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("id", dayPlan.getId());
+        response.put("date", dayPlan.getDate());
+        response.put("user_id", dayPlan.getUserId());
+        response.put("context_hash", dayPlan.getContextHash());
+        response.put("meals", dayPlan.getMeals());
+
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Alias for moveMeal to support day-scoped routes.
+     */
+    @PostMapping("/day/meals/{mealId}/move")
+    @Transactional
+    public ResponseEntity<?> moveMealInDay(
+            @PathVariable Long mealId,
+            @RequestParam(name = "direction") String direction) {
+        return moveMeal(mealId, direction);
     }
     
     /**
@@ -586,7 +737,8 @@ public class MealPlanController {
         
         try {
             // 1) Delete existing day plan to force regeneration (with meals)
-            Optional<DayPlan> existingPlan = dayPlanRepository.findByUserIdAndDateWithMeals(userId, date);
+            Optional<DayPlan> existingPlan = dayPlanRepository.findByUserIdAndDateWithMealsAndDuration(
+                    userId, date, PlanDuration.DAILY);
             if (existingPlan.isPresent()) {
                 logger.info("[MEAL_PLAN] Deleting existing plan id={} for refresh", existingPlan.get().getId());
                 dayPlanRepository.delete(existingPlan.get());

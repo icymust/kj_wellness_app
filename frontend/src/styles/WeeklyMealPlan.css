@@ -269,6 +269,15 @@
   white-space: nowrap;
 }
 
+.meal-type-inline {
+  font-size: 11px;
+  font-weight: 700;
+  color: #666;
+  text-transform: uppercase;
+  margin-right: 8px;
+  flex-shrink: 0;
+}
+
 .meal-calories {
   color: #999;
   font-size: 12px;
@@ -321,10 +330,28 @@
   box-shadow: 0 2px 8px rgba(76, 175, 80, 0.3);
 }
 
+.meal-btn-choose {
+  background-color: #ff9800;
+}
+
+.meal-btn-choose:hover:not(:disabled) {
+  background-color: #fb8c00;
+  box-shadow: 0 2px 8px rgba(255, 152, 0, 0.3);
+}
+
 .meal-btn:disabled {
   background-color: #ccc;
   cursor: not-allowed;
   opacity: 0.7;
+}
+
+.meal-btn-move {
+  background-color: #607d8b;
+}
+
+.meal-btn-move:hover:not(:disabled) {
+  background-color: #546e7a;
+  box-shadow: 0 2px 8px rgba(96, 125, 139, 0.3);
 }
 
 /* No Meals Message */

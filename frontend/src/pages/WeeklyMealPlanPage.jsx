@@ -17,6 +17,7 @@ import { useNavigate } from 'react-router-dom';
 import '../styles/WeeklyMealPlan.css';
 import { useUser } from '../contexts/UserContext';
 import { getAccessToken } from '../lib/tokens';
+import { api } from '../lib/api';
 
 export function WeeklyMealPlanPage() {
   const navigate = useNavigate();
@@ -26,7 +27,7 @@ export function WeeklyMealPlanPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [replacingMeal, setReplacingMeal] = useState(null);
+  const [movingMealId, setMovingMealId] = useState(null);
 
   // Resolve userId from /protected/me if needed
   useEffect(() => {
@@ -118,8 +119,8 @@ export function WeeklyMealPlanPage() {
       const now = new Date();
       const today = now.toLocaleDateString('en-CA');
       
-      const weekUrl = `http://localhost:5173/api/meal-plans/week?userId=${userId}&startDate=${today}`;
-      const response = await fetch(weekUrl);
+      const weekUrl = `http://localhost:5173/api/meal-plans/week/refresh?userId=${userId}&startDate=${today}`;
+      const response = await fetch(weekUrl, { method: 'POST' });
       
       if (response.ok) {
         const data = await response.json();
@@ -137,60 +138,30 @@ export function WeeklyMealPlanPage() {
     }
   };
 
-  /**
-   * Replace a meal with a new one
-   * Calls backend endpoint to generate a fresh meal for the specific date and meal type
-   */
-  const handleReplaceMeal = async (date, mealType) => {
-    console.log('[MEAL_REPLACE] Button clicked, date:', date, 'mealType:', mealType);
-    
-    if (!date || !mealType) {
-      console.warn('[MEAL_REPLACE] Skip: date or mealType is missing');
-      return;
-    }
-    
+  const handleChooseRecipe = (mealId) => {
+    if (!mealId) return;
+    navigate(`/meals/replace/${mealId}?returnTo=weekly`);
+  };
+
+  const handleMoveMeal = async (dayDate, mealId, direction) => {
+    if (!mealId || !dayDate) return;
     try {
-      const key = `${date}-${mealType}`;
-      setReplacingMeal(key);
-      console.log(`[MEAL_REPLACE] Replacing meal for ${date} ${mealType}`);
-      
-      // Call backend endpoint to generate a new meal
-      const response = await fetch(
-        `http://localhost:5173/api/meal-plans/week/meals/replace?userId=${userId}&date=${date}&mealType=${mealType}`,
-        { method: 'POST' }
-      );
-      
-      if (!response.ok) {
-        throw new Error(`Failed to replace meal (${response.status})`);
-      }
-      
-      const newMeal = await response.json();
-      console.log(`[MEAL_REPLACE] Success: ${newMeal.custom_meal_name || newMeal.customMealName}`);
-      
-      // Update only the specific meal in the weekly plan
+      setMovingMealId(mealId);
+      const token = getAccessToken();
+      const updatedDay = await api.moveMeal(token, mealId, direction);
+
       setWeeklyPlan(prevPlan => ({
         ...prevPlan,
         days: prevPlan.days.map(day => {
-          if (day.date !== date) return day;
-          
-          return {
-            ...day,
-            meals: day.meals.map(meal => {
-              const currentMealType = (meal.meal_type || meal.mealType || '').toUpperCase();
-              if (currentMealType === mealType.toUpperCase()) {
-                return newMeal;
-              }
-              return meal;
-            })
-          };
+          if (day.date !== dayDate) return day;
+          return updatedDay;
         })
       }));
-      
     } catch (err) {
-      console.error(`[MEAL_REPLACE] Error: ${err.message}`);
-      setError(`Failed to replace meal: ${err.message}`);
+      console.error('[MEAL_MOVE] Error:', err.message);
+      setError(`Failed to move meal: ${err.message}`);
     } finally {
-      setReplacingMeal(null);
+      setMovingMealId(null);
     }
   };
 
@@ -347,44 +318,56 @@ export function WeeklyMealPlanPage() {
 
             {day.meals && day.meals.length > 0 ? (
               <div className="day-meals">
-                {groupMealsByType(day.meals).map((mealGroup, groupIndex) => (
-                  <div key={groupIndex} className="meal-group">
-                    <h3 className="meal-type-label">{formatMealType(mealGroup.type)}</h3>
-                    <div className="meals-list">
-                      {mealGroup.meals.map((meal, mealIndex) => (
-                        <div key={mealIndex} className="meal-item-wrapper">
-                          <div className="meal-item">
-                            <span className="meal-name">
-                              {meal.custom_meal_name || meal.customMealName || meal.meal_name || '(Meal)'}
-                            </span>
-                            {(meal.calorie_target || meal.calorieTarget) && (
-                              <span className="meal-calories">
-                                {Math.round(meal.calorie_target || meal.calorieTarget)} kcal
-                              </span>
-                            )}
-                          </div>
-                          <div className="meal-actions">
-                            <button
-                              className="meal-btn meal-btn-info"
-                              onClick={() => navigate(`/recipes/${meal.recipe_id || meal.recipeId || 'unknown'}`)}
-                              title="View recipe details"
-                            >
-                              ?
-                            </button>
-                            <button
-                              className="meal-btn meal-btn-replace"
-                              onClick={() => handleReplaceMeal(day.date, meal.meal_type || meal.mealType)}
-                              disabled={replacingMeal === `${day.date}-${meal.meal_type || meal.mealType}`}
-                              title="Replace this meal"
-                            >
-                              ↻
-                            </button>
-                          </div>
-                        </div>
-                      ))}
+                <div className="meals-list">
+                  {sortMealsByTime(day.meals).map((meal, mealIndex, arr) => (
+                    <div key={meal.id || mealIndex} className="meal-item-wrapper">
+                      <div className="meal-item">
+                        <span className="meal-type-inline">{formatMealType(meal.meal_type || meal.mealType)}</span>
+                        <span className="meal-name">
+                          {meal.custom_meal_name || meal.customMealName || meal.meal_name || '(Meal)'}
+                        </span>
+                        {(meal.calorie_target || meal.calorieTarget) && (
+                          <span className="meal-calories">
+                            {Math.round(meal.calorie_target || meal.calorieTarget)} kcal
+                          </span>
+                        )}
+                      </div>
+                      <div className="meal-actions">
+                        <button
+                          className="meal-btn meal-btn-move"
+                          onClick={() => handleMoveMeal(day.date, meal.id, 'up')}
+                          disabled={!meal.id || mealIndex === 0 || movingMealId === meal.id}
+                          title="Move up"
+                        >
+                          ↑
+                        </button>
+                        <button
+                          className="meal-btn meal-btn-move"
+                          onClick={() => handleMoveMeal(day.date, meal.id, 'down')}
+                          disabled={!meal.id || mealIndex === arr.length - 1 || movingMealId === meal.id}
+                          title="Move down"
+                        >
+                          ↓
+                        </button>
+                        <button
+                          className="meal-btn meal-btn-info"
+                          onClick={() => navigate(`/recipes/${meal.recipe_id || meal.recipeId || 'unknown'}`)}
+                          title="View recipe details"
+                        >
+                          ?
+                        </button>
+                        <button
+                          className="meal-btn meal-btn-choose"
+                          onClick={() => handleChooseRecipe(meal.id)}
+                          disabled={!meal.id}
+                          title={meal.id ? 'Choose another recipe' : 'Meal ID missing'}
+                        >
+                          ≡
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             ) : (
               <div className="no-meals">
@@ -401,27 +384,6 @@ export function WeeklyMealPlanPage() {
 /**
  * Group meals by type for display
  */
-function groupMealsByType(meals) {
-  const grouped = {};
-  
-  meals.forEach(meal => {
-    // Handle both camelCase and snake_case field names from API
-    const mealType = (meal.mealType || meal.meal_type || 'OTHER').toUpperCase();
-    if (!grouped[mealType]) {
-      grouped[mealType] = { type: mealType, meals: [] };
-    }
-    grouped[mealType].meals.push(meal);
-  });
-
-  // Sort by meal order: breakfast, lunch, dinner, snack
-  const mealOrder = ['BREAKFAST', 'LUNCH', 'DINNER', 'SNACK'];
-  return Object.values(grouped).sort((a, b) => {
-    const indexA = mealOrder.indexOf(a.type);
-    const indexB = mealOrder.indexOf(b.type);
-    return (indexA >= 0 ? indexA : 999) - (indexB >= 0 ? indexB : 999);
-  });
-}
-
 /**
  * Format meal type for display
  */
@@ -434,4 +396,19 @@ function formatMealType(mealType) {
     'OTHER': 'Other'
   };
   return translations[mealType] || mealType;
+}
+
+/**
+ * Sort meals by planned time (fallback to meal type order)
+ */
+function sortMealsByTime(meals) {
+  const mealOrder = ['BREAKFAST', 'LUNCH', 'DINNER', 'SNACK'];
+  return [...meals].sort((a, b) => {
+    const aTime = a.planned_time || a.plannedTime;
+    const bTime = b.planned_time || b.plannedTime;
+    if (aTime && bTime) return aTime.localeCompare(bTime);
+    const aType = (a.meal_type || a.mealType || 'OTHER').toUpperCase();
+    const bType = (b.meal_type || b.mealType || 'OTHER').toUpperCase();
+    return mealOrder.indexOf(aType) - mealOrder.indexOf(bType);
+  });
 }

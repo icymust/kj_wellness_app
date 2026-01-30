@@ -152,5 +152,7 @@ export const api = {
   // Meal plans and recipes
   getMealById: (token, mealId) => request(`/api/meal-plans/${mealId}`, { token }),
   replaceMeal: (token, mealId, body) => request(`/api/meal-plans/${mealId}/replace`, { method: "PUT", token, body }),
+  moveMeal: (token, mealId, direction) =>
+    request(`/api/meal-plans/meals/${mealId}/move?direction=${encodeURIComponent(direction)}`, { method: "POST", token }),
   getRecipes: (token, mealType) => request(`/api/recipes${mealType ? `?meal=${mealType}` : ''}`, { token }),
 };
