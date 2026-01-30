@@ -36,6 +36,9 @@ export function WeeklyMealPlanPage() {
   const [trendData, setTrendData] = useState(null);
   const [trendError, setTrendError] = useState(null);
   const [generatingMealId, setGeneratingMealId] = useState(null);
+  const [weeklyInsights, setWeeklyInsights] = useState(null);
+  const [weeklyInsightsLoading, setWeeklyInsightsLoading] = useState(false);
+  const [userGoal, setUserGoal] = useState('maintenance');
 
   // Resolve userId from /protected/me if needed
   useEffect(() => {
@@ -115,6 +118,77 @@ export function WeeklyMealPlanPage() {
     if (!userId) return;
     loadWeeklyPlan();
   }, [userId, loadWeeklyPlan]);
+
+  useEffect(() => {
+    const loadGoal = async () => {
+      const token = getAccessToken();
+      if (!token) return;
+      try {
+        const data = await api.getProfile(token);
+        const goal = data?.profile?.goal;
+        if (goal) {
+          setUserGoal(goal);
+        }
+      } catch (err) {
+        console.warn('[WEEK_PLAN_PAGE] Failed to load profile goal', err);
+      }
+    };
+    loadGoal();
+  }, [userId]);
+
+  useEffect(() => {
+    const generateWeeklyInsights = async () => {
+      if (!weeklyPlan?.weeklyNutrition || !trendData?.days?.length || !weeklyPlan?.startDate || !weeklyPlan?.endDate) {
+        setWeeklyInsights(null);
+        return;
+      }
+
+      setWeeklyInsightsLoading(true);
+      try {
+        const dailySummaries = trendData.days.map((day) => ({
+          date: day.date,
+          calories: day.actualCalories ?? 0,
+          targetCalories: day.targetCalories ?? 0,
+        }));
+
+        const response = await fetch('http://localhost:5173/api/ai/nutrition/weekly-insights', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId,
+            startDate: weeklyPlan.startDate,
+            endDate: weeklyPlan.endDate,
+            userGoal,
+            weeklyNutrition: {
+              totalCalories: weeklyPlan.weeklyNutrition.totalCalories ?? 0,
+              targetCalories: weeklyPlan.weeklyNutrition.targetCalories ?? 0,
+              totalProtein: weeklyPlan.weeklyNutrition.totalProtein ?? 0,
+              targetProtein: weeklyPlan.weeklyNutrition.targetProtein ?? 0,
+              totalCarbs: weeklyPlan.weeklyNutrition.totalCarbs ?? 0,
+              targetCarbs: weeklyPlan.weeklyNutrition.targetCarbs ?? 0,
+              totalFats: weeklyPlan.weeklyNutrition.totalFats ?? 0,
+              targetFats: weeklyPlan.weeklyNutrition.targetFats ?? 0,
+              nutritionEstimated: !!weeklyPlan.weeklyNutrition.nutritionEstimated,
+            },
+            dailySummaries,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to generate weekly insights');
+        }
+
+        const data = await response.json();
+        setWeeklyInsights(data?.summary || null);
+      } catch {
+        setWeeklyInsights(null);
+      } finally {
+        setWeeklyInsightsLoading(false);
+      }
+    };
+
+    generateWeeklyInsights();
+  }, [weeklyPlan, trendData, userGoal, userId]);
 
   const reloadWeeklyPlan = async (startDateOverride) => {
     if (!userId) return;
@@ -448,6 +522,17 @@ export function WeeklyMealPlanPage() {
 
           {weeklyNutrition.nutritionEstimated && (
             <p className="nutrition-note">* Nutrition estimated</p>
+          )}
+        </div>
+      )}
+
+      {(weeklyInsightsLoading || weeklyInsights) && (
+        <div className="weekly-ai-insights">
+          <h2>AI Weekly Nutrition Insights</h2>
+          {weeklyInsightsLoading ? (
+            <p className="weekly-ai-loading">Analyzing weekly nutrition…</p>
+          ) : (
+            <p className="weekly-ai-text">{weeklyInsights}</p>
           )}
         </div>
       )}

@@ -131,6 +131,33 @@
   border: 1px solid #e0e0e0;
 }
 
+.weekly-ai-insights {
+  background-color: #fff;
+  border-radius: 10px;
+  padding: 20px;
+  margin-bottom: 30px;
+  border: 1px solid #e0e0e0;
+}
+
+.weekly-ai-insights h2 {
+  margin: 0 0 10px 0;
+  font-size: 18px;
+  color: #333;
+}
+
+.weekly-ai-loading {
+  margin: 0;
+  font-size: 14px;
+  color: #666;
+}
+
+.weekly-ai-text {
+  margin: 0;
+  font-size: 14px;
+  color: #555;
+  line-height: 1.6;
+}
+
 .weekly-trend-header h2 {
   margin: 0 0 4px 0;
   font-size: 18px;
