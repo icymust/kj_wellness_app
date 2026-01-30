@@ -119,6 +119,101 @@
   color: #333;
 }
 
+.ingredient-actions-cell {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.substitute-button {
+  padding: 8px 12px;
+  border: none;
+  border-radius: 6px;
+  background-color: #ffecb3;
+  color: #7a4f00;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.substitute-button:hover {
+  background-color: #ffe082;
+}
+
+.substitute-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.ingredient-substitute-row td {
+  padding: 0;
+  border-bottom: none;
+}
+
+.substitute-panel {
+  background-color: #fff8e1;
+  border: 1px solid #ffe0b2;
+  border-radius: 10px;
+  padding: 16px;
+  margin: 8px 0 16px 0;
+}
+
+.substitute-loading,
+.substitute-empty,
+.substitute-error {
+  font-size: 14px;
+  color: #6d4c41;
+}
+
+.substitute-error {
+  color: #c62828;
+}
+
+.substitute-options {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.substitute-option {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  background-color: #fff3e0;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.substitute-option-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.substitute-name {
+  font-weight: 600;
+  color: #4e342e;
+}
+
+.substitute-reason {
+  font-size: 13px;
+  color: #6d4c41;
+}
+
+.substitute-apply-button {
+  padding: 8px 14px;
+  border: none;
+  border-radius: 6px;
+  background-color: #4caf50;
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.substitute-apply-button:hover {
+  background-color: #43a047;
+}
+
 .ingredients-table tbody tr:hover {
   background-color: #f8f9fa;
 }

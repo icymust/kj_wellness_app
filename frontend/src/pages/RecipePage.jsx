@@ -19,6 +19,12 @@ export function RecipePage() {
   const [recipe, setRecipe] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [substituteState, setSubstituteState] = useState({
+    ingredientKey: null,
+    alternatives: [],
+    loading: false,
+    error: null,
+  });
 
   useEffect(() => {
     console.log('[RECIPE_PAGE_DEBUG] Page mounted with recipeId param:', recipeId);
@@ -67,6 +73,104 @@ export function RecipePage() {
 
     fetchRecipe();
   }, [recipeId]);
+
+  const handleSuggestSubstitute = async (ingredientLabel) => {
+    if (!recipe?.id) {
+      return;
+    }
+
+    if (substituteState.ingredientKey === ingredientLabel && !substituteState.loading) {
+      setSubstituteState({
+        ingredientKey: null,
+        alternatives: [],
+        loading: false,
+        error: null,
+      });
+      return;
+    }
+
+    setSubstituteState({
+      ingredientKey: ingredientLabel,
+      alternatives: [],
+      loading: true,
+      error: null,
+    });
+
+    try {
+      const response = await fetch('http://localhost:5173/api/ai/ingredients/substitute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recipeId: recipe.id,
+          ingredientName: ingredientLabel,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to get substitutes');
+      }
+
+      const data = await response.json();
+      setSubstituteState({
+        ingredientKey: ingredientLabel,
+        alternatives: Array.isArray(data.alternatives) ? data.alternatives : [],
+        loading: false,
+        error: null,
+      });
+    } catch (err) {
+      setSubstituteState({
+        ingredientKey: ingredientLabel,
+        alternatives: [],
+        loading: false,
+        error: err.message || 'Failed to get substitutes',
+      });
+    }
+  };
+
+  const handleApplySubstitute = async (ingredientLabel, newIngredientName) => {
+    if (!recipe?.id) {
+      return;
+    }
+
+    setSubstituteState((prev) => ({
+      ...prev,
+      loading: true,
+      error: null,
+    }));
+
+    try {
+      const response = await fetch(
+        `http://localhost:5173/api/recipes/${recipe.id}/ingredients/replace`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ingredientName: ingredientLabel,
+            newIngredientName,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to apply substitute');
+      }
+
+      const data = await response.json();
+      setRecipe(data);
+      setSubstituteState({
+        ingredientKey: null,
+        alternatives: [],
+        loading: false,
+        error: null,
+      });
+    } catch (err) {
+      setSubstituteState((prev) => ({
+        ...prev,
+        loading: false,
+        error: err.message || 'Failed to apply substitute',
+      }));
+    }
+  };
 
   if (loading) {
     return (
@@ -182,17 +286,67 @@ export function RecipePage() {
                   <th>Ingredient</th>
                   <th>Quantity</th>
                   <th>Unit</th>
+                  <th></th>
                 </tr>
               </thead>
               <tbody>
                 {recipe.ingredients.map((ingredient, index) => (
-                  <tr key={index}>
-                    <td>{ingredient.label || 'Unknown'}</td>
-                    <td className="quantity-cell">
-                      {ingredient.quantity ? ingredient.quantity.toFixed(1) : '-'}
-                    </td>
-                    <td>{ingredient.unit || '-'}</td>
-                  </tr>
+                  <React.Fragment key={`${ingredient.label}-${index}`}>
+                    <tr>
+                      <td>{ingredient.label || 'Unknown'}</td>
+                      <td className="quantity-cell">
+                        {ingredient.quantity ? ingredient.quantity.toFixed(1) : '-'}
+                      </td>
+                      <td>{ingredient.unit || '-'}</td>
+                      <td className="ingredient-actions-cell">
+                        <button
+                          className="substitute-button"
+                          onClick={() => handleSuggestSubstitute(ingredient.label)}
+                          disabled={substituteState.loading && substituteState.ingredientKey === ingredient.label}
+                        >
+                          ⚡ Suggest substitute
+                        </button>
+                      </td>
+                    </tr>
+                    {substituteState.ingredientKey === ingredient.label && (
+                      <tr className="ingredient-substitute-row">
+                        <td colSpan="4">
+                          <div className="substitute-panel">
+                            {substituteState.loading && (
+                              <div className="substitute-loading">Loading suggestions...</div>
+                            )}
+                            {substituteState.error && (
+                              <div className="substitute-error">{substituteState.error}</div>
+                            )}
+                            {!substituteState.loading && !substituteState.error && (
+                              <>
+                                {substituteState.alternatives.length > 0 ? (
+                                  <div className="substitute-options">
+                                    {substituteState.alternatives.map((alt, altIndex) => (
+                                      <div className="substitute-option" key={`${alt.name}-${altIndex}`}>
+                                        <div className="substitute-option-text">
+                                          <span className="substitute-name">{alt.name}</span>
+                                          <span className="substitute-reason">{alt.reason}</span>
+                                        </div>
+                                        <button
+                                          className="substitute-apply-button"
+                                          onClick={() => handleApplySubstitute(ingredient.label, alt.name)}
+                                        >
+                                          Apply
+                                        </button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <div className="substitute-empty">No alternatives found.</div>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
                 ))}
               </tbody>
             </table>

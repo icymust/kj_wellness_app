@@ -1,8 +1,13 @@
 package com.ndl.numbers_dont_lie.recipe.controller;
 
-import com.ndl.numbers_dont_lie.recipe.entity.Recipe;
+import com.ndl.numbers_dont_lie.recipe.dto.RecipeIngredientReplaceRequest;
+import com.ndl.numbers_dont_lie.recipe.entity.Ingredient;
 import com.ndl.numbers_dont_lie.recipe.entity.MealType;
+import com.ndl.numbers_dont_lie.recipe.entity.Recipe;
+import com.ndl.numbers_dont_lie.recipe.entity.RecipeIngredient;
+import com.ndl.numbers_dont_lie.recipe.repository.IngredientRepository;
 import com.ndl.numbers_dont_lie.recipe.repository.RecipeRepository;
+import java.util.Locale;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
@@ -30,9 +35,11 @@ public class RecipeController {
     private static final Logger logger = LoggerFactory.getLogger(RecipeController.class);
     
     private final RecipeRepository recipeRepository;
+    private final IngredientRepository ingredientRepository;
     
-    public RecipeController(RecipeRepository recipeRepository) {
+    public RecipeController(RecipeRepository recipeRepository, IngredientRepository ingredientRepository) {
         this.recipeRepository = recipeRepository;
+        this.ingredientRepository = ingredientRepository;
     }
     
     /**
@@ -115,6 +122,56 @@ public class RecipeController {
             return ResponseEntity.status(500).build();
         }
     }
+
+    /**
+     * Replace a single ingredient in a recipe.
+     *
+     * POST /api/recipes/{recipeId}/ingredients/replace
+     */
+    @PostMapping("/{recipeId}/ingredients/replace")
+    @Transactional
+    public ResponseEntity<?> replaceIngredient(
+            @PathVariable Long recipeId,
+            @RequestBody RecipeIngredientReplaceRequest request) {
+        if (request == null || request.getIngredientName() == null || request.getNewIngredientName() == null) {
+            return ResponseEntity.badRequest().body(Map.of(
+                "error", "ingredientName and newIngredientName are required"
+            ));
+        }
+
+        var recipeOpt = recipeRepository.findById(recipeId);
+        if (recipeOpt.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+
+        Recipe recipe = recipeOpt.get();
+        String oldName = normalize(request.getIngredientName());
+        String newName = normalize(request.getNewIngredientName());
+
+        RecipeIngredient target = null;
+        for (var ri : recipe.getIngredients()) {
+            if (ri.getIngredient() != null && normalize(ri.getIngredient().getLabel()).equals(oldName)) {
+                target = ri;
+                break;
+            }
+        }
+
+        if (target == null) {
+            return ResponseEntity.status(404).body(Map.of(
+                "error", "Ingredient not found in recipe"
+            ));
+        }
+
+        String fallbackUnit = target.getIngredient() != null ? target.getIngredient().getUnit() : "gram";
+        Ingredient replacement = ingredientRepository.findByLabel(newName)
+            .orElseGet(() -> createIngredient(newName, fallbackUnit));
+
+        target.setIngredient(replacement);
+        Recipe saved = recipeRepository.save(recipe);
+        logger.info("[RECIPE_API] Replaced ingredient '{}' with '{}' for recipeId={}", oldName, newName, recipeId);
+
+        return ResponseEntity.ok(recipeToMap(saved));
+    }
     
     /**
      * Convert Recipe entity to a simple Map (avoiding circular references).
@@ -153,5 +210,23 @@ public class RecipeController {
         recipeMap.put("preparation", stepsList);
         
         return recipeMap;
+    }
+
+    private Ingredient createIngredient(String label, String fallbackUnit) {
+        String stableId = generateNextIngredientStableId();
+        String unit = fallbackUnit != null ? fallbackUnit : "gram";
+        Ingredient ingredient = new Ingredient(stableId, label, unit, 100.0, 0.0, 0.0, 0.0, 0.0);
+        return ingredientRepository.save(ingredient);
+    }
+
+    private String generateNextIngredientStableId() {
+        long nextId = ingredientRepository.findTopByOrderByIdDesc()
+            .map(i -> i.getId() + 1)
+            .orElse(1L);
+        return String.format("ing%013d", nextId);
+    }
+
+    private String normalize(String value) {
+        return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
     }
 }
