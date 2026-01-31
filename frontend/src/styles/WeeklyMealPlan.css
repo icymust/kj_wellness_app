@@ -539,6 +539,15 @@
   box-shadow: 0 2px 8px rgba(123, 31, 162, 0.3);
 }
 
+.meal-btn-shopping {
+  background-color: #3B82F6;
+}
+
+.meal-btn-shopping:hover:not(:disabled) {
+  background-color: #2563eb;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+}
+
 .meal-btn-delete {
   background-color: #e53935;
 }

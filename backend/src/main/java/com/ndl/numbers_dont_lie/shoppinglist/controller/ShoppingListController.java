@@ -1,6 +1,7 @@
 package com.ndl.numbers_dont_lie.shoppinglist.controller;
 
 import com.ndl.numbers_dont_lie.shoppinglist.dto.DailyShoppingListResponse;
+import com.ndl.numbers_dont_lie.shoppinglist.dto.MealShoppingListResponse;
 import com.ndl.numbers_dont_lie.shoppinglist.dto.WeeklyShoppingListResponse;
 import com.ndl.numbers_dont_lie.shoppinglist.service.ShoppingListService;
 import java.time.LocalDate;
@@ -68,6 +69,22 @@ public class ShoppingListController {
         }
 
         WeeklyShoppingListResponse response = shoppingListService.buildWeeklyShoppingList(userId, parsedStartDate);
+        if (response.getItems() == null) {
+            response.setItems(Collections.emptyList());
+        }
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/meal")
+    public ResponseEntity<?> getMealShoppingList(
+            @RequestParam(required = false) Long mealId) {
+        if (mealId == null) {
+            return ResponseEntity.badRequest().body(Map.of(
+                "error", "mealId is required"
+            ));
+        }
+
+        MealShoppingListResponse response = shoppingListService.buildMealShoppingList(mealId);
         if (response.getItems() == null) {
             response.setItems(Collections.emptyList());
         }

@@ -31,6 +31,7 @@ export default function NutritionalPreferences({ token }) {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const [readOnly, setReadOnly] = useState(true);
 
   useEffect(() => {
     loadPreferences();
@@ -66,6 +67,7 @@ export default function NutritionalPreferences({ token }) {
         setLunchTime(prefs.lunchTime || '12:30');
         setDinnerTime(prefs.dinnerTime || '18:00');
         setSnackTime(prefs.snackTime || '');
+        setReadOnly(true);
       }
       
       if (response.availableDietaryPreferences) {
@@ -80,10 +82,12 @@ export default function NutritionalPreferences({ token }) {
     } finally {
       setLoading(false);
       setDirty(false);
+      setReadOnly(true);
     }
   };
 
   const handleDietaryChange = (preference) => {
+    if (readOnly) return;
     const newSelected = new Set(selectedDietary);
     if (newSelected.has(preference)) {
       newSelected.delete(preference);
@@ -96,6 +100,7 @@ export default function NutritionalPreferences({ token }) {
   };
 
   const handleAllergyChange = (allergen) => {
+    if (readOnly) return;
     const newSelected = new Set(selectedAllergies);
     if (newSelected.has(allergen)) {
       newSelected.delete(allergen);
@@ -108,6 +113,7 @@ export default function NutritionalPreferences({ token }) {
   };
 
   const handleCuisineChange = (cuisine) => {
+    if (readOnly) return;
     const newSelected = new Set(selectedCuisines);
     if (newSelected.has(cuisine)) {
       newSelected.delete(cuisine);
@@ -158,6 +164,7 @@ export default function NutritionalPreferences({ token }) {
         setNutritionalPrefs(response.nutritionalPreferences);
         setStatus('Saved successfully');
         setDirty(false);
+        setReadOnly(true);
       }
     } catch (err) {
       setStatus(err?.data?.error || err.message || 'Failed to save preferences');
@@ -187,6 +194,18 @@ export default function NutritionalPreferences({ token }) {
     }
     setDirty(false);
     setStatus(null);
+    setReadOnly(true);
+  };
+
+  const handleConfirm = () => {
+    setStatus('Confirmed');
+    setDirty(false);
+    setReadOnly(true);
+  };
+
+  const handleEdit = () => {
+    setStatus(null);
+    setReadOnly(false);
   };
 
   if (loading && !nutritionalPrefs) {
@@ -213,6 +232,18 @@ export default function NutritionalPreferences({ token }) {
           {status}
         </div>
       )}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+        {readOnly ? (
+          <>
+            <button type="button" onClick={handleConfirm} disabled={saving}>Confirm</button>
+            <button type="button" onClick={handleEdit} disabled={saving}>Edit</button>
+          </>
+        ) : (
+          <button type="button" onClick={() => { handleReset(); setReadOnly(true); }} disabled={saving}>
+            Cancel
+          </button>
+        )}
+      </div>
 
       <form onSubmit={handleSave}>
         {/* Food Preferences & Targets Section */}
@@ -226,9 +257,9 @@ export default function NutritionalPreferences({ token }) {
             <input
               type="text"
               value={dislikedIngredients}
-              onChange={(e) => { setDislikedIngredients(e.target.value); setDirty(true); setStatus(null); }}
+              onChange={(e) => { if (readOnly) return; setDislikedIngredients(e.target.value); setDirty(true); setStatus(null); }}
               placeholder="e.g. mushrooms, olives, cilantro"
-              disabled={saving}
+              disabled={saving || readOnly}
               style={{ width: '100%', padding: 8, borderRadius: 4, border: '1px solid #ccc' }}
             />
           </div>
@@ -244,7 +275,7 @@ export default function NutritionalPreferences({ token }) {
                     type="checkbox"
                     checked={selectedCuisines.has(cuisine)}
                     onChange={() => handleCuisineChange(cuisine)}
-                    disabled={saving}
+                    disabled={saving || readOnly}
                   />
                   <span>{cuisine}</span>
                 </label>
@@ -259,9 +290,9 @@ export default function NutritionalPreferences({ token }) {
             <input
               type="number"
               value={calorieTarget}
-              onChange={(e) => { setCalorieTarget(e.target.value); setDirty(true); setStatus(null); }}
+              onChange={(e) => { if (readOnly) return; setCalorieTarget(e.target.value); setDirty(true); setStatus(null); }}
               placeholder="e.g. 2000"
-              disabled={saving}
+              disabled={saving || readOnly}
               min="0"
               style={{ width: '100%', padding: 8, borderRadius: 4, border: '1px solid #ccc' }}
             />
@@ -279,9 +310,9 @@ export default function NutritionalPreferences({ token }) {
                 <input
                   type="number"
                   value={proteinTarget}
-                  onChange={(e) => { setProteinTarget(e.target.value); setDirty(true); setStatus(null); }}
+                  onChange={(e) => { if (readOnly) return; setProteinTarget(e.target.value); setDirty(true); setStatus(null); }}
                   placeholder="150"
-                  disabled={saving}
+                  disabled={saving || readOnly}
                   min="0"
                   style={{ width: '100%', padding: 8, borderRadius: 4, border: '1px solid #ccc' }}
                 />
@@ -293,9 +324,9 @@ export default function NutritionalPreferences({ token }) {
                 <input
                   type="number"
                   value={carbsTarget}
-                  onChange={(e) => { setCarbsTarget(e.target.value); setDirty(true); setStatus(null); }}
+                  onChange={(e) => { if (readOnly) return; setCarbsTarget(e.target.value); setDirty(true); setStatus(null); }}
                   placeholder="200"
-                  disabled={saving}
+                  disabled={saving || readOnly}
                   min="0"
                   style={{ width: '100%', padding: 8, borderRadius: 4, border: '1px solid #ccc' }}
                 />
@@ -307,9 +338,9 @@ export default function NutritionalPreferences({ token }) {
                 <input
                   type="number"
                   value={fatsTarget}
-                  onChange={(e) => { setFatsTarget(e.target.value); setDirty(true); setStatus(null); }}
+                  onChange={(e) => { if (readOnly) return; setFatsTarget(e.target.value); setDirty(true); setStatus(null); }}
                   placeholder="65"
-                  disabled={saving}
+                  disabled={saving || readOnly}
                   min="0"
                   style={{ width: '100%', padding: 8, borderRadius: 4, border: '1px solid #ccc' }}
                 />
@@ -330,13 +361,14 @@ export default function NutritionalPreferences({ token }) {
                 type="number"
                 value={breakfastCount}
                 onChange={(e) => {
+                  if (readOnly) return;
                   const val = parseInt(e.target.value) || 0;
                   setBreakfastCount(val);
                   if (val === 0) setBreakfastTime('');
                   setDirty(true);
                   setStatus(null);
                 }}
-                disabled={saving}
+                disabled={saving || readOnly}
                 min="0"
                 max="5"
                 style={{ width: '100%', padding: 8, borderRadius: 4, border: '1px solid #ccc' }}
@@ -350,13 +382,14 @@ export default function NutritionalPreferences({ token }) {
                 type="number"
                 value={lunchCount}
                 onChange={(e) => {
+                  if (readOnly) return;
                   const val = parseInt(e.target.value) || 0;
                   setLunchCount(val);
                   if (val === 0) setLunchTime('');
                   setDirty(true);
                   setStatus(null);
                 }}
-                disabled={saving}
+                disabled={saving || readOnly}
                 min="0"
                 max="5"
                 style={{ width: '100%', padding: 8, borderRadius: 4, border: '1px solid #ccc' }}
@@ -370,13 +403,14 @@ export default function NutritionalPreferences({ token }) {
                 type="number"
                 value={dinnerCount}
                 onChange={(e) => {
+                  if (readOnly) return;
                   const val = parseInt(e.target.value) || 0;
                   setDinnerCount(val);
                   if (val === 0) setDinnerTime('');
                   setDirty(true);
                   setStatus(null);
                 }}
-                disabled={saving}
+                disabled={saving || readOnly}
                 min="0"
                 max="5"
                 style={{ width: '100%', padding: 8, borderRadius: 4, border: '1px solid #ccc' }}
@@ -390,13 +424,14 @@ export default function NutritionalPreferences({ token }) {
                 type="number"
                 value={snackCount}
                 onChange={(e) => {
+                  if (readOnly) return;
                   const val = parseInt(e.target.value) || 0;
                   setSnackCount(val);
                   if (val === 0) setSnackTime('');
                   setDirty(true);
                   setStatus(null);
                 }}
-                disabled={saving}
+                disabled={saving || readOnly}
                 min="0"
                 max="5"
                 style={{ width: '100%', padding: 8, borderRadius: 4, border: '1px solid #ccc' }}
@@ -416,8 +451,8 @@ export default function NutritionalPreferences({ token }) {
               <input
                 type="time"
                 value={breakfastTime}
-                onChange={(e) => { setBreakfastTime(e.target.value); setDirty(true); setStatus(null); }}
-                disabled={saving || breakfastCount === 0}
+                onChange={(e) => { if (readOnly) return; setBreakfastTime(e.target.value); setDirty(true); setStatus(null); }}
+                disabled={saving || readOnly || breakfastCount === 0}
                 style={{ width: '100%', padding: 8, borderRadius: 4, border: '1px solid #ccc', opacity: breakfastCount === 0 ? 0.5 : 1 }}
               />
             </div>
@@ -428,8 +463,8 @@ export default function NutritionalPreferences({ token }) {
               <input
                 type="time"
                 value={lunchTime}
-                onChange={(e) => { setLunchTime(e.target.value); setDirty(true); setStatus(null); }}
-                disabled={saving || lunchCount === 0}
+                onChange={(e) => { if (readOnly) return; setLunchTime(e.target.value); setDirty(true); setStatus(null); }}
+                disabled={saving || readOnly || lunchCount === 0}
                 style={{ width: '100%', padding: 8, borderRadius: 4, border: '1px solid #ccc', opacity: lunchCount === 0 ? 0.5 : 1 }}
               />
             </div>
@@ -440,8 +475,8 @@ export default function NutritionalPreferences({ token }) {
               <input
                 type="time"
                 value={dinnerTime}
-                onChange={(e) => { setDinnerTime(e.target.value); setDirty(true); setStatus(null); }}
-                disabled={saving || dinnerCount === 0}
+                onChange={(e) => { if (readOnly) return; setDinnerTime(e.target.value); setDirty(true); setStatus(null); }}
+                disabled={saving || readOnly || dinnerCount === 0}
                 style={{ width: '100%', padding: 8, borderRadius: 4, border: '1px solid #ccc', opacity: dinnerCount === 0 ? 0.5 : 1 }}
               />
             </div>
@@ -452,8 +487,8 @@ export default function NutritionalPreferences({ token }) {
               <input
                 type="time"
                 value={snackTime}
-                onChange={(e) => { setSnackTime(e.target.value); setDirty(true); setStatus(null); }}
-                disabled={saving || snackCount === 0}
+                onChange={(e) => { if (readOnly) return; setSnackTime(e.target.value); setDirty(true); setStatus(null); }}
+                disabled={saving || readOnly || snackCount === 0}
                 style={{ width: '100%', padding: 8, borderRadius: 4, border: '1px solid #ccc', opacity: snackCount === 0 ? 0.5 : 1 }}
               />
             </div>
@@ -469,7 +504,7 @@ export default function NutritionalPreferences({ token }) {
                   type="checkbox"
                   checked={selectedDietary.has(pref)}
                   onChange={() => handleDietaryChange(pref)}
-                  disabled={saving}
+                  disabled={saving || readOnly}
                 />
                 <span>{pref.replace('-', ' ')}</span>
               </label>
@@ -486,7 +521,7 @@ export default function NutritionalPreferences({ token }) {
                   type="checkbox"
                   checked={selectedAllergies.has(allergen)}
                   onChange={() => handleAllergyChange(allergen)}
-                  disabled={saving}
+                  disabled={saving || readOnly}
                 />
                 <span>{allergen.replace('-', ' ')}</span>
               </label>
@@ -497,7 +532,7 @@ export default function NutritionalPreferences({ token }) {
         <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
           <button 
             type="submit" 
-            disabled={!dirty || saving}
+            disabled={!dirty || saving || readOnly}
             style={{ cursor: dirty && !saving ? 'pointer' : 'not-allowed' }}
           >
             {saving ? 'Saving...' : 'Save'}
@@ -522,7 +557,7 @@ export default function NutritionalPreferences({ token }) {
 
         {nutritionalPrefs && nutritionalPrefs.updatedAt && (
           <p style={{ fontSize: '0.85em', color: '#666', marginTop: 12 }}>
-            Last updated: {new Date(nutritionalPrefs.updatedAt).toLocaleString()}
+            Last updated: {new Date(nutritionalPrefs.updatedAt).toISOString()}
           </p>
         )}
       </form>

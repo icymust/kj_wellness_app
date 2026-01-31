@@ -264,6 +264,17 @@ export function WeeklyMealPlanPage() {
     navigate(`/meals/replace/${mealId}?returnTo=weekly`);
   };
 
+  const getMealCalories = (meal) => {
+    const value =
+      meal?.planned_calories ??
+      meal?.plannedCalories ??
+      meal?.calories ??
+      meal?.calorie_target ??
+      meal?.calorieTarget ??
+      null;
+    return value != null ? Math.round(value) : null;
+  };
+
   const handleMoveMeal = async (dayDate, mealId, direction) => {
     if (!mealId || !dayDate) return;
     try {
@@ -668,11 +679,9 @@ export function WeeklyMealPlanPage() {
                           </span>
                       </div>
                       <div className="meal-actions">
-                        {(meal.calorie_target || meal.calorieTarget) && (
-                          <span className="meal-calories-inline">
-                            {Math.round(meal.calorie_target || meal.calorieTarget)} kcal
-                          </span>
-                        )}
+                        <span className="meal-calories-inline">
+                          {getMealCalories(meal) != null ? `${getMealCalories(meal)} kcal` : '—'}
+                        </span>
                         <button
                           className="meal-btn meal-btn-move"
                           onClick={() => handleMoveMeal(day.date, meal.id, 'up')}
@@ -717,6 +726,15 @@ export function WeeklyMealPlanPage() {
                             title="Generate AI recipe"
                           >
                             AI
+                          </button>
+                        )}
+                        {meal.id && (
+                          <button
+                            className="meal-btn meal-btn-shopping"
+                            onClick={() => navigate(`/shopping-list/meal?mealId=${meal.id}`)}
+                            title="Meal shopping list"
+                          >
+                            🧺
                           </button>
                         )}
                           {isCustom && (

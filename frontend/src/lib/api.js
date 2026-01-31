@@ -165,4 +165,9 @@ export const api = {
       `/api/shopping-list/day?userId=${encodeURIComponent(userId)}&date=${encodeURIComponent(date)}&_ts=${Date.now()}`,
       { token }
     ),
+  getMealShoppingList: (token, mealId) =>
+    request(
+      `/api/shopping-list/meal?mealId=${encodeURIComponent(mealId)}&_ts=${Date.now()}`,
+      { token }
+    ),
 };

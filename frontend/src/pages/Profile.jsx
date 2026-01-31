@@ -8,6 +8,7 @@ export default function Profile({ ctx }) {
   const { userId } = useUser();
   const [form, setForm] = useState({ age: '', gender: 'male', heightCm: '', weightKg: '', targetWeightKg: '', activityLevel: 'moderate', goal: 'general_fitness' });
   const [dirty, setDirty] = useState(false);
+  const [readOnly, setReadOnly] = useState(true);
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -27,10 +28,12 @@ export default function Profile({ ctx }) {
         activityLevel: profile.activityLevel ?? 'moderate',
         goal: profile.goal ?? 'general_fitness'
       });
+      setReadOnly(true);
     }
   }, [profile, dirty]);
 
   const onChange = (field, value) => {
+    if (readOnly) return;
     setDirty(true); setStatus(null);
     setForm(f => ({ ...f, [field]: value }));
   };
@@ -69,7 +72,7 @@ export default function Profile({ ctx }) {
           }));
         }
       }
-    } finally { setLoading(false); setDirty(false); }
+    } finally { setLoading(false); setDirty(false); setReadOnly(true); }
   };
 
   const handleSave = async (e) => {
@@ -90,9 +93,21 @@ export default function Profile({ ctx }) {
         goal: saved.goal ?? 'general_fitness'
       });
       setDirty(false);
+      setReadOnly(true);
     } catch (e1) {
   setStatus(e1?.data?.error || e1.message || 'Save error');
     } finally { setSaving(false); }
+  };
+
+  const handleConfirm = () => {
+    setStatus('Confirmed');
+    setDirty(false);
+    setReadOnly(true);
+  };
+
+  const handleEdit = () => {
+    setStatus(null);
+    setReadOnly(false);
   };
 
   return (
@@ -101,6 +116,14 @@ export default function Profile({ ctx }) {
   <h2>Health Profile</h2>
       <div style={{ display:'flex', gap:8, marginBottom:12 }}>
         <button type="button" onClick={handleReload} disabled={loading}>{loading ? 'Loading...' : 'Update from server'}</button>
+        {readOnly ? (
+          <>
+            <button type="button" onClick={handleConfirm}>Confirm</button>
+            <button type="button" onClick={handleEdit}>Edit</button>
+          </>
+        ) : (
+          <button type="button" onClick={() => { setReadOnly(true); setDirty(false); setStatus(null); }}>Cancel</button>
+        )}
       </div>
   {/* Inline messages: priority — explicit profileError/profileSuccess from global; fallback to local status */}
   {profileError && <div style={{ marginBottom:12, color:'#b00' }}>{profileError}</div>}
@@ -108,41 +131,41 @@ export default function Profile({ ctx }) {
   {!profileError && !profileSuccess && status && <div style={{ marginBottom:12, color: status==='Saved' ? '#070' : '#b00' }}>{status}</div>}
       <form onSubmit={handleSave} style={{ display: 'grid', gap: 8, maxWidth: 420 }}>
         <label>Age 
-          <input inputMode="numeric" pattern="[0-9]*" value={form.age} onChange={(e)=>onChange('age', e.target.value.replace(/[^0-9]/g,''))} />
+          <input inputMode="numeric" pattern="[0-9]*" value={form.age} onChange={(e)=>onChange('age', e.target.value.replace(/[^0-9]/g,''))} disabled={readOnly} />
         </label>
         <label>Sex 
-          <select value={form.gender} onChange={(e)=>onChange('gender', e.target.value)}>
+          <select value={form.gender} onChange={(e)=>onChange('gender', e.target.value)} disabled={readOnly}>
             <option value="male">male</option>
             <option value="female">female</option>
             <option value="other">other</option>
           </select>
         </label>
         <label>Height (cm)
-          <input inputMode="numeric" pattern="[0-9]*" value={form.heightCm} onChange={(e)=>onChange('heightCm', e.target.value.replace(/[^0-9]/g,''))} />
+          <input inputMode="numeric" pattern="[0-9]*" value={form.heightCm} onChange={(e)=>onChange('heightCm', e.target.value.replace(/[^0-9]/g,''))} disabled={readOnly} />
         </label>
         <label>Weight (kg)
-          <input inputMode="decimal" value={form.weightKg} onChange={(e)=>onChange('weightKg', e.target.value.replace(/[^0-9.,]/g,'').replace(',', '.'))} />
+          <input inputMode="decimal" value={form.weightKg} onChange={(e)=>onChange('weightKg', e.target.value.replace(/[^0-9.,]/g,'').replace(',', '.'))} disabled={readOnly} />
         </label>
         <label>Weight goal (kg)
-          <input inputMode="decimal" value={form.targetWeightKg} onChange={(e)=>onChange('targetWeightKg', e.target.value.replace(/[^0-9.,]/g,'').replace(',', '.'))} />
+          <input inputMode="decimal" value={form.targetWeightKg} onChange={(e)=>onChange('targetWeightKg', e.target.value.replace(/[^0-9.,]/g,'').replace(',', '.'))} disabled={readOnly} />
         </label>
         <label>Activity
-          <select value={form.activityLevel} onChange={(e)=>onChange('activityLevel', e.target.value)}>
+          <select value={form.activityLevel} onChange={(e)=>onChange('activityLevel', e.target.value)} disabled={readOnly}>
             <option value="low">low</option>
             <option value="moderate">moderate</option>
             <option value="high">high</option>
           </select>
         </label>
         <label>Goal
-          <select value={form.goal} onChange={(e)=>onChange('goal', e.target.value)}>
+          <select value={form.goal} onChange={(e)=>onChange('goal', e.target.value)} disabled={readOnly}>
             <option value="weight_loss">weight_loss</option>
             <option value="muscle_gain">muscle_gain</option>
             <option value="general_fitness">general_fitness</option>
           </select>
         </label>
         <div style={{ display:'flex', gap:8, marginTop:4 }}>
-          <button type="submit" disabled={!dirty || saving || profileSaving}>{(saving || profileSaving) ? 'Saving...' : 'Save'}</button>
-          <button type="button" onClick={() => { setDirty(false); setStatus(null); setForm({ age: '', gender: 'male', heightCm: '', weightKg: '', targetWeightKg: '', activityLevel: 'moderate', goal: 'general_fitness' }); }}>Reset</button>
+          <button type="submit" disabled={readOnly || !dirty || saving || profileSaving}>{(saving || profileSaving) ? 'Saving...' : 'Save'}</button>
+          <button type="button" onClick={() => { setDirty(false); setStatus(null); setForm({ age: '', gender: 'male', heightCm: '', weightKg: '', targetWeightKg: '', activityLevel: 'moderate', goal: 'general_fitness' }); setReadOnly(true); }}>Reset</button>
         </div>
       </form>
     </section>

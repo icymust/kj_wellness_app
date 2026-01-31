@@ -33,6 +33,7 @@ export function WeeklyShoppingListPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [checkedItems, setCheckedItems] = useState({});
+  const [itemEdits, setItemEdits] = useState({});
 
   const startDate = useMemo(() => {
     const params = new URLSearchParams(location.search);
@@ -63,6 +64,26 @@ export function WeeklyShoppingListPage() {
       setCheckedItems({});
     }
   }, [storageKey]);
+
+  const editsKey = useMemo(() => {
+    if (!storageKey) return null;
+    return `${storageKey}:edits`;
+  }, [storageKey]);
+
+  useEffect(() => {
+    if (!editsKey) return;
+    try {
+      const raw = localStorage.getItem(editsKey);
+      const parsed = raw ? JSON.parse(raw) : null;
+      if (parsed && typeof parsed === 'object') {
+        setItemEdits(parsed);
+      } else {
+        setItemEdits({});
+      }
+    } catch (err) {
+      setItemEdits({});
+    }
+  }, [editsKey]);
 
   useEffect(() => {
     const fillUserId = async () => {
@@ -108,12 +129,26 @@ export function WeeklyShoppingListPage() {
     loadShoppingList();
   }, [userId, startDate]);
 
-  const sortedItems = useMemo(() => {
+  const groupedItems = useMemo(() => {
     if (!shoppingList?.items) return [];
-    return [...shoppingList.items].sort((a, b) =>
-      (a.ingredient || '').localeCompare(b.ingredient || '')
-    );
-  }, [shoppingList]);
+    const groups = new Map();
+    shoppingList.items.forEach((item) => {
+      const key = `${item.ingredient}-${item.unit}`;
+      const edit = itemEdits[key];
+      if (edit?.removed) return;
+      const quantity = edit?.quantity ?? item.totalQuantity;
+      const adjusted = { ...item, totalQuantity: quantity };
+      const category = item.category || 'Other';
+      if (!groups.has(category)) groups.set(category, []);
+      groups.get(category).push(adjusted);
+    });
+    return Array.from(groups.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([category, items]) => ({
+        category,
+        items: items.sort((a, b) => (a.ingredient || '').localeCompare(b.ingredient || '')),
+      }));
+  }, [shoppingList, itemEdits]);
 
   const toggleChecked = (key) => {
     setCheckedItems((prev) => {
@@ -121,6 +156,35 @@ export function WeeklyShoppingListPage() {
       if (storageKey) {
         try {
           localStorage.setItem(storageKey, JSON.stringify(next));
+        } catch (err) {
+          // ignore localStorage errors
+        }
+      }
+      return next;
+    });
+  };
+
+  const updateItemQuantity = (key, baseQty, nextValue) => {
+    const safeValue = Number.isFinite(nextValue) ? Math.max(0, nextValue) : baseQty;
+    setItemEdits((prev) => {
+      const next = { ...prev, [key]: { ...(prev[key] || {}), quantity: safeValue } };
+      if (editsKey) {
+        try {
+          localStorage.setItem(editsKey, JSON.stringify(next));
+        } catch (err) {
+          // ignore localStorage errors
+        }
+      }
+      return next;
+    });
+  };
+
+  const removeItem = (key) => {
+    setItemEdits((prev) => {
+      const next = { ...prev, [key]: { ...(prev[key] || {}), removed: true } };
+      if (editsKey) {
+        try {
+          localStorage.setItem(editsKey, JSON.stringify(next));
         } catch (err) {
           // ignore localStorage errors
         }
@@ -150,7 +214,7 @@ export function WeeklyShoppingListPage() {
     );
   }
 
-  if (!sortedItems.length) {
+  if (!groupedItems.length) {
     return (
       <div className="weekly-shopping-page">
         <div className="shopping-header">
@@ -190,28 +254,45 @@ export function WeeklyShoppingListPage() {
       </div>
 
       <div className="shopping-list">
-        {sortedItems.map((item) => {
-          const key = `${item.ingredient}-${item.unit}`;
-          const isChecked = !!checkedItems[key];
-          return (
-            <div key={key} className={`shopping-item ${isChecked ? 'checked' : ''}`}>
-              <label className="shopping-checkbox">
-                <input
-                  type="checkbox"
-                  checked={isChecked}
-                  onChange={() => toggleChecked(key)}
-                />
-                <span></span>
-              </label>
-              <div className="shopping-item-text">
-                <span className="shopping-ingredient">{item.ingredient}</span>
-                <span className="shopping-quantity">
-                  {formatQuantity(item.totalQuantity)} {item.unit}
-                </span>
-              </div>
-            </div>
-          );
-        })}
+        {groupedItems.map((group) => (
+          <div key={group.category} className="shopping-category">
+            <h3 className="shopping-category-title">{group.category}</h3>
+            {group.items.map((item) => {
+              const key = `${item.ingredient}-${item.unit}`;
+              const isChecked = !!checkedItems[key];
+              return (
+                <div key={key} className={`shopping-item ${isChecked ? 'checked' : ''}`}>
+                  <label className="shopping-checkbox">
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={() => toggleChecked(key)}
+                    />
+                    <span></span>
+                  </label>
+                  <div className="shopping-item-text">
+                    <span className="shopping-ingredient">{item.ingredient}</span>
+                    <span className="shopping-quantity">
+                      {formatQuantity(item.totalQuantity)} {item.unit}
+                    </span>
+                  </div>
+                  <div className="shopping-item-actions">
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.1"
+                      value={Number(item.totalQuantity)}
+                      onChange={(e) => updateItemQuantity(key, item.totalQuantity, parseFloat(e.target.value))}
+                    />
+                    <button type="button" onClick={() => removeItem(key)}>
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ))}
       </div>
     </div>
   );

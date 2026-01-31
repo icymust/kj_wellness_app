@@ -1,25 +1,13 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import '../styles/DailyShoppingList.css';
-import { useUser } from '../contexts/UserContext';
-import { getAccessToken } from '../lib/tokens';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import '../styles/MealShoppingList.css';
 import { api } from '../lib/api';
+import { getAccessToken } from '../lib/tokens';
 
-function formatDateISO(date) {
-  return date.toLocaleDateString('en-CA');
-}
-
-function formatQuantity(value) {
-  const num = typeof value === 'number' ? value : 0;
-  const rounded = Math.round(num);
-  if (Math.abs(num - rounded) < 0.01) return `${rounded}`;
-  return num.toFixed(1);
-}
-
-export function DailyShoppingListPage() {
+export function MealShoppingListPage() {
   const navigate = useNavigate();
-  const location = useLocation();
-  const { userId, setUserId } = useUser();
+  const [searchParams] = useSearchParams();
+  const mealId = searchParams.get('mealId');
 
   const [shoppingList, setShoppingList] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -27,32 +15,27 @@ export function DailyShoppingListPage() {
   const [checkedItems, setCheckedItems] = useState({});
   const [itemEdits, setItemEdits] = useState({});
 
-  const date = useMemo(() => {
-    const params = new URLSearchParams(location.search);
-    const queryDate = params.get('date');
-    if (queryDate) return queryDate;
-    return formatDateISO(new Date());
-  }, [location.search]);
-
   const storageKey = useMemo(() => {
-    if (!userId || !date) return null;
-    return `dailyShoppingChecked:${userId}:${date}`;
-  }, [userId, date]);
+    if (!mealId) return null;
+    return `mealShoppingChecked:${mealId}`;
+  }, [mealId]);
 
   useEffect(() => {
     if (!storageKey) return;
-    try {
-      const raw = localStorage.getItem(storageKey);
-      const parsed = raw ? JSON.parse(raw) : null;
-      if (parsed && typeof parsed === 'object') {
-        setCheckedItems(parsed);
-      } else {
+    const saved = localStorage.getItem(storageKey);
+    if (saved) {
+      try {
+        setCheckedItems(JSON.parse(saved));
+      } catch {
         setCheckedItems({});
       }
-    } catch {
-      setCheckedItems({});
     }
   }, [storageKey]);
+
+  useEffect(() => {
+    if (!storageKey) return;
+    localStorage.setItem(storageKey, JSON.stringify(checkedItems));
+  }, [checkedItems, storageKey]);
 
   const editsKey = useMemo(() => {
     if (!storageKey) return null;
@@ -74,55 +57,37 @@ export function DailyShoppingListPage() {
     }
   }, [editsKey]);
 
-  useEffect(() => {
-    const fillUserId = async () => {
-      if (userId) return;
-      const token = getAccessToken();
-      if (!token) return;
-      try {
-        const data = await api.me(token);
-        const resolvedId = data?.user?.id || data?.id;
-        if (resolvedId) {
-          setUserId(resolvedId);
-        }
-      } catch (err) {
-        console.warn('Auto-resolve userId failed', err);
-      }
-    };
-    fillUserId();
-  }, [userId, setUserId]);
-
-  const loadShoppingList = async () => {
-    if (!userId) {
-      setError('No active user. Sign in to view shopping list.');
+  const loadShoppingList = useCallback(async () => {
+    if (!mealId) {
+      setError('Meal not specified.');
       setLoading(false);
       return;
     }
 
+    setLoading(true);
+    setError(null);
     try {
-      setLoading(true);
-      setError(null);
       const token = getAccessToken();
-      const data = await api.getDailyShoppingList(token, userId, date);
+      const data = await api.getMealShoppingList(token, mealId);
       setShoppingList(data);
-      console.log('[SHOPPING_LIST_PAGE] Loaded daily shopping list');
+      console.log('[SHOPPING_LIST_PAGE] Loaded meal shopping list');
       console.log('[SHOPPING_LIST_PAGE] Items count:', data?.items?.length || 0);
     } catch (err) {
       setError('Failed to load shopping list');
     } finally {
       setLoading(false);
     }
-  };
+  }, [mealId]);
 
   useEffect(() => {
     loadShoppingList();
-  }, [userId, date]);
+  }, [loadShoppingList]);
 
   const groupedItems = useMemo(() => {
     if (!shoppingList?.items) return [];
     const groups = new Map();
     shoppingList.items.forEach((item) => {
-      const key = `${item.ingredient}-${item.unit}`;
+      const key = `${item.ingredient}|${item.unit}`;
       const edit = itemEdits[key];
       if (edit?.removed) return;
       const quantity = edit?.quantity ?? item.totalQuantity;
@@ -140,17 +105,10 @@ export function DailyShoppingListPage() {
   }, [shoppingList, itemEdits]);
 
   const toggleChecked = (key) => {
-    setCheckedItems((prev) => {
-      const next = { ...prev, [key]: !prev[key] };
-      if (storageKey) {
-        try {
-          localStorage.setItem(storageKey, JSON.stringify(next));
-        } catch {
-          // ignore
-        }
-      }
-      return next;
-    });
+    setCheckedItems((prev) => ({
+      ...prev,
+      [key]: !prev[key],
+    }));
   };
 
   const updateItemQuantity = (key, baseQty, nextValue) => {
@@ -184,7 +142,7 @@ export function DailyShoppingListPage() {
 
   if (loading) {
     return (
-      <div className="daily-shopping-page">
+      <div className="meal-shopping-page">
         <div className="shopping-state">Loading shopping list...</div>
       </div>
     );
@@ -192,9 +150,9 @@ export function DailyShoppingListPage() {
 
   if (error) {
     return (
-      <div className="daily-shopping-page">
+      <div className="meal-shopping-page">
         <div className="shopping-state">
-          <p>Failed to load shopping list</p>
+          <p>{error}</p>
           <button onClick={loadShoppingList} className="shopping-retry-btn">
             Retry
           </button>
@@ -203,38 +161,38 @@ export function DailyShoppingListPage() {
     );
   }
 
-  if (!groupedItems.length) {
+  if (!shoppingList || groupedItems.length === 0) {
     return (
-      <div className="daily-shopping-page">
+      <div className="meal-shopping-page">
         <div className="shopping-header">
           <div>
-            <h1>Daily Shopping List</h1>
-            <p className="shopping-date-range">{shoppingList?.date}</p>
+            <h1>Meal Shopping List</h1>
+            <p className="shopping-date-range">
+              {shoppingList?.mealType ? shoppingList.mealType : 'Meal'}
+              {shoppingList?.mealName ? ` — ${shoppingList.mealName}` : ''}
+            </p>
           </div>
-          <button
-            className="shopping-back-btn"
-            onClick={() => navigate('/meals/today')}
-          >
-            Back to Today Meal Plan
+          <button className="shopping-back-btn" onClick={() => navigate(-1)}>
+            Back
           </button>
         </div>
-        <div className="shopping-state">No ingredients found for this day</div>
+        <div className="shopping-state">No ingredients found for this meal</div>
       </div>
     );
   }
 
   return (
-    <div className="daily-shopping-page">
+    <div className="meal-shopping-page">
       <div className="shopping-header">
         <div>
-          <h1>Daily Shopping List</h1>
-          <p className="shopping-date-range">{shoppingList?.date}</p>
+          <h1>Meal Shopping List</h1>
+          <p className="shopping-date-range">
+            {shoppingList?.mealType ? shoppingList.mealType : 'Meal'}
+            {shoppingList?.mealName ? ` — ${shoppingList.mealName}` : ''}
+          </p>
         </div>
-        <button
-          className="shopping-back-btn"
-          onClick={() => navigate('/meals/today')}
-        >
-          Back to Today Meal Plan
+        <button className="shopping-back-btn" onClick={() => navigate(-1)}>
+          Back
         </button>
       </div>
 
@@ -243,7 +201,7 @@ export function DailyShoppingListPage() {
           <div key={group.category} className="shopping-category">
             <h3 className="shopping-category-title">{group.category}</h3>
             {group.items.map((item) => {
-              const key = `${item.ingredient}-${item.unit}`;
+              const key = `${item.ingredient}|${item.unit}`;
               const isChecked = !!checkedItems[key];
               return (
                 <div key={key} className={`shopping-item ${isChecked ? 'checked' : ''}`}>
@@ -253,12 +211,11 @@ export function DailyShoppingListPage() {
                       checked={isChecked}
                       onChange={() => toggleChecked(key)}
                     />
-                    <span></span>
                   </label>
                   <div className="shopping-item-text">
                     <span className="shopping-ingredient">{item.ingredient}</span>
                     <span className="shopping-quantity">
-                      {formatQuantity(item.totalQuantity)} {item.unit}
+                      {Number(item.totalQuantity).toFixed(1)} {item.unit}
                     </span>
                   </div>
                   <div className="shopping-item-actions">

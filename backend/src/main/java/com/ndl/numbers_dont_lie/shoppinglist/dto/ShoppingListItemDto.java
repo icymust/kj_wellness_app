@@ -4,13 +4,19 @@ public class ShoppingListItemDto {
     private String ingredient;
     private Double totalQuantity;
     private String unit;
+    private String category;
 
     public ShoppingListItemDto() {}
 
     public ShoppingListItemDto(String ingredient, Double totalQuantity, String unit) {
+        this(ingredient, totalQuantity, unit, null);
+    }
+
+    public ShoppingListItemDto(String ingredient, Double totalQuantity, String unit, String category) {
         this.ingredient = ingredient;
         this.totalQuantity = totalQuantity;
         this.unit = unit;
+        this.category = category;
     }
 
     public String getIngredient() {
@@ -35,5 +41,13 @@ public class ShoppingListItemDto {
 
     public void setUnit(String unit) {
         this.unit = unit;
+    }
+
+    public String getCategory() {
+        return category;
+    }
+
+    public void setCategory(String category) {
+        this.category = category;
     }
 }

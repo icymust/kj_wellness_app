@@ -494,6 +494,17 @@ export function MealPlanPage() {
     );
   };
 
+  const getMealCalories = (meal) => {
+    const value =
+      meal?.planned_calories ??
+      meal?.plannedCalories ??
+      meal?.calories ??
+      meal?.calorie_target ??
+      meal?.calorieTarget ??
+      null;
+    return value != null ? Math.round(value) : null;
+  };
+
   return (
     <div className="meal-plan-page">
       {/* Header with Refresh Button */}
@@ -609,9 +620,9 @@ export function MealPlanPage() {
             <div key={index} className="meal-card">
               <div className="meal-header">
                 <h3 className="meal-type">{meal.meal_type}</h3>
-                {meal.calories && (
-                  <span className="meal-calories">{Math.round(meal.calories)} cal</span>
-                )}
+                <span className="meal-calories">
+                  {getMealCalories(meal) != null ? `${getMealCalories(meal)} kcal` : '—'}
+                </span>
               </div>
 
               {meal.custom_meal_name && (
@@ -700,6 +711,27 @@ export function MealPlanPage() {
                 >
                   {generatingMealId === (meal.id || (meal.meal_type || meal.mealType)) ? 'Generating...' : 'Generate AI Recipe'}
                 </button>
+
+                {/* Meal Shopping List Button */}
+                {meal.id ? (
+                  <button
+                    className="meal-shopping-list-button"
+                    onClick={() => navigate(`/shopping-list/meal?mealId=${meal.id}`)}
+                    style={{
+                      padding: '8px 16px',
+                      backgroundColor: '#3B82F6',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      fontSize: '14px',
+                      flex: 1,
+                      minWidth: '160px'
+                    }}
+                  >
+                    Shopping List
+                  </button>
+                ) : null}
 
                 {/* View Recipe Button */}
                 <button

@@ -1,0 +1,130 @@
+.meal-shopping-page {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 16px;
+  color: #1f2933;
+}
+
+.meal-shopping-page .shopping-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.meal-shopping-page .shopping-header h1 {
+  margin: 0;
+  font-size: 24px;
+}
+
+.meal-shopping-page .shopping-date-range {
+  margin: 6px 0 0;
+  color: #6b7280;
+}
+
+.meal-shopping-page .shopping-back-btn {
+  border: 1px solid #d1d5db;
+  background: #ffffff;
+  padding: 8px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.meal-shopping-page .shopping-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.meal-shopping-page .shopping-category {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.meal-shopping-page .shopping-category-title {
+  margin: 6px 0 0;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #6b7280;
+}
+
+.meal-shopping-page .shopping-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.meal-shopping-page .shopping-item.checked {
+  opacity: 0.5;
+  text-decoration: line-through;
+}
+
+.meal-shopping-page .shopping-checkbox input {
+  width: 18px;
+  height: 18px;
+}
+
+.meal-shopping-page .shopping-item-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.meal-shopping-page .shopping-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.meal-shopping-page .shopping-item-actions input {
+  width: 80px;
+  padding: 6px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+}
+
+.meal-shopping-page .shopping-item-actions button {
+  border: 1px solid #ef4444;
+  background: #ffffff;
+  color: #ef4444;
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.meal-shopping-page .shopping-item-actions button:hover {
+  background: #fee2e2;
+}
+
+.meal-shopping-page .shopping-ingredient {
+  font-weight: 600;
+}
+
+.meal-shopping-page .shopping-quantity {
+  color: #6b7280;
+}
+
+.meal-shopping-page .shopping-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 220px;
+  color: #6b7280;
+  gap: 12px;
+}
+
+.meal-shopping-page .shopping-retry-btn {
+  border: 1px solid #d1d5db;
+  background: #ffffff;
+  padding: 8px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+}
