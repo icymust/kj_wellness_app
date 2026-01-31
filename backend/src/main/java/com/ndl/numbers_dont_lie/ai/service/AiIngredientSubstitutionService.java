@@ -41,7 +41,10 @@ public class AiIngredientSubstitutionService {
         this.mealRepository = mealRepository;
     }
 
-    public AiIngredientSubstituteResponse suggestSubstitutes(Long recipeId, String ingredientName) {
+    public AiIngredientSubstituteResponse suggestSubstitutes(
+            Long recipeId,
+            String ingredientName,
+            String availableIngredients) {
         if (recipeId == null || ingredientName == null || ingredientName.isBlank()) {
             throw new IllegalArgumentException("recipeId and ingredientName are required");
         }
@@ -64,12 +67,20 @@ public class AiIngredientSubstitutionService {
         List<String> disliked = prefs != null ? new ArrayList<>(prefs.getDislikedIngredients()) : List.of();
         List<String> cuisines = prefs != null ? new ArrayList<>(prefs.getCuisinePreferences()) : List.of();
 
-        String prompt = buildPrompt(recipe, ingredientName, dietaryPrefs, allergies, disliked, cuisines);
+        String prompt = buildPrompt(
+            recipe,
+            ingredientName,
+            dietaryPrefs,
+            allergies,
+            disliked,
+            cuisines,
+            availableIngredients
+        );
         JsonNode response = groqClient.callForJson(prompt);
         AiIngredientSubstituteResponse parsed = parseResponse(response);
 
         List<AiIngredientSubstituteResponse.Alternative> filtered = filterAlternatives(
-            parsed.getAlternatives(), ingredientName, allergies, disliked
+            parsed.getAlternatives(), ingredientName, allergies, disliked, availableIngredients
         );
 
         return new AiIngredientSubstituteResponse(filtered);
@@ -89,7 +100,8 @@ public class AiIngredientSubstitutionService {
             List<String> dietaryPrefs,
             List<String> allergies,
             List<String> disliked,
-            List<String> cuisines) {
+            List<String> cuisines,
+            String availableIngredients) {
         StringBuilder sb = new StringBuilder();
         sb.append("Suggest 1 to 3 ingredient substitutes as STRICT JSON only.\n");
         sb.append("Return JSON with schema:\n");
@@ -103,6 +115,10 @@ public class AiIngredientSubstitutionService {
         sb.append("- allergies/intolerances (must avoid): ").append(allergies).append("\n");
         sb.append("- disliked ingredients (must avoid): ").append(disliked).append("\n");
         sb.append("- preferred cuisines: ").append(cuisines).append("\n");
+        if (availableIngredients != null && !availableIngredients.isBlank()) {
+            sb.append("- available ingredients to prefer: ").append(availableIngredients).append("\n");
+            sb.append("Prefer available ingredients if possible; otherwise suggest the closest fit.\n");
+        }
         sb.append("\n");
         sb.append("Do not repeat the original ingredient. Use short reasons (one sentence).\n");
         sb.append("No markdown, no extra text.\n");
@@ -125,7 +141,8 @@ public class AiIngredientSubstitutionService {
             List<AiIngredientSubstituteResponse.Alternative> alternatives,
             String originalIngredient,
             List<String> allergies,
-            List<String> disliked) {
+            List<String> disliked,
+            String availableIngredients) {
         if (alternatives == null) {
             return List.of();
         }
@@ -134,6 +151,7 @@ public class AiIngredientSubstitutionService {
         Set<String> bannedTokens = new LinkedHashSet<>();
         allergies.forEach(a -> bannedTokens.add(normalize(a)));
         disliked.forEach(d -> bannedTokens.add(normalize(d)));
+        List<String> preferred = parsePreferred(availableIngredients);
 
         List<AiIngredientSubstituteResponse.Alternative> filtered = new ArrayList<>();
         for (AiIngredientSubstituteResponse.Alternative alt : alternatives) {
@@ -154,10 +172,43 @@ public class AiIngredientSubstitutionService {
             filtered.add(new AiIngredientSubstituteResponse.Alternative(alt.getName(), reason));
         }
 
-        return filtered.stream().limit(3).collect(Collectors.toList());
+        if (preferred.isEmpty()) {
+            return filtered.stream().limit(3).collect(Collectors.toList());
+        }
+
+        List<AiIngredientSubstituteResponse.Alternative> ordered = new ArrayList<>();
+        for (AiIngredientSubstituteResponse.Alternative alt : filtered) {
+            String name = normalize(alt.getName());
+            boolean matches = preferred.stream().anyMatch(pref -> !pref.isEmpty() && name.contains(pref));
+            if (matches) {
+                ordered.add(alt);
+            }
+        }
+        for (AiIngredientSubstituteResponse.Alternative alt : filtered) {
+            if (!ordered.contains(alt)) {
+                ordered.add(alt);
+            }
+        }
+
+        return ordered.stream().limit(3).collect(Collectors.toList());
     }
 
     private String normalize(String value) {
         return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private List<String> parsePreferred(String availableIngredients) {
+        if (availableIngredients == null || availableIngredients.isBlank()) {
+            return List.of();
+        }
+        String[] tokens = availableIngredients.split("[,;]");
+        List<String> values = new ArrayList<>();
+        for (String token : tokens) {
+            String trimmed = normalize(token);
+            if (!trimmed.isEmpty()) {
+                values.add(trimmed);
+            }
+        }
+        return values;
     }
 }

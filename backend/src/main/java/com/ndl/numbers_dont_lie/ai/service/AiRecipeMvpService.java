@@ -121,6 +121,7 @@ public class AiRecipeMvpService {
         sb.append("\n");
         sb.append("Use realistic ingredients and quantities in grams or milliliters.\n");
         sb.append("Ensure steps are clear and concise.\n");
+        sb.append("Ensure the recipe feels distinct and not a generic repeat; include a small unique twist.\n");
         return sb.toString();
     }
 

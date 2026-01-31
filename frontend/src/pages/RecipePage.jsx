@@ -9,7 +9,7 @@
  * - /recipes/unknown - Fallback for meals without stored recipes
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import '../styles/RecipePage.css';
 
@@ -25,6 +25,7 @@ export function RecipePage() {
     loading: false,
     error: null,
   });
+  const [availabilityInput, setAvailabilityInput] = useState('');
 
   useEffect(() => {
     console.log('[RECIPE_PAGE_DEBUG] Page mounted with recipeId param:', recipeId);
@@ -74,6 +75,41 @@ export function RecipePage() {
     fetchRecipe();
   }, [recipeId]);
 
+  const nutritionTotals = useMemo(() => {
+    const totals = { calories: 0, protein: 0, carbs: 0, fats: 0 };
+    const ingredients = Array.isArray(recipe?.ingredients) ? recipe.ingredients : [];
+    ingredients.forEach((ingredient) => {
+      const nutrition = ingredient?.nutrition;
+      const quantity = typeof ingredient?.quantity === 'number' ? ingredient.quantity : null;
+      if (!nutrition || !quantity || quantity <= 0) return;
+      const factor = quantity / 100;
+      totals.calories += (nutrition.calories || 0) * factor;
+      totals.protein += (nutrition.protein || 0) * factor;
+      totals.carbs += (nutrition.carbs || 0) * factor;
+      totals.fats += (nutrition.fats || 0) * factor;
+    });
+    return totals;
+  }, [recipe]);
+
+  const nutritionMax = Math.max(
+    nutritionTotals.calories,
+    nutritionTotals.protein,
+    nutritionTotals.carbs,
+    nutritionTotals.fats,
+    1
+  );
+
+  const formatNumber = (value) => {
+    if (typeof value !== 'number' || Number.isNaN(value)) return '0';
+    return value % 1 === 0 ? String(value) : value.toFixed(1);
+  };
+
+  const nutritionAvailable =
+    nutritionTotals.calories > 0 ||
+    nutritionTotals.protein > 0 ||
+    nutritionTotals.carbs > 0 ||
+    nutritionTotals.fats > 0;
+
   const handleSuggestSubstitute = async (ingredientLabel) => {
     if (!recipe?.id) {
       return;
@@ -103,6 +139,7 @@ export function RecipePage() {
         body: JSON.stringify({
           recipeId: recipe.id,
           ingredientName: ingredientLabel,
+          availableIngredients: availabilityInput,
         }),
       });
 
@@ -320,6 +357,15 @@ export function RecipePage() {
                             )}
                             {!substituteState.loading && !substituteState.error && (
                               <>
+                                <div className="substitute-availability">
+                                  <label>Available ingredients (optional)</label>
+                                  <input
+                                    type="text"
+                                    placeholder="e.g. tofu, mushrooms"
+                                    value={availabilityInput}
+                                    onChange={(e) => setAvailabilityInput(e.target.value)}
+                                  />
+                                </div>
                                 {substituteState.alternatives.length > 0 ? (
                                   <div className="substitute-options">
                                     {substituteState.alternatives.map((alt, altIndex) => (
@@ -352,6 +398,63 @@ export function RecipePage() {
             </table>
           ) : (
             <p className="no-data">No ingredients available</p>
+          )}
+        </div>
+
+        {/* Nutrition Summary */}
+        <div className="recipe-section nutrition-section">
+          <h2>Nutrition Summary</h2>
+          {nutritionAvailable ? (
+            <>
+              <div className="nutrition-stats">
+                <div className="nutrition-stat">
+                  <span className="stat-label">Calories</span>
+                  <span className="stat-value">{formatNumber(nutritionTotals.calories)} kcal</span>
+                </div>
+                <div className="nutrition-stat">
+                  <span className="stat-label">Protein</span>
+                  <span className="stat-value">{formatNumber(nutritionTotals.protein)} g</span>
+                </div>
+                <div className="nutrition-stat">
+                  <span className="stat-label">Carbs</span>
+                  <span className="stat-value">{formatNumber(nutritionTotals.carbs)} g</span>
+                </div>
+                <div className="nutrition-stat">
+                  <span className="stat-label">Fats</span>
+                  <span className="stat-value">{formatNumber(nutritionTotals.fats)} g</span>
+                </div>
+              </div>
+              <div className="nutrition-chart">
+                {[
+                  { key: 'calories', label: 'Calories', unit: 'kcal', color: '#f97316' },
+                  { key: 'protein', label: 'Protein', unit: 'g', color: '#22c55e' },
+                  { key: 'carbs', label: 'Carbs', unit: 'g', color: '#3b82f6' },
+                  { key: 'fats', label: 'Fats', unit: 'g', color: '#a855f7' },
+                ].map((item) => {
+                  const value = nutritionTotals[item.key] || 0;
+                  const height = Math.max(8, Math.round((value / nutritionMax) * 140));
+                  return (
+                    <div key={item.key} className="nutrition-bar">
+                      <div className="bar-wrapper">
+                        <div
+                          className="bar-fill"
+                          style={{ height: `${height}px`, backgroundColor: item.color }}
+                        />
+                      </div>
+                      <div className="bar-label">{item.label}</div>
+                      <div className="bar-value">
+                        {formatNumber(value)} {item.unit}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="nutrition-note">
+                Estimated from ingredient data. Meal plan calories may differ based on plan targets and portioning.
+              </p>
+            </>
+          ) : (
+            <p className="no-data">Nutrition data unavailable for this recipe.</p>
           )}
         </div>
 

@@ -195,9 +195,11 @@ public class RecipeController {
         var ingredientsList = new ArrayList<Map<String, Object>>();
         for (var ri : recipe.getIngredients()) {
             var ingMap = new HashMap<String, Object>();
-            ingMap.put("label", ri.getIngredient().getLabel());
+            var ingredient = ri.getIngredient();
+            ingMap.put("label", ingredient.getLabel());
             ingMap.put("quantity", ri.getQuantity());
-            ingMap.put("unit", ri.getIngredient().getUnit());
+            ingMap.put("unit", ingredient.getUnit());
+            ingMap.put("nutrition", ingredient.getNutrition());
             ingredientsList.add(ingMap);
         }
         recipeMap.put("ingredients", ingredientsList);

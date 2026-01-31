@@ -6,10 +6,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ndl.numbers_dont_lie.ai.exception.AiClientException;
 
 import java.io.IOException;
+import java.net.ConnectException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.net.http.HttpTimeoutException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -110,6 +112,12 @@ public class GroqClient {
             } catch (JsonProcessingException e) {
                 throw new AiClientException("Model did not return valid JSON.", e);
             }
+        } catch (HttpTimeoutException e) {
+            Thread.currentThread().interrupt();
+            throw new AiClientException("Groq request timed out. Please retry.", e);
+        } catch (ConnectException e) {
+            Thread.currentThread().interrupt();
+            throw new AiClientException("Groq connectivity error. Check network.", e);
         } catch (IOException | InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new AiClientException("Groq request failed.", e);
@@ -183,6 +191,12 @@ public class GroqClient {
             } catch (JsonProcessingException e) {
                 throw new AiClientException("Model did not return valid JSON after function.", e);
             }
+        } catch (HttpTimeoutException e) {
+            Thread.currentThread().interrupt();
+            throw new AiClientException("Groq request timed out. Please retry.", e);
+        } catch (ConnectException e) {
+            Thread.currentThread().interrupt();
+            throw new AiClientException("Groq connectivity error. Check network.", e);
         } catch (IOException | InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new AiClientException("Groq function result request failed.", e);

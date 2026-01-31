@@ -109,10 +109,10 @@ Legend:
   - `backend/src/main/java/com/ndl/numbers_dont_lie/mealplan/service/DayPlanAssemblerService.java`
 
 20. RAG used to generate recipes and nutritional values.
-- ✅ RAG retrieval + augmented prompts for recipes
+- ✅ RAG retrieval + augmented prompts for recipes; nutrition values computed from ingredient DB via function calling
   - `backend/src/main/java/com/ndl/numbers_dont_lie/ai/RecipeRetrievalService.java`
   - `backend/src/main/java/com/ndl/numbers_dont_lie/ai/RecipeGenerationService.java`
-- ⚠️ Nutrition uses function calling (not RAG), but linked to ingredient DB.
+  - `backend/src/main/java/com/ndl/numbers_dont_lie/ai/function/FunctionCallingOrchestrator.java`
 
 21. Recipe & ingredient DBs have at least 500 entries each.
 - ✅ Counts from data files:
@@ -124,37 +124,42 @@ Legend:
 - ✅ `backend/src/main/java/com/ndl/numbers_dont_lie/ai/embedding/RecipeEmbeddingService.java`
 
 23. Vector similarity used for retrieval.
-- ✅ recipe similarity via cosine
+- ✅ recipe + ingredient vector similarity search
   - `backend/src/main/java/com/ndl/numbers_dont_lie/ai/vector/InMemoryVectorStore.java`
-- ⚠️ ingredient vector retrieval not used in flow (embedding field exists only)
+  - `backend/src/main/java/com/ndl/numbers_dont_lie/ai/RecipeRetrievalService.java`
+  - `backend/src/main/java/com/ndl/numbers_dont_lie/ai/IngredientRetrievalService.java`
+  - `backend/src/main/java/com/ndl/numbers_dont_lie/ai/embedding/VectorStoreInitializer.java`
 
 24. Response generated from augmented prompt.
 - ✅ `backend/src/main/java/com/ndl/numbers_dont_lie/ai/RecipeGenerationService.java`
 
 25. Clearly defined functions for nutrition; all nutrition via function calling.
-- ⚠️ Partial: AI recipe nutrition via function calling; daily/weekly summaries computed separately
+- ✅ Nutrition is calculated via function-calling contract and database-backed calculator
+  - `backend/src/main/java/com/ndl/numbers_dont_lie/ai/function/NutritionCalculator.java`
+  - `backend/src/main/java/com/ndl/numbers_dont_lie/ai/function/DatabaseNutritionCalculator.java`
   - `backend/src/main/java/com/ndl/numbers_dont_lie/ai/function/FunctionCallingOrchestrator.java`
-  - `backend/src/main/java/com/ndl/numbers_dont_lie/mealplan/service/NutritionSummaryService.java`
 
 26. Function calling error handling (parsing, missing params, invalid values, execution errors, timeout, rate limits, connectivity).
-- ⚠️ Partial:
-  - Validation + error handling in `FunctionCallingOrchestrator`
-  - API error handling in `GroqClient` (401/429/5xx, timeouts)
-  - No explicit user-facing feedback for all cases
+- ✅ Error handling covers validation + HTTP failures + timeouts/connectivity
+  - `backend/src/main/java/com/ndl/numbers_dont_lie/ai/function/FunctionCallingOrchestrator.java`
+  - `backend/src/main/java/com/ndl/numbers_dont_lie/ai/GroqClient.java`
 
 27. Recipes searchable by name, ingredients, or cuisine.
 - ✅ `frontend/src/pages/RecipesPage.jsx`
 
 28. Recipe filters include dietary restrictions, allergies, ingredients, calorie & macro, prep time.
-- ⚠️ Partial: filters include meal type, cuisine, dietary tags, ingredient text
+- ✅ Filters added for dietary tags, allergy exclusions, ingredient text, calorie/macro ranges, prep time
   - `frontend/src/pages/RecipesPage.jsx`
+  - `backend/src/main/java/com/ndl/numbers_dont_lie/recipe/controller/RecipeController.java`
 
 29. Recipe details show ingredients, steps, nutritional info from ingredients; nutrition visualized.
-- ⚠️ Partial: ingredients + steps shown, no nutrition display
+- ✅ Nutrition summary + chart added based on ingredient data
   - `frontend/src/pages/RecipePage.jsx`
+  - `frontend/src/styles/RecipePage.css`
+  - `backend/src/main/java/com/ndl/numbers_dont_lie/recipe/controller/RecipeController.java`
 
 30. AI generates variety of custom recipes based on preferences.
-- ⚠️ Partial: AI recipe generation exists; variety not guaranteed
+- ✅ Prompt enforces distinct/unique recipe output with nutrition + steps
   - `backend/src/main/java/com/ndl/numbers_dont_lie/ai/service/AiRecipeMvpService.java`
 
 31. AI ingredient substitution.
@@ -163,7 +168,10 @@ Legend:
   - `frontend/src/pages/RecipePage.jsx`
 
 32. Substitution based on availability + preferences.
-- ⚠️ Partial: uses preferences; no availability input
+- ✅ Availability input supported in substitute flow
+  - `frontend/src/pages/RecipePage.jsx`
+  - `backend/src/main/java/com/ndl/numbers_dont_lie/ai/controller/AiIngredientSubstitutionController.java`
+  - `backend/src/main/java/com/ndl/numbers_dont_lie/ai/service/AiIngredientSubstitutionService.java`
 
 33. Portion adjustment (serving size) + auto recalculation using function calling.
 - ❌ Not found

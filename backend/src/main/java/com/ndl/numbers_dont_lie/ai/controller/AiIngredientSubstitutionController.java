@@ -34,7 +34,8 @@ public class AiIngredientSubstitutionController {
         try {
             AiIngredientSubstituteResponse response = substitutionService.suggestSubstitutes(
                 request.getRecipeId(),
-                request.getIngredientName()
+                request.getIngredientName(),
+                request.getAvailableIngredients()
             );
             return ResponseEntity.ok(response);
         } catch (IllegalArgumentException e) {
