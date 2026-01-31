@@ -26,6 +26,7 @@ import { WeeklyShoppingListPage } from "./pages/WeeklyShoppingListPage";
 import { DailyShoppingListPage } from "./pages/DailyShoppingListPage";
 import { ReplaceMealPage } from "./pages/ReplaceMealPage";
 import { RecipePage } from "./pages/RecipePage";
+import { RecipesPage } from "./pages/RecipesPage";
 
 // Root component wraps router so inner shell can use hooks
 export default function App(){
@@ -595,7 +596,8 @@ function AppShell() {
           <Link to="/profile">Profile</Link>
           <Link to="/security">Security</Link>
           <Link to="/privacy">Privacy</Link>
-            <Link to="/meals/today">Meal Plan</Link>
+          <Link to="/meals/today">Meal Plan</Link>
+          <Link to="/recipes">Recipes</Link>
         </nav>
         <div style={{ marginLeft: 'auto' }}>
           {accessToken ? (
@@ -633,6 +635,7 @@ function AppShell() {
           <Route path="/shopping-list/week" element={<WeeklyShoppingListPage />} />
           <Route path="/shopping-list/day" element={<DailyShoppingListPage />} />
           <Route path="/meals/replace/:mealId" element={<ReplaceMealPage />} />
+          <Route path="/recipes" element={<RecipesPage />} />
           <Route path="/recipes/:recipeId" element={<RecipePage />} />
           <Route
             path="/oauth-callback"
