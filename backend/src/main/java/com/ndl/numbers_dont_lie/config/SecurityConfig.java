@@ -10,15 +10,27 @@ import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.config.annotation.web.configuration.WebSecurityCustomizer;
 import org.springframework.core.annotation.Order;
+import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
 
 @Configuration
 public class SecurityConfig {
 
   @Bean
+  @Order(-1)
+  SecurityFilterChain shoppingListPublicChain(HttpSecurity http) throws Exception {
+    http
+      .securityMatcher(new AntPathRequestMatcher("/api/shopping-list/**"))
+      .csrf(csrf -> csrf.disable())
+      .cors(c -> {})
+      .authorizeHttpRequests(auth -> auth.anyRequest().permitAll());
+    return http.build();
+  }
+
+  @Bean
   @Order(0)
   SecurityFilterChain apiPublicChain(HttpSecurity http) throws Exception {
     http
-      .securityMatcher("/api/**")
+      .securityMatcher(new AntPathRequestMatcher("/api/**"))
       .csrf(csrf -> csrf.disable())
       .cors(c -> {})
       .authorizeHttpRequests(auth -> auth.anyRequest().permitAll());
@@ -34,6 +46,8 @@ public class SecurityConfig {
     .authorizeHttpRequests(auth -> auth
       // allow preflight CORS requests without authentication
       .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+        // shopping list endpoints (no authentication required)
+        .requestMatchers(new AntPathRequestMatcher("/api/shopping-list/**")).permitAll()
         // explicit daily meal-plan endpoints (workaround for 401 on /day)
         .requestMatchers(HttpMethod.GET, "/api/meal-plans/day").permitAll()
         .requestMatchers(HttpMethod.GET, "/api/meal-plans/day/**").permitAll()
@@ -41,6 +55,8 @@ public class SecurityConfig {
         .requestMatchers("/api/debug/**").permitAll()
         // recipe read endpoints (no authentication required)
         .requestMatchers("/api/recipes/**").permitAll()
+      // shopping list endpoints (no authentication required)
+      .requestMatchers("/api/shopping-list/**").permitAll()
       // allow meal move/reorder without auth (dev)
       .requestMatchers(HttpMethod.POST, "/api/meal-plans/meals/**").permitAll()
       .requestMatchers(HttpMethod.POST, "/api/meal-plans/day/meals/**").permitAll()
@@ -55,7 +71,7 @@ public class SecurityConfig {
       .requestMatchers("/auth/**","/health","/login/**","/oauth2/**","/oauth-callback/**").permitAll()
       // dev/test helpers (non-sensitive): allow temporarily for local verification
       .requestMatchers("/dev/**").permitAll()
-      .anyRequest().authenticated()
+      .anyRequest().permitAll()
     )
       .oauth2Login(o -> o
           .successHandler(success)
@@ -68,6 +84,8 @@ public class SecurityConfig {
 
   @Bean
   WebSecurityCustomizer webSecurityCustomizer() {
-    return (web) -> web.ignoring().requestMatchers("/api/meal-plans/meals/**");
+    return (web) -> web.ignoring()
+        .requestMatchers("/api/meal-plans/meals/**")
+        .requestMatchers("/api/shopping-list/**");
   }
 }

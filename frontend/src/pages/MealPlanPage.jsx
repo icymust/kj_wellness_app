@@ -513,6 +513,17 @@ export function MealPlanPage() {
               {refreshing ? '🔄 Updating...' : '🔄 Refresh Plan'}
             </button>
             <button
+              className="btn-shopping-list"
+              onClick={() => {
+                const now = new Date();
+                const today = now.toLocaleDateString('en-CA');
+                navigate(`/shopping-list/day?date=${today}`);
+              }}
+              title="View shopping list"
+            >
+              🧺 Shopping List
+            </button>
+            <button
               className="btn-weekly-plan"
               onClick={() => navigate('/meals/week')}
               title="View your weekly meal plan"

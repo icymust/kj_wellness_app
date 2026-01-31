@@ -443,6 +443,20 @@ export function WeeklyMealPlanPage() {
               {refreshing ? '🔄 Refreshing...' : 'Refresh plan'}
             </button>
             <button
+              className="btn-shopping-list"
+              onClick={() => {
+                const startDate = weeklyPlan?.startDate;
+                if (startDate) {
+                  navigate(`/shopping-list/week?startDate=${startDate}`);
+                } else {
+                  navigate('/shopping-list/week');
+                }
+              }}
+              title="Weekly shopping list"
+            >
+              🧺 Shopping List
+            </button>
+            <button
               className="btn-day-plan"
               onClick={() => navigate('/meals/today')}
               title="Daily plan"

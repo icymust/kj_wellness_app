@@ -155,4 +155,14 @@ export const api = {
   moveMeal: (token, mealId, direction) =>
     request(`/api/meal-plans/meals/${mealId}/move?direction=${encodeURIComponent(direction)}`, { method: "POST", token }),
   getRecipes: (token, mealType) => request(`/api/recipes${mealType ? `?meal=${mealType}` : ''}`, { token }),
+  getWeeklyShoppingList: (token, userId, startDate) =>
+    request(
+      `/api/shopping-list/week?userId=${encodeURIComponent(userId)}&startDate=${encodeURIComponent(startDate)}&_ts=${Date.now()}`,
+      { token }
+    ),
+  getDailyShoppingList: (token, userId, date) =>
+    request(
+      `/api/shopping-list/day?userId=${encodeURIComponent(userId)}&date=${encodeURIComponent(date)}&_ts=${Date.now()}`,
+      { token }
+    ),
 };

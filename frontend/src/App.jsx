@@ -22,6 +22,8 @@ import Log from "./pages/Log";
 import { DebugMealPlanPage } from "./pages/DebugMealPlanPage";
 import { MealPlanPage } from "./pages/MealPlanPage";
 import { WeeklyMealPlanPage } from "./pages/WeeklyMealPlanPage";
+import { WeeklyShoppingListPage } from "./pages/WeeklyShoppingListPage";
+import { DailyShoppingListPage } from "./pages/DailyShoppingListPage";
 import { ReplaceMealPage } from "./pages/ReplaceMealPage";
 import { RecipePage } from "./pages/RecipePage";
 
@@ -628,6 +630,8 @@ function AppShell() {
           <Route path="/debug/meal-plan" element={<DebugMealPlanPage />} />
           <Route path="/meals/today" element={<MealPlanPage />} />
           <Route path="/meals/week" element={<WeeklyMealPlanPage />} />
+          <Route path="/shopping-list/week" element={<WeeklyShoppingListPage />} />
+          <Route path="/shopping-list/day" element={<DailyShoppingListPage />} />
           <Route path="/meals/replace/:mealId" element={<ReplaceMealPage />} />
           <Route path="/recipes/:recipeId" element={<RecipePage />} />
           <Route

@@ -23,6 +23,13 @@ public interface DayPlanRepository extends JpaRepository<DayPlan, Long> {
 	Optional<DayPlan> findByUserIdAndDateWithMeals(@Param("userId") Long userId, @Param("date") LocalDate date);
 
 	/**
+	 * Find DayPlans with meals eagerly loaded, ordered by newest first.
+	 * Use when multiple plans exist for the same date.
+	 */
+	@Query("SELECT dp FROM DayPlan dp LEFT JOIN FETCH dp.meals WHERE dp.userId = :userId AND dp.date = :date ORDER BY dp.id DESC")
+	List<DayPlan> findByUserIdAndDateWithMealsOrderByIdDesc(@Param("userId") Long userId, @Param("date") LocalDate date);
+
+	/**
 	 * Find a day plan by id with meals eagerly loaded.
 	 */
 	@Query("SELECT dp FROM DayPlan dp LEFT JOIN FETCH dp.meals WHERE dp.id = :id")
@@ -37,6 +44,21 @@ public interface DayPlanRepository extends JpaRepository<DayPlan, Long> {
 		   "JOIN v.mealPlan p " +
 		   "WHERE dp.userId = :userId AND dp.date = :date AND p.duration = :duration")
 	Optional<DayPlan> findByUserIdAndDateWithMealsAndDuration(
+			@Param("userId") Long userId,
+			@Param("date") LocalDate date,
+			@Param("duration") PlanDuration duration);
+
+	/**
+	 * Find day plans by date and duration with meals, ordered by newest first.
+	 * Use when multiple plans exist for the same date and duration.
+	 */
+	@Query("SELECT dp FROM DayPlan dp " +
+		   "LEFT JOIN FETCH dp.meals " +
+		   "JOIN dp.mealPlanVersion v " +
+		   "JOIN v.mealPlan p " +
+		   "WHERE dp.userId = :userId AND dp.date = :date AND p.duration = :duration " +
+		   "ORDER BY dp.id DESC")
+	List<DayPlan> findByUserIdAndDateWithMealsAndDurationOrderByIdDesc(
 			@Param("userId") Long userId,
 			@Param("date") LocalDate date,
 			@Param("duration") PlanDuration duration);
