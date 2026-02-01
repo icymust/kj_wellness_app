@@ -94,13 +94,19 @@ public class AiNutritionSuggestionsService {
             : List.of();
 
         StringBuilder sb = new StringBuilder();
-        sb.append("Generate 3-6 bullet-point nutrition improvement suggestions for today.\n");
+        sb.append("Generate 5-6 bullet-point nutrition improvement suggestions for today.\n");
         sb.append("Return STRICT JSON only: { \"suggestions\": [string] }\n");
         sb.append("Rules:\n");
         sb.append("- Use ONLY provided data; do not invent numbers.\n");
         sb.append("- Do NOT mention exact calories for individual meals.\n");
         sb.append("- Do NOT give medical advice or suggest supplements.\n");
         sb.append("- Be supportive and neutral.\n");
+        sb.append("- Must include at least one suggestion of EACH type:\n");
+        sb.append("  1) food recommendation\n");
+        sb.append("  2) meal timing adjustment\n");
+        sb.append("  3) portion size modification\n");
+        sb.append("  4) alternative ingredient\n");
+        sb.append("  5) meal plan optimization\n");
         if (estimated) {
             sb.append("- Include a short disclaimer that values are estimated.\n");
         }

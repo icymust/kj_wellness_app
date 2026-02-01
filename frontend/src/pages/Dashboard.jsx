@@ -1,5 +1,7 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import '../styles/Dashboard.css';
+import { getAccessToken } from '../lib/tokens';
+import { api } from '../lib/api';
 
 // Простой скелетон для предотвращения "дёрганья" текста загрузки.
 function SkeletonBlock({ lines = 3, height = 14 }) {
@@ -92,6 +94,8 @@ function DashboardComparison({ summary, week, monthData, ai }) {
               </li>
             ))}
           </ul>
+        ) : !dailyNutrition ? (
+          <div style={{ fontSize: 13 }}>Daily nutrition unavailable</div>
         ) : (
           <div style={{ fontSize:13, marginTop:8 }}>No insights yet. Generate weekly/monthly AI insights.</div>
         )}
@@ -104,6 +108,13 @@ export default function Dashboard({ ctx }) {
   const { summary, week, monthData, ai, rateLimitUntil, dashboardLoading, dashboardError, loadDashboard } = ctx;
   const hasData = !!(summary || week || monthData || ai);
   const isRateLimited = !!(rateLimitUntil && Date.now() < rateLimitUntil);
+  const [dailyNutrition, setDailyNutrition] = useState(null);
+  const [dailyLoading, setDailyLoading] = useState(false);
+  const [dailyError, setDailyError] = useState(null);
+  const [dailyAiSummary, setDailyAiSummary] = useState(null);
+  const [dailyAiSuggestions, setDailyAiSuggestions] = useState([]);
+  const [dailyAiLoading, setDailyAiLoading] = useState(false);
+  const [dailyAiError, setDailyAiError] = useState(null);
 
   // Initial aggregated load
   useEffect(() => { loadDashboard(); }, [loadDashboard]);
@@ -118,6 +129,115 @@ export default function Dashboard({ ctx }) {
   }, [rateLimitUntil, loadDashboard]);
 
   const comparisonAi = ai;
+
+  useEffect(() => {
+    const loadDailyNutrition = async () => {
+      const token = getAccessToken();
+      if (!token) return;
+      setDailyLoading(true);
+      setDailyError(null);
+      try {
+        const me = await api.me(token);
+        const user = me?.user || me;
+        const userId = user?.id;
+        if (!userId) {
+          throw new Error('No userId');
+        }
+        const today = new Date().toLocaleDateString('en-CA');
+        const response = await fetch(
+          `http://localhost:5173/api/meal-plans/day/nutrition?userId=${userId}&date=${today}`
+        );
+        if (!response.ok) {
+          throw new Error('Failed to load daily nutrition');
+        }
+        const data = await response.json();
+        setDailyNutrition({ ...data, date: today, userId });
+      } catch (err) {
+        setDailyError('Daily nutrition unavailable');
+        setDailyNutrition(null);
+      } finally {
+        setDailyLoading(false);
+      }
+    };
+    loadDailyNutrition();
+  }, []);
+
+  useEffect(() => {
+    const loadAiDaily = async () => {
+      if (!dailyNutrition || dailyNutrition.unavailable) {
+        setDailyAiSummary(null);
+        setDailyAiSuggestions([]);
+        return;
+      }
+      setDailyAiLoading(true);
+      setDailyAiError(null);
+      try {
+        const summaryRes = await fetch('http://localhost:5173/api/ai/nutrition/summary', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: dailyNutrition.userId,
+            date: dailyNutrition.date,
+            userGoal: summary?.goal?.type || 'general_fitness',
+            nutritionSummary: {
+              calories: dailyNutrition.total_calories ?? 0,
+              targetCalories: dailyNutrition.target_calories ?? 0,
+              protein: dailyNutrition.total_protein ?? 0,
+              targetProtein: dailyNutrition.target_protein ?? 0,
+              carbs: dailyNutrition.total_carbs ?? 0,
+              targetCarbs: dailyNutrition.target_carbs ?? 0,
+              fats: dailyNutrition.total_fats ?? 0,
+              targetFats: dailyNutrition.target_fats ?? 0,
+              nutritionEstimated: !!dailyNutrition.nutrition_estimated,
+            },
+          }),
+        });
+        if (summaryRes.ok) {
+          const data = await summaryRes.json();
+          setDailyAiSummary(data?.summary || null);
+        }
+
+        const suggestionsRes = await fetch('http://localhost:5173/api/ai/nutrition/suggestions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: dailyNutrition.userId,
+            date: dailyNutrition.date,
+            userGoal: summary?.goal?.type || 'general_fitness',
+            dietaryPreferences: [],
+            meals: [],
+            nutritionSummary: {
+              calories: dailyNutrition.total_calories ?? 0,
+              targetCalories: dailyNutrition.target_calories ?? 0,
+              protein: dailyNutrition.total_protein ?? 0,
+              targetProtein: dailyNutrition.target_protein ?? 0,
+              carbs: dailyNutrition.total_carbs ?? 0,
+              targetCarbs: dailyNutrition.target_carbs ?? 0,
+              fats: dailyNutrition.total_fats ?? 0,
+              targetFats: dailyNutrition.target_fats ?? 0,
+              nutritionEstimated: !!dailyNutrition.nutrition_estimated,
+            },
+          }),
+        });
+        if (suggestionsRes.ok) {
+          const data = await suggestionsRes.json();
+          setDailyAiSuggestions(Array.isArray(data?.suggestions) ? data.suggestions : []);
+        }
+      } catch (err) {
+        setDailyAiError('AI insights temporarily unavailable');
+      } finally {
+        setDailyAiLoading(false);
+      }
+    };
+    loadAiDaily();
+  }, [dailyNutrition, summary]);
+
+  const calorieProgress = useMemo(() => {
+    const total = dailyNutrition?.total_calories ?? 0;
+    const target = dailyNutrition?.target_calories ?? 0;
+    const pct = target > 0 ? Math.min((total / target) * 100, 100) : 0;
+    return { total, target, pct, isSurplus: total > target };
+  }, [dailyNutrition]);
 
   return (
     <div className="dashboard-wrap">
@@ -138,6 +258,56 @@ export default function Dashboard({ ctx }) {
           Load error: {dashboardError}
         </div>
       )}
+      <div className="card">
+        <h2 style={{ marginTop: 0 }}>Daily Nutrition Tracking</h2>
+        {dailyLoading ? (
+          <div style={{ fontSize: 13 }}>Loading daily nutrition…</div>
+        ) : dailyError ? (
+          <div style={{ fontSize: 13 }}>{dailyError}</div>
+        ) : (
+          <>
+            <div className="daily-progress">
+              <div className="daily-progress-header">
+                <span>Calories</span>
+                <span>{Math.round(calorieProgress.total)} / {Math.round(calorieProgress.target)} kcal</span>
+              </div>
+              <div className={`daily-progress-bar ${calorieProgress.isSurplus ? 'surplus' : 'deficit'}`}>
+                <div className="daily-progress-fill" style={{ width: `${calorieProgress.pct}%` }} />
+              </div>
+              <div className="daily-progress-note">
+                {calorieProgress.isSurplus ? 'Surplus' : 'Deficit'}
+              </div>
+            </div>
+            <div className="daily-macro-grid">
+              <div>Protein: {Math.round(dailyNutrition?.total_protein ?? 0)}g / {Math.round(dailyNutrition?.target_protein ?? 0)}g</div>
+              <div>Carbs: {Math.round(dailyNutrition?.total_carbs ?? 0)}g / {Math.round(dailyNutrition?.target_carbs ?? 0)}g</div>
+              <div>Fats: {Math.round(dailyNutrition?.total_fats ?? 0)}g / {Math.round(dailyNutrition?.target_fats ?? 0)}g</div>
+            </div>
+            <div className="daily-ai-block">
+              <h3>AI Nutrition Insights</h3>
+              {dailyAiLoading ? (
+                <div style={{ fontSize: 13 }}>Generating insights…</div>
+              ) : dailyAiError ? (
+                <div style={{ fontSize: 13 }}>{dailyAiError}</div>
+              ) : (
+                <div style={{ fontSize: 13 }}>{dailyAiSummary || 'No insights yet.'}</div>
+              )}
+              <h4>AI Suggestions</h4>
+              {dailyAiLoading ? (
+                <div style={{ fontSize: 13 }}>Generating suggestions…</div>
+              ) : dailyAiError ? (
+                <div style={{ fontSize: 13 }}>{dailyAiError}</div>
+              ) : (
+                <ul>
+                  {(dailyAiSuggestions || []).slice(0, 5).map((s, idx) => (
+                    <li key={idx}>{s}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </>
+        )}
+      </div>
       <DashboardComparison summary={summary} week={week} monthData={monthData} ai={comparisonAi} />
     </div>
   );

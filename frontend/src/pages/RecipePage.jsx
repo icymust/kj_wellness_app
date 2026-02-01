@@ -19,6 +19,7 @@ export function RecipePage() {
   const [recipe, setRecipe] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [servingsInput, setServingsInput] = useState('');
   const [substituteState, setSubstituteState] = useState({
     ingredientKey: null,
     alternatives: [],
@@ -63,6 +64,7 @@ export function RecipePage() {
         const data = await response.json();
         console.log('[RECIPE_PAGE_DEBUG] Successfully loaded recipe:', data);
         setRecipe(data);
+        setServingsInput(String(data.servings || 1));
         console.log('[RECIPE_PAGE] Loaded recipe:', data);
       } catch (err) {
         console.error('[RECIPE_PAGE_DEBUG] Error loading recipe:', err);
@@ -209,6 +211,38 @@ export function RecipePage() {
     }
   };
 
+  const handleUpdateServings = async () => {
+    if (!recipe?.id) {
+      return;
+    }
+    const next = Number(servingsInput);
+    if (!Number.isFinite(next) || next <= 0) {
+      setError('Servings must be a positive number.');
+      return;
+    }
+
+    try {
+      setError(null);
+      const response = await fetch(
+        `http://localhost:5173/api/recipes/${recipe.id}/servings`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ servings: Math.floor(next) }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to update servings');
+      }
+
+      const data = await response.json();
+      setRecipe(data);
+    } catch (err) {
+      setError(err.message || 'Failed to update servings.');
+    }
+  };
+
   if (loading) {
     return (
       <div className="recipe-page">
@@ -310,6 +344,28 @@ export function RecipePage() {
           <p>{recipe.summary}</p>
         </div>
       )}
+
+      <div className="recipe-section servings-section">
+        <h2>Serving Size</h2>
+        <div className="servings-controls">
+          <label>
+            Servings
+            <input
+              type="number"
+              min="1"
+              step="1"
+              value={servingsInput}
+              onChange={(e) => setServingsInput(e.target.value)}
+            />
+          </label>
+          <button type="button" className="servings-apply-btn" onClick={handleUpdateServings}>
+            Update servings
+          </button>
+        </div>
+        <p className="servings-note">
+          Ingredient quantities and nutrition update based on serving size.
+        </p>
+      </div>
 
       {/* Main Content Grid */}
       <div className="recipe-content">

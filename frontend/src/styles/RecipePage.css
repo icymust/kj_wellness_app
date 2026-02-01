@@ -291,6 +291,52 @@
   font-size: 16px;
 }
 
+.servings-section {
+  grid-column: 1 / -1;
+}
+
+.servings-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.servings-controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 14px;
+  color: #555;
+}
+
+.servings-controls input {
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 14px;
+}
+
+.servings-apply-btn {
+  border: none;
+  border-radius: 6px;
+  background-color: #4caf50;
+  color: white;
+  font-weight: 600;
+  padding: 10px 16px;
+  cursor: pointer;
+}
+
+.servings-apply-btn:hover {
+  background-color: #43a047;
+}
+
+.servings-note {
+  margin-top: 10px;
+  color: #6b7280;
+  font-size: 13px;
+}
+
 .loading-state,
 .error-state {
   display: flex;

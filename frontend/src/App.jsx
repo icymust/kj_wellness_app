@@ -13,6 +13,7 @@ import Weight from "./pages/Weight";
 import Analytics from "./pages/Analytics";
 import AI from "./pages/AI";
 import Dashboard from "./pages/Dashboard";
+import ProgressChartsPage from "./pages/ProgressChartsPage";
 import Profile from "./pages/Profile";
 import Security from "./pages/Security";
 import Verify from "./pages/Verify";
@@ -586,19 +587,39 @@ function AppShell() {
     <div style={{ padding: 16, fontFamily: 'Arial, sans-serif' }}>
       <header style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
         <h1 style={{ margin: 0, fontSize: 18 }}>Numbers-Don't-Lie</h1>
-        <nav style={{ marginLeft: 12, display: 'flex', gap: 8 }}>
-          <Link to="/">Home</Link>
-          <Link to="/register">Register</Link>
-          <Link to="/activity">Activity</Link>
-          <Link to="/weight">Weight</Link>
-          <Link to="/analytics">Analytics</Link>
+        <nav style={{ marginLeft: 12, display: 'flex', gap: 8, alignItems: 'center' }}>
           <Link to="/ai">AI</Link>
           <Link to="/dashboard">Dashboard</Link>
+          <Link to="/progress">Progress Charts</Link>
           <Link to="/profile">Profile</Link>
-          <Link to="/security">Security</Link>
-          <Link to="/privacy">Privacy</Link>
           <Link to="/meals/today">Meal Plan</Link>
           <Link to="/recipes">Recipes</Link>
+          <details style={{ position: 'relative' }}>
+            <summary style={{ cursor: 'pointer' }}>More</summary>
+            <div
+              style={{
+                position: 'absolute',
+                top: '100%',
+                left: 0,
+                background: '#fff',
+                border: '1px solid #ddd',
+                borderRadius: 8,
+                padding: 8,
+                display: 'grid',
+                gap: 6,
+                minWidth: 160,
+                zIndex: 10,
+              }}
+            >
+              <Link to="/">Home</Link>
+              <Link to="/register">Register</Link>
+              <Link to="/activity">Activity</Link>
+              <Link to="/weight">Weight</Link>
+              <Link to="/analytics">Analytics</Link>
+              <Link to="/security">Security</Link>
+              <Link to="/privacy">Privacy</Link>
+            </div>
+          </details>
         </nav>
         <div style={{ marginLeft: 'auto' }}>
           {accessToken ? (
@@ -622,6 +643,7 @@ function AppShell() {
           <Route path="/analytics" element={<Protected><Analytics ctx={ctx} /></Protected>} />
           <Route path="/ai" element={<Protected><AI ctx={ctx} /></Protected>} />
           <Route path="/dashboard" element={<Protected><Dashboard ctx={ctx} /></Protected>} />
+          <Route path="/progress" element={<Protected><ProgressChartsPage /></Protected>} />
           <Route path="/profile" element={<Protected><Profile ctx={ctx} /></Protected>} />
           <Route path="/security" element={<Protected><Security ctx={ctx} /></Protected>} />
           <Route path="/auth/verify" element={<Verify ctx={ctx} />} />

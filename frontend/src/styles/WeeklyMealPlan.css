@@ -230,6 +230,39 @@
   color: #444;
 }
 
+.trend-line-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.trend-line-svg {
+  width: 100%;
+  height: 160px;
+  background: #f8fafc;
+  border-radius: 10px;
+}
+
+.trend-line-axis {
+  stroke: #cbd5f5;
+  stroke-width: 2;
+}
+
+.trend-line-path {
+  fill: none;
+  stroke: #2563eb;
+  stroke-width: 3;
+}
+
+.trend-line-labels {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(80px, 1fr));
+  gap: 6px;
+  font-size: 10px;
+  color: #6b7280;
+  text-align: center;
+}
+
 .weekly-trend-error,
 .weekly-trend-empty {
   color: #999;

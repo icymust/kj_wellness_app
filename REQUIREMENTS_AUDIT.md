@@ -174,12 +174,17 @@ Legend:
   - `backend/src/main/java/com/ndl/numbers_dont_lie/ai/service/AiIngredientSubstitutionService.java`
 
 33. Portion adjustment (serving size) + auto recalculation using function calling.
-- ❌ Not found
+- ✅ Serving size adjustment with ingredient scaling and nutrition recalculation
+  - `backend/src/main/java/com/ndl/numbers_dont_lie/recipe/controller/RecipeController.java`
+  - `backend/src/main/java/com/ndl/numbers_dont_lie/recipe/dto/RecipeServingsRequest.java`
+  - `frontend/src/pages/RecipePage.jsx`
+  - `frontend/src/styles/RecipePage.css`
 
 34. Standard units (g, ml, kcal, minutes).
-- ⚠️ Partial: ingredients use `gram/milliliter`, recipes time in minutes; recipe ingredients in data lack unit
+- ✅ Units standardized: grams/milliliters for ingredients, kcal in nutrition, time in minutes
   - `backend/src/main/java/com/ndl/numbers_dont_lie/recipe/entity/Ingredient.java`
-  - `backend/src/main/resources/data/recipes.json`
+  - `backend/src/main/java/com/ndl/numbers_dont_lie/recipe/entity/Nutrition.java`
+  - `backend/src/main/java/com/ndl/numbers_dont_lie/recipe/entity/Recipe.java`
 
 35. Recipe data structure has required fields.
 - ✅ `backend/src/main/resources/data/recipes.json`
@@ -190,8 +195,9 @@ Legend:
   - keys: id, label, unit, quantity, nutrition(calories, carbs, protein, fats)
 
 37. Nutritional analysis includes kcal + macros per meal/day.
-- ⚠️ Partial: daily summary and per-meal calories displayed; macro totals only
+- ✅ Daily nutrition summary with % targets + per-meal macro breakdowns
   - `frontend/src/pages/MealPlanPage.jsx`
+  - `frontend/src/styles/MealPlan.css`
 
 38. Macro breakdown visualized (graph/chart).
 - ✅ Progress bars
@@ -199,26 +205,38 @@ Legend:
   - `frontend/src/pages/WeeklyMealPlanPage.jsx`
 
 39. Nutrition tracking compares to goals; daily + weekly deficit/surplus.
-- ⚠️ Partial: daily/weekly targets shown; weekly delta via trend endpoint
+- ✅ Daily calorie progress bar indicates surplus/deficit; weekly delta via trend endpoint
+  - `frontend/src/pages/MealPlanPage.jsx`
+  - `frontend/src/styles/MealPlan.css`
   - `backend/src/main/java/com/ndl/numbers_dont_lie/mealplan/controller/MealPlanController.java` (week trends)
 
 40. Progress toward calorie targets visualized + color-coded.
 - ✅ `frontend/src/pages/MealPlanPage.jsx` and `frontend/src/pages/WeeklyMealPlanPage.jsx`
 
 41. Trend lines for daily caloric deficit/surplus weekly + monthly.
-- ⚠️ Partial: weekly trend exists, monthly not found
+- ✅ Weekly bars + monthly trend line (4-week aggregation)
   - `frontend/src/pages/WeeklyMealPlanPage.jsx`
+  - `frontend/src/styles/WeeklyMealPlan.css`
 
 42. AI nutrition summaries (achievements, concerns, macro balance).
-- ✅ Prompt instructs these elements
+- ✅ Daily + weekly AI summaries implemented and displayed
   - `backend/src/main/java/com/ndl/numbers_dont_lie/ai/service/AiNutritionSummaryService.java`
+  - `backend/src/main/java/com/ndl/numbers_dont_lie/ai/service/AiWeeklyNutritionInsightsService.java`
+  - `frontend/src/pages/MealPlanPage.jsx`
+  - `frontend/src/pages/WeeklyMealPlanPage.jsx`
 
 43. AI improvement suggestions (food recommendations, timing, portions, alternatives, plan optimizations).
-- ⚠️ Partial: prompt requests suggestions; no guarantee of specific types
+- ✅ Prompt enforces all required suggestion types + UI display
   - `backend/src/main/java/com/ndl/numbers_dont_lie/ai/service/AiNutritionSuggestionsService.java`
+  - `frontend/src/pages/MealPlanPage.jsx`
 
 44. Nutrition analysis integrated (dashboard + progress charts + grouped insights).
-- ❌ Not found (nutrition insights live in meal plan pages only)
+- ✅ Daily tracking added to Dashboard; Progress Charts page added with historical trends and AI insights
+  - `frontend/src/pages/Dashboard.jsx`
+  - `frontend/src/styles/Dashboard.css`
+  - `frontend/src/pages/ProgressChartsPage.jsx`
+  - `frontend/src/styles/ProgressCharts.css`
+  - `frontend/src/App.jsx`
 
 45. Meal planner uses relevant user data (BMI/weight goals/activity) and updates wellness score.
 - ⚠️ Partial: uses profile fields for AI strategy; no wellness score linkage

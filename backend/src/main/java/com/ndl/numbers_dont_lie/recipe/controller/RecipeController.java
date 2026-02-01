@@ -1,6 +1,9 @@
 package com.ndl.numbers_dont_lie.recipe.controller;
 
 import com.ndl.numbers_dont_lie.recipe.dto.RecipeIngredientReplaceRequest;
+import com.ndl.numbers_dont_lie.recipe.dto.RecipeServingsRequest;
+import com.ndl.numbers_dont_lie.ai.dto.GeneratedRecipe;
+import com.ndl.numbers_dont_lie.ai.function.DatabaseNutritionCalculator;
 import com.ndl.numbers_dont_lie.recipe.entity.Ingredient;
 import com.ndl.numbers_dont_lie.recipe.entity.MealType;
 import com.ndl.numbers_dont_lie.recipe.entity.Recipe;
@@ -36,10 +39,15 @@ public class RecipeController {
     
     private final RecipeRepository recipeRepository;
     private final IngredientRepository ingredientRepository;
+    private final DatabaseNutritionCalculator nutritionCalculator;
     
-    public RecipeController(RecipeRepository recipeRepository, IngredientRepository ingredientRepository) {
+    public RecipeController(
+            RecipeRepository recipeRepository,
+            IngredientRepository ingredientRepository,
+            DatabaseNutritionCalculator nutritionCalculator) {
         this.recipeRepository = recipeRepository;
         this.ingredientRepository = ingredientRepository;
+        this.nutritionCalculator = nutritionCalculator;
     }
     
     /**
@@ -121,6 +129,44 @@ public class RecipeController {
             logger.error("[RECIPE_API] Error fetching recipe ID {}: {}", id, e.getMessage(), e);
             return ResponseEntity.status(500).build();
         }
+    }
+
+    /**
+     * Adjust recipe servings (read-only) and recalculate ingredient quantities + nutrition.
+     *
+     * POST /api/recipes/{recipeId}/servings
+     */
+    @PostMapping("/{recipeId}/servings")
+    @Transactional(readOnly = true)
+    public ResponseEntity<?> adjustServings(
+            @PathVariable Long recipeId,
+            @RequestBody RecipeServingsRequest request) {
+        if (request == null || request.getServings() == null) {
+            return ResponseEntity.badRequest().body(Map.of(
+                "error", "servings is required"
+            ));
+        }
+
+        int newServings = request.getServings();
+        if (newServings <= 0) {
+            return ResponseEntity.badRequest().body(Map.of(
+                "error", "servings must be positive"
+            ));
+        }
+
+        var recipeOpt = recipeRepository.findById(recipeId);
+        if (recipeOpt.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+
+        Recipe recipe = recipeOpt.get();
+        int baseServings = recipe.getServings() != null && recipe.getServings() > 0
+            ? recipe.getServings()
+            : 1;
+        double ratio = (double) newServings / baseServings;
+
+        Map<String, Object> response = recipeToMapScaled(recipe, newServings, ratio);
+        return ResponseEntity.ok(response);
     }
 
     /**
@@ -211,6 +257,66 @@ public class RecipeController {
         }
         recipeMap.put("preparation", stepsList);
         
+        return recipeMap;
+    }
+
+    private Map<String, Object> recipeToMapScaled(Recipe recipe, int newServings, double ratio) {
+        var recipeMap = new HashMap<String, Object>();
+        recipeMap.put("id", recipe.getId());
+        recipeMap.put("stable_id", recipe.getStableId());
+        recipeMap.put("title", recipe.getTitle());
+        recipeMap.put("cuisine", recipe.getCuisine());
+        recipeMap.put("meal", recipe.getMeal());
+        recipeMap.put("servings", newServings);
+        recipeMap.put("summary", recipe.getSummary());
+        recipeMap.put("time", recipe.getTimeMinutes());
+        recipeMap.put("difficulty_level", recipe.getDifficultyLevel());
+        recipeMap.put("source", recipe.getSource());
+        recipeMap.put("img", recipe.getImageUrl());
+        recipeMap.put("dietary_tags", recipe.getDietaryTags());
+
+        var ingredientsList = new ArrayList<Map<String, Object>>();
+        List<GeneratedRecipe.GeneratedIngredient> calcIngredients = new ArrayList<>();
+
+        for (var ri : recipe.getIngredients()) {
+            var ingredient = ri.getIngredient();
+            var ingMap = new HashMap<String, Object>();
+            ingMap.put("label", ingredient.getLabel());
+            double scaledQty = ri.getQuantity() * ratio;
+            ingMap.put("quantity", scaledQty);
+            ingMap.put("unit", ingredient.getUnit());
+            ingMap.put("nutrition", ingredient.getNutrition());
+            ingredientsList.add(ingMap);
+
+            GeneratedRecipe.GeneratedIngredient calcIng = new GeneratedRecipe.GeneratedIngredient();
+            calcIng.setName(ingredient.getLabel());
+            calcIng.setQuantity(scaledQty);
+            calcIng.setUnit(ingredient.getUnit());
+            if (ingredient.getStableId() != null) {
+                calcIng.setIngredientId(ingredient.getStableId());
+            }
+            calcIngredients.add(calcIng);
+        }
+        recipeMap.put("ingredients", ingredientsList);
+
+        var stepsList = new ArrayList<String>();
+        for (var step : recipe.getPreparationSteps()) {
+            stepsList.add(step.getDescription());
+        }
+        recipeMap.put("preparation", stepsList);
+
+        GeneratedRecipe.NutritionInfo nutrition = nutritionCalculator.calculate(calcIngredients, newServings);
+        Map<String, Object> nutritionSummary = new HashMap<>();
+        nutritionSummary.put("calories", nutrition.getCalories());
+        nutritionSummary.put("protein", nutrition.getProtein());
+        nutritionSummary.put("carbs", nutrition.getCarbohydrates());
+        nutritionSummary.put("fats", nutrition.getFat());
+        nutritionSummary.put("caloriesPerServing", nutrition.getCaloriesPerServing());
+        nutritionSummary.put("proteinPerServing", nutrition.getProteinPerServing());
+        nutritionSummary.put("carbsPerServing", nutrition.getCarbsPerServing());
+        nutritionSummary.put("fatsPerServing", nutrition.getFatPerServing());
+        recipeMap.put("nutrition_summary", nutritionSummary);
+
         return recipeMap;
     }
 

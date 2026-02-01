@@ -31,8 +31,11 @@ export function MealPlanPage() {
   const [generatingMealId, setGeneratingMealId] = useState(null);
   const [aiNutritionSummary, setAiNutritionSummary] = useState(null);
   const [aiNutritionLoading, setAiNutritionLoading] = useState(false);
+  const [aiNutritionError, setAiNutritionError] = useState(null);
   const [aiSuggestions, setAiSuggestions] = useState([]);
   const [aiSuggestionsLoading, setAiSuggestionsLoading] = useState(false);
+  const [aiSuggestionsError, setAiSuggestionsError] = useState(null);
+  const [mealNutritionMap, setMealNutritionMap] = useState({});
   const [dietaryPreferences, setDietaryPreferences] = useState([]);
   const [userGoal, setUserGoal] = useState('general_fitness');
 
@@ -116,6 +119,63 @@ export function MealPlanPage() {
   }, [userId]);
 
   useEffect(() => {
+    if (!dayPlan?.meals || dayPlan.meals.length === 0) {
+      setMealNutritionMap({});
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadMealNutrition = async () => {
+      const updates = {};
+
+      await Promise.all(
+        dayPlan.meals.map(async (meal) => {
+          const recipeId = meal?.recipe_id || meal?.recipeId;
+          if (!recipeId) {
+            return;
+          }
+          try {
+            const response = await fetch(`http://localhost:5173/api/recipes/${recipeId}`);
+            if (!response.ok) {
+              return;
+            }
+            const data = await response.json();
+            const ingredients = Array.isArray(data.ingredients) ? data.ingredients : [];
+            const totals = ingredients.reduce(
+              (acc, ingredient) => {
+                const nutrition = ingredient?.nutrition;
+                const quantity = typeof ingredient?.quantity === 'number' ? ingredient.quantity : null;
+                if (!nutrition || !quantity || quantity <= 0) return acc;
+                const factor = quantity / 100;
+                acc.calories += (nutrition.calories || 0) * factor;
+                acc.protein += (nutrition.protein || 0) * factor;
+                acc.carbs += (nutrition.carbs || 0) * factor;
+                acc.fats += (nutrition.fats || 0) * factor;
+                return acc;
+              },
+              { calories: 0, protein: 0, carbs: 0, fats: 0 }
+            );
+            updates[meal.id] = totals;
+          } catch (err) {
+            console.warn('[MEAL_PLAN] Failed to load meal nutrition', err);
+          }
+        })
+      );
+
+      if (!cancelled) {
+        setMealNutritionMap(updates);
+      }
+    };
+
+    loadMealNutrition();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [dayPlan?.meals]);
+
+  useEffect(() => {
     const loadGoal = async () => {
       const token = getAccessToken();
       if (!token) return;
@@ -155,6 +215,7 @@ export function MealPlanPage() {
     const generateInsights = async () => {
       if (!nutritionSummary || nutritionSummary.unavailable) {
         setAiNutritionSummary(null);
+        setAiNutritionError(null);
         return;
       }
       if (!dayPlan?.date) {
@@ -163,6 +224,7 @@ export function MealPlanPage() {
       setAiNutritionLoading(true);
 
       try {
+        setAiNutritionError(null);
         const response = await fetch('http://localhost:5173/api/ai/nutrition/summary', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -192,6 +254,7 @@ export function MealPlanPage() {
         setAiNutritionSummary(data?.summary || null);
       } catch (err) {
         setAiNutritionSummary(null);
+        setAiNutritionError('AI insights temporarily unavailable (rate limit).');
       } finally {
         setAiNutritionLoading(false);
       }
@@ -204,6 +267,7 @@ export function MealPlanPage() {
     const generateSuggestions = async () => {
       if (!nutritionSummary || nutritionSummary.unavailable) {
         setAiSuggestions([]);
+        setAiSuggestionsError(null);
         return;
       }
       if (!dayPlan?.date || !dayPlan?.meals) {
@@ -212,6 +276,7 @@ export function MealPlanPage() {
 
       setAiSuggestionsLoading(true);
       try {
+        setAiSuggestionsError(null);
         const meals = dayPlan.meals.map((meal) => ({
           mealType: (meal.meal_type || meal.mealType || '').toString().toUpperCase(),
           name: meal.custom_meal_name || meal.customMealName || meal.title || 'Meal',
@@ -249,6 +314,7 @@ export function MealPlanPage() {
         setAiSuggestions(suggestions);
       } catch (err) {
         setAiSuggestions([]);
+        setAiSuggestionsError('AI suggestions temporarily unavailable (rate limit).');
       } finally {
         setAiSuggestionsLoading(false);
       }
@@ -505,6 +571,26 @@ export function MealPlanPage() {
     return value != null ? Math.round(value) : null;
   };
 
+  const formatMacroLine = (mealId) => {
+    const totals = mealNutritionMap[mealId];
+    if (!totals) {
+      return null;
+    }
+    const targetProtein = nutritionSummary?.target_protein ?? 0;
+    const targetCarbs = nutritionSummary?.target_carbs ?? 0;
+    const targetFats = nutritionSummary?.target_fats ?? 0;
+
+    const pct = (value, target) => (target > 0 ? Math.round((value / target) * 100) : 0);
+
+    return (
+      <div className="meal-macro-line">
+        <span>Protein {totals.protein.toFixed(1)}g ({pct(totals.protein, targetProtein)}%)</span>
+        <span>Carbs {totals.carbs.toFixed(1)}g ({pct(totals.carbs, targetCarbs)}%)</span>
+        <span>Fats {totals.fats.toFixed(1)}g ({pct(totals.fats, targetFats)}%)</span>
+      </div>
+    );
+  };
+
   return (
     <div className="meal-plan-page">
       {/* Header with Refresh Button */}
@@ -561,6 +647,38 @@ export function MealPlanPage() {
           )}
           {!nutritionSummary.unavailable && (
             <div className="nutrition-grid">
+              <div className="calorie-progress">
+                <div className="calorie-progress-header">
+                  <span className="calorie-progress-label">Calories</span>
+                  <span className="calorie-progress-value">
+                    {Math.round(nutritionSummary.total_calories ?? 0)} / {Math.round(nutritionSummary.target_calories ?? 0)} kcal
+                  </span>
+                </div>
+                <div
+                  className={`calorie-progress-bar ${
+                    (nutritionSummary.total_calories ?? 0) > (nutritionSummary.target_calories ?? 0)
+                      ? 'surplus'
+                      : 'deficit'
+                  }`}
+                >
+                  <div
+                    className="calorie-progress-fill"
+                    style={{
+                      width: `${Math.min(
+                        ((nutritionSummary.total_calories ?? 0) /
+                          Math.max(nutritionSummary.target_calories ?? 1, 1)) *
+                          100,
+                        100
+                      )}%`,
+                    }}
+                  ></div>
+                </div>
+                <div className="calorie-progress-note">
+                  {(nutritionSummary.total_calories ?? 0) > (nutritionSummary.target_calories ?? 0)
+                    ? 'Surplus'
+                    : 'Deficit'}
+                </div>
+              </div>
               {renderNutritionBar(
                 nutritionSummary.total_calories,
                 nutritionSummary.target_calories,
@@ -583,21 +701,25 @@ export function MealPlanPage() {
               )}
             </div>
           )}
-          {(aiNutritionLoading || aiNutritionSummary) && !nutritionSummary.unavailable && (
+          {(aiNutritionLoading || aiNutritionSummary || aiNutritionError) && !nutritionSummary.unavailable && (
             <div className="ai-nutrition-summary">
               <h3>AI Nutrition Insights</h3>
               {aiNutritionLoading ? (
                 <p className="ai-nutrition-loading">Generating nutrition insights…</p>
+              ) : aiNutritionError ? (
+                <p className="ai-nutrition-loading">{aiNutritionError}</p>
               ) : (
                 <p className="ai-nutrition-text">{aiNutritionSummary}</p>
               )}
             </div>
           )}
-          {(aiSuggestionsLoading || aiSuggestions.length > 0) && !nutritionSummary.unavailable && (
+          {(aiSuggestionsLoading || aiSuggestions.length > 0 || aiSuggestionsError) && !nutritionSummary.unavailable && (
             <div className="ai-nutrition-suggestions">
               <h3>AI Nutrition Suggestions</h3>
               {aiSuggestionsLoading ? (
                 <p className="ai-nutrition-loading">Generating suggestions…</p>
+              ) : aiSuggestionsError ? (
+                <p className="ai-nutrition-loading">{aiSuggestionsError}</p>
               ) : (
                 <ul className="ai-nutrition-list">
                   {aiSuggestions.map((suggestion, idx) => (
@@ -628,6 +750,8 @@ export function MealPlanPage() {
               {meal.custom_meal_name && (
                 <p className="meal-name">{meal.custom_meal_name}</p>
               )}
+
+              {formatMacroLine(meal.id)}
               
               {/* Button Container */}
               <div style={{ display: 'flex', gap: '10px', marginTop: '10px', flexWrap: 'wrap' }}>

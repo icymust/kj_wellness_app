@@ -35,9 +35,12 @@ export function WeeklyMealPlanPage() {
   const [customMealError, setCustomMealError] = useState(null);
   const [trendData, setTrendData] = useState(null);
   const [trendError, setTrendError] = useState(null);
+  const [monthlyTrendDays, setMonthlyTrendDays] = useState([]);
+  const [monthlyTrendError, setMonthlyTrendError] = useState(null);
   const [generatingMealId, setGeneratingMealId] = useState(null);
   const [weeklyInsights, setWeeklyInsights] = useState(null);
   const [weeklyInsightsLoading, setWeeklyInsightsLoading] = useState(false);
+  const [weeklyInsightsError, setWeeklyInsightsError] = useState(null);
   const [userGoal, setUserGoal] = useState('maintenance');
 
   // Resolve userId from /protected/me if needed
@@ -95,6 +98,7 @@ export function WeeklyMealPlanPage() {
       const data = await response.json();
       setWeeklyPlan(data);
       await fetchWeeklyTrends(today);
+      await fetchMonthlyTrends(today);
 
       // Debug: log meal IDs
       if (data.days && data.days.length > 0) {
@@ -140,11 +144,13 @@ export function WeeklyMealPlanPage() {
     const generateWeeklyInsights = async () => {
       if (!weeklyPlan?.weeklyNutrition || !trendData?.days?.length || !weeklyPlan?.startDate || !weeklyPlan?.endDate) {
         setWeeklyInsights(null);
+        setWeeklyInsightsError(null);
         return;
       }
 
       setWeeklyInsightsLoading(true);
       try {
+        setWeeklyInsightsError(null);
         const dailySummaries = trendData.days.map((day) => ({
           date: day.date,
           calories: day.actualCalories ?? 0,
@@ -182,6 +188,7 @@ export function WeeklyMealPlanPage() {
         setWeeklyInsights(data?.summary || null);
       } catch {
         setWeeklyInsights(null);
+        setWeeklyInsightsError('AI insights temporarily unavailable (rate limit).');
       } finally {
         setWeeklyInsightsLoading(false);
       }
@@ -202,6 +209,7 @@ export function WeeklyMealPlanPage() {
         const data = await response.json();
         setWeeklyPlan(data);
         await fetchWeeklyTrends(startDate);
+        await fetchMonthlyTrends(startDate);
       } else {
         console.error('[WEEK_PLAN_PAGE] Reload failed:', response.status);
       }
@@ -227,6 +235,42 @@ export function WeeklyMealPlanPage() {
     }
   };
 
+  const fetchMonthlyTrends = async (startDate) => {
+    if (!userId || !startDate) return;
+    try {
+      setMonthlyTrendError(null);
+      const baseDate = new Date(startDate);
+      const weekStarts = Array.from({ length: 4 }, (_, idx) => {
+        const d = new Date(baseDate);
+        d.setDate(baseDate.getDate() + idx * 7);
+        return d.toLocaleDateString('en-CA');
+      });
+
+      const responses = await Promise.all(
+        weekStarts.map((weekStart) =>
+          fetch(`http://localhost:5173/api/meal-plans/week/trends?userId=${userId}&startDate=${weekStart}`)
+        )
+      );
+
+      const payloads = await Promise.all(
+        responses.map((response) => (response.ok ? response.json() : null))
+      );
+
+      const merged = [];
+      payloads.forEach((data) => {
+        if (data?.days?.length) {
+          merged.push(...data.days);
+        }
+      });
+
+      setMonthlyTrendDays(merged);
+    } catch (err) {
+      console.error('[WEEK_PLAN_PAGE] Monthly trend error:', err);
+      setMonthlyTrendError('Failed to load monthly trends');
+      setMonthlyTrendDays([]);
+    }
+  };
+
   /**
    * Refresh weekly meal plan
    */
@@ -246,6 +290,7 @@ export function WeeklyMealPlanPage() {
         const data = await response.json();
         setWeeklyPlan(data);
         await fetchWeeklyTrends(today);
+        await fetchMonthlyTrends(today);
         console.log('[WEEK_PLAN_PAGE] Refresh SUCCESS!');
       } else {
         console.error('[WEEK_PLAN_PAGE] Refresh failed:', response.status);
@@ -432,6 +477,61 @@ export function WeeklyMealPlanPage() {
   const maxAbsDelta = trendDays.length > 0
     ? Math.max(...trendDays.map(day => Math.abs(day.delta)))
     : 0;
+  const monthlyMaxAbsDelta = monthlyTrendDays.length > 0
+    ? Math.max(...monthlyTrendDays.map(day => Math.abs(day.delta)))
+    : 0;
+
+  const formatShortDate = (value) => {
+    if (!value) return '';
+    const parts = value.split('-');
+    if (parts.length !== 3) return value;
+    return `${parts[1]}.${parts[2]}`;
+  };
+
+  const buildWeekLabels = (daysList) => {
+    if (!daysList.length) return [];
+    const labels = [];
+    for (let i = 0; i < daysList.length; i += 7) {
+      const start = daysList[i];
+      const end = daysList[Math.min(i + 6, daysList.length - 1)];
+      if (start?.date && end?.date) {
+        labels.push(`${formatShortDate(start.date)}–${formatShortDate(end.date)}`);
+      }
+    }
+    return labels;
+  };
+
+  const renderTrendLine = (daysList, maxAbs, labelsOverride = null) => {
+    if (!daysList.length) {
+      return <div className="weekly-trend-empty">No trend data available.</div>;
+    }
+
+    const width = 600;
+    const height = 160;
+    const padding = 20;
+    const mid = height / 2;
+    const scale = maxAbs > 0 ? (mid - padding) / maxAbs : 1;
+
+    const points = daysList.map((day, idx) => {
+      const x = padding + (idx / Math.max(daysList.length - 1, 1)) * (width - padding * 2);
+      const y = mid - (day.delta || 0) * scale;
+      return `${x},${y}`;
+    });
+
+    return (
+      <div className="trend-line-wrapper">
+        <svg viewBox={`0 0 ${width} ${height}`} className="trend-line-svg">
+          <line x1={padding} y1={mid} x2={width - padding} y2={mid} className="trend-line-axis" />
+          <polyline points={points.join(' ')} className="trend-line-path" />
+        </svg>
+        <div className="trend-line-labels">
+          {(labelsOverride || []).length > 0
+            ? labelsOverride.map((label, idx) => <span key={`${label}-${idx}`}>{label}</span>)
+            : daysList.map((day) => <span key={day.date}>{formatShortDate(day.date)}</span>)}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="weekly-meal-plan-page">
@@ -551,11 +651,13 @@ export function WeeklyMealPlanPage() {
         </div>
       )}
 
-      {(weeklyInsightsLoading || weeklyInsights) && (
+      {(weeklyInsightsLoading || weeklyInsights || weeklyInsightsError) && (
         <div className="weekly-ai-insights">
           <h2>AI Weekly Nutrition Insights</h2>
           {weeklyInsightsLoading ? (
             <p className="weekly-ai-loading">Analyzing weekly nutrition…</p>
+          ) : weeklyInsightsError ? (
+            <p className="weekly-ai-loading">{weeklyInsightsError}</p>
           ) : (
             <p className="weekly-ai-text">{weeklyInsights}</p>
           )}
@@ -601,6 +703,22 @@ export function WeeklyMealPlanPage() {
             No trend data available.
           </div>
         )}
+      </div>
+
+      {/* Monthly Calorie Trend */}
+      <div className="weekly-trend-section">
+        <div className="weekly-trend-header">
+          <h2>Monthly Calorie Trend</h2>
+          <p className="weekly-trend-subtitle">Last 4 weeks combined</p>
+        </div>
+
+        {monthlyTrendError && (
+          <div className="weekly-trend-error">
+            {monthlyTrendError}
+          </div>
+        )}
+
+        {renderTrendLine(monthlyTrendDays, monthlyMaxAbsDelta, buildWeekLabels(monthlyTrendDays))}
       </div>
 
       {/* Days List */}

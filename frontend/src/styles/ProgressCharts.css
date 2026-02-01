@@ -1,0 +1,77 @@
+.progress-wrap {
+  display: grid;
+  gap: 20px;
+  padding: 16px;
+}
+
+.progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.progress-header h1 {
+  margin: 0;
+}
+
+.progress-header p {
+  margin: 4px 0 0;
+  color: #6b7280;
+}
+
+.progress-header button {
+  border: 1px solid #d1d5db;
+  background: #ffffff;
+  padding: 8px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.progress-card {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.progress-error {
+  background: #fdecea;
+  border: 1px solid #f44336;
+  padding: 12px;
+  border-radius: 8px;
+  color: #9b1c1c;
+}
+
+.trend-line-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.trend-line-svg {
+  width: 100%;
+  height: 160px;
+  background: #f8fafc;
+  border-radius: 10px;
+}
+
+.trend-line-axis {
+  stroke: #cbd5f5;
+  stroke-width: 2;
+}
+
+.trend-line-path {
+  fill: none;
+  stroke: #2563eb;
+  stroke-width: 3;
+}
+
+.trend-line-labels {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(80px, 1fr));
+  gap: 6px;
+  font-size: 10px;
+  color: #6b7280;
+  text-align: center;
+}
