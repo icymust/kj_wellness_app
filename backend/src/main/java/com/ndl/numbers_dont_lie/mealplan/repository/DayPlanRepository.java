@@ -94,6 +94,18 @@ public interface DayPlanRepository extends JpaRepository<DayPlan, Long> {
 			@Param("endDate") LocalDate endDate);
 
 	/**
+	 * Find day plans for a specific meal plan version in a date range with meals.
+	 */
+	@Query("SELECT DISTINCT dp FROM DayPlan dp " +
+		   "LEFT JOIN FETCH dp.meals " +
+		   "WHERE dp.mealPlanVersion.id = :versionId AND dp.date BETWEEN :startDate AND :endDate " +
+		   "ORDER BY dp.date ASC")
+	List<DayPlan> findByMealPlanVersionIdAndDateRangeWithMeals(
+			@Param("versionId") Long versionId,
+			@Param("startDate") LocalDate startDate,
+			@Param("endDate") LocalDate endDate);
+
+	/**
 	 * Find a day plan for a specific meal plan and date, with meals eagerly loaded.
 	 */
 	@Query("SELECT dp FROM DayPlan dp " +

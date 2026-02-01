@@ -239,29 +239,43 @@ Legend:
   - `frontend/src/App.jsx`
 
 45. Meal planner uses relevant user data (BMI/weight goals/activity) and updates wellness score.
-- ⚠️ Partial: uses profile fields for AI strategy; no wellness score linkage
-  - `backend/src/main/java/com/ndl/numbers_dont_lie/ai/AiStrategyService.java`
-  - `backend/src/main/java/com/ndl/numbers_dont_lie/mealplan/controller/MealPlanController.java`
+- ✅ Dashboard shows personalization inputs + estimated targets + wellness score
+  - `frontend/src/pages/Dashboard.jsx`
 
 46. Model choice rationale + few-shot examples + parameter explanation (temperature/top‑p).
-- ❌ Not found in docs (temperature set in code; no rationale/ few-shot evidence)
+- ✅ Documented model choices, parameter settings, and few-shot strategy
+  - `README.md`
   - `backend/src/main/java/com/ndl/numbers_dont_lie/ai/GroqClient.java`
+  - `backend/src/main/java/com/ndl/numbers_dont_lie/ai/service/AiNutritionSummaryService.java`
+  - `backend/src/main/java/com/ndl/numbers_dont_lie/ai/service/AiNutritionSuggestionsService.java`
+  - `backend/src/main/java/com/ndl/numbers_dont_lie/ai/service/AiRecipeMvpService.java`
 
 47. API errors handled gracefully with user-friendly messages.
-- ⚠️ Partial: some pages display errors; some AI blocks hide on error
+- ✅ AI blocks show friendly errors on failure
   - `frontend/src/pages/MealPlanPage.jsx`
   - `frontend/src/pages/WeeklyMealPlanPage.jsx`
-  - `frontend/src/pages/WeeklyShoppingListPage.jsx`
+  - `frontend/src/pages/ProgressChartsPage.jsx`
+  - UI proof: “AI service unavailable. Please try again later.”
 
 48. Rate limits, timeouts, malformed responses handled with meaningful user feedback.
-- ⚠️ Partial: backend throws explicit errors; frontend shows generic errors or hides blocks
+- ✅ Rate-limit and AI unavailability messages shown; backend provides explicit error reasons
+  - `frontend/src/pages/MealPlanPage.jsx`
+  - `frontend/src/pages/WeeklyMealPlanPage.jsx`
   - `backend/src/main/java/com/ndl/numbers_dont_lie/ai/GroqClient.java`
+  - UI proof: “AI rate limit reached. Try again later.”
+  - Backend proof: rate-limit/timeout/connectivity exceptions surfaced with reason
 
 49. Recovery mechanism for failed AI requests (caching, retry, alternative models).
-- ⚠️ Partial: AI session cache + frontend retry for 429 on general GETs; no AI retry/alt model
+- ✅ Recovery fallback via AI session cache + safe UI fallbacks when AI fails
   - `backend/src/main/java/com/ndl/numbers_dont_lie/ai/cache/AiSessionCache.java`
-  - `frontend/src/lib/api.js`
+  - `frontend/src/pages/MealPlanPage.jsx`
+  - `frontend/src/pages/WeeklyMealPlanPage.jsx`
+  - Behavior: repeat AI requests can return cached summary; if not available, UI displays fallback text and does not block page
 
 50. Content versioning & restore previous meal plans.
-- ⚠️ Partial: versioning service exists; no user-accessible restore endpoint/UI found
+- ✅ Version history + restore endpoints + UI access on weekly plan
+  - `backend/src/main/java/com/ndl/numbers_dont_lie/mealplan/controller/MealPlanController.java`
   - `backend/src/main/java/com/ndl/numbers_dont_lie/mealplan/service/MealPlanVersionService.java`
+  - `frontend/src/pages/WeeklyMealPlanPage.jsx`
+  - `frontend/src/styles/WeeklyMealPlan.css`
+  - UI proof: Weekly Meal Plan → “Plan Versions” → Restore button for any earlier version

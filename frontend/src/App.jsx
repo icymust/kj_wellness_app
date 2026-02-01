@@ -522,7 +522,7 @@ function AppShell() {
       // If all failed and none were 429 (already handled), surface a generic error
       const non429 = errors.filter(e => !(e && e.status === 429));
       if (non429.length === errors.length) {
-        setDashboardError(non429[0]?.message || 'Не удалось загрузить данные дашборда');
+        setDashboardError(non429[0]?.message || 'Failed to load dashboard data');
       }
     }
     setDashboardLoading(false);

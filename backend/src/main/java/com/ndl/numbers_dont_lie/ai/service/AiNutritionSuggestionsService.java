@@ -52,7 +52,7 @@ public class AiNutritionSuggestionsService {
             estimated
         );
 
-        JsonNode response = groqClient.callForJson(prompt);
+        JsonNode response = groqClient.callForJson(prompt, 0.3);
         AiNutritionSuggestionsResponse parsed = parseResponse(response);
 
         logger.info(
@@ -110,6 +110,14 @@ public class AiNutritionSuggestionsService {
         if (estimated) {
             sb.append("- Include a short disclaimer that values are estimated.\n");
         }
+        sb.append("\nExample:\n");
+        sb.append("{\"suggestions\":[\n");
+        sb.append("  \"Add a colorful vegetable to lunch to boost fiber and micronutrients.\",\n");
+        sb.append("  \"If you feel hungry later, shift a small snack closer to the afternoon.\",\n");
+        sb.append("  \"Reduce dinner portions slightly to better match your calorie target.\",\n");
+        sb.append("  \"Swap mayonnaise for Greek yogurt to lower saturated fat.\",\n");
+        sb.append("  \"Consider a lighter evening meal to balance higher calories earlier in the day.\"\n");
+        sb.append("]}\n");
         sb.append("\nInputs:\n");
         sb.append("- date: ").append(request.getDate()).append("\n");
         sb.append("- goal: ").append(goal).append("\n");

@@ -12,8 +12,8 @@
  * - Graceful handling of missing data
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import '../styles/WeeklyMealPlan.css';
 import { useUser } from '../contexts/UserContext';
 import { getAccessToken } from '../lib/tokens';
@@ -21,6 +21,7 @@ import { api } from '../lib/api';
 
 export function WeeklyMealPlanPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { userId, setUserId } = useUser();
   
   const [weeklyPlan, setWeeklyPlan] = useState(null);
@@ -38,10 +39,20 @@ export function WeeklyMealPlanPage() {
   const [monthlyTrendDays, setMonthlyTrendDays] = useState([]);
   const [monthlyTrendError, setMonthlyTrendError] = useState(null);
   const [generatingMealId, setGeneratingMealId] = useState(null);
+  const lastReloadRef = useRef(0);
+  const locationRefreshHandledRef = useRef(false);
+  const initialLoadRef = useRef(false);
+  const lastMonthlyTrendStartRef = useRef(null);
+  const lastWeeklyTrendStartRef = useRef(null);
   const [weeklyInsights, setWeeklyInsights] = useState(null);
   const [weeklyInsightsLoading, setWeeklyInsightsLoading] = useState(false);
   const [weeklyInsightsError, setWeeklyInsightsError] = useState(null);
   const [userGoal, setUserGoal] = useState('maintenance');
+  const [versionHistory, setVersionHistory] = useState(null);
+  const [versionsLoading, setVersionsLoading] = useState(false);
+  const [versionsError, setVersionsError] = useState(null);
+  const [deletingVersion, setDeletingVersion] = useState(null);
+  const [restoringVersion, setRestoringVersion] = useState(null);
 
   // Resolve userId from /protected/me if needed
   useEffect(() => {
@@ -66,6 +77,26 @@ export function WeeklyMealPlanPage() {
     };
     fillUserId();
   }, [userId, setUserId]);
+
+  const fetchWeeklyVersions = useCallback(async (startDate) => {
+    if (!userId || !startDate) return;
+    try {
+      setVersionsLoading(true);
+      setVersionsError(null);
+      const url = `http://localhost:5173/api/meal-plans/week/versions?userId=${userId}&startDate=${startDate}`;
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`Failed to load plan versions (${response.status})`);
+      }
+      const data = await response.json();
+      setVersionHistory(data);
+    } catch (err) {
+      setVersionHistory(null);
+      setVersionsError(err?.message || 'Failed to load plan versions.');
+    } finally {
+      setVersionsLoading(false);
+    }
+  }, [userId]);
 
   /**
    * Load weekly meal plan
@@ -99,6 +130,7 @@ export function WeeklyMealPlanPage() {
       setWeeklyPlan(data);
       await fetchWeeklyTrends(today);
       await fetchMonthlyTrends(today);
+      await fetchWeeklyVersions(today);
 
       // Debug: log meal IDs
       if (data.days && data.days.length > 0) {
@@ -116,10 +148,12 @@ export function WeeklyMealPlanPage() {
     } finally {
       setLoading(false);
     }
-  }, [userId]);
+  }, [userId, fetchWeeklyVersions, loading]);
 
   useEffect(() => {
     if (!userId) return;
+    if (initialLoadRef.current) return;
+    initialLoadRef.current = true;
     loadWeeklyPlan();
   }, [userId, loadWeeklyPlan]);
 
@@ -181,14 +215,17 @@ export function WeeklyMealPlanPage() {
         });
 
         if (!response.ok) {
-          throw new Error('Failed to generate weekly insights');
+          const msg = response.status === 429
+            ? 'AI rate limit reached. Try again later.'
+            : 'AI service unavailable. Please try again later.';
+          throw new Error(msg);
         }
 
         const data = await response.json();
         setWeeklyInsights(data?.summary || null);
-      } catch {
+      } catch (err) {
         setWeeklyInsights(null);
-        setWeeklyInsightsError('AI insights temporarily unavailable (rate limit).');
+        setWeeklyInsightsError(err?.message || 'AI insights temporarily unavailable.');
       } finally {
         setWeeklyInsightsLoading(false);
       }
@@ -200,6 +237,11 @@ export function WeeklyMealPlanPage() {
   const reloadWeeklyPlan = async (startDateOverride) => {
     if (!userId) return;
     try {
+      const nowMs = Date.now();
+      if (nowMs - lastReloadRef.current < 800) {
+        return;
+      }
+      lastReloadRef.current = nowMs;
       const now = new Date();
       const today = now.toLocaleDateString('en-CA');
       const startDate = startDateOverride || weeklyPlan?.startDate || today;
@@ -210,6 +252,7 @@ export function WeeklyMealPlanPage() {
         setWeeklyPlan(data);
         await fetchWeeklyTrends(startDate);
         await fetchMonthlyTrends(startDate);
+        await fetchWeeklyVersions(startDate);
       } else {
         console.error('[WEEK_PLAN_PAGE] Reload failed:', response.status);
       }
@@ -218,8 +261,68 @@ export function WeeklyMealPlanPage() {
     }
   };
 
+  useEffect(() => {
+    if (!location.state?.refreshWeeklyPlan) {
+      locationRefreshHandledRef.current = false;
+      return;
+    }
+    if (locationRefreshHandledRef.current) return;
+    locationRefreshHandledRef.current = true;
+    const runRefresh = async () => {
+      const now = new Date();
+      const today = now.toLocaleDateString('en-CA');
+      const startDate = weeklyPlan?.startDate || today;
+      lastWeeklyTrendStartRef.current = null;
+      lastMonthlyTrendStartRef.current = null;
+      await reloadWeeklyPlan(startDate);
+      navigate(location.pathname, { replace: true, state: {} });
+    };
+    runRefresh();
+  }, [location.state, weeklyPlan, reloadWeeklyPlan, navigate, location.pathname]);
+
+  const handleRestoreVersion = async (versionNumber) => {
+    if (!userId || !weeklyPlan?.startDate) return;
+    setRestoringVersion(versionNumber);
+    setVersionsError(null);
+    try {
+      const url = `http://localhost:5173/api/meal-plans/week/versions/restore?userId=${userId}&startDate=${weeklyPlan.startDate}&versionNumber=${versionNumber}`;
+      const response = await fetch(url, { method: 'POST' });
+      if (!response.ok) {
+        throw new Error(`Failed to restore version (${response.status})`);
+      }
+      await reloadWeeklyPlan(weeklyPlan.startDate);
+      await fetchWeeklyVersions(weeklyPlan.startDate);
+    } catch (err) {
+      setVersionsError(err?.message || 'Failed to restore plan version.');
+    } finally {
+      setRestoringVersion(null);
+    }
+  };
+
+  const handleDeleteVersion = async (versionNumber) => {
+    if (!userId || !weeklyPlan?.startDate) return;
+    const confirmed = window.confirm(`Delete version v${versionNumber}? This cannot be undone.`);
+    if (!confirmed) return;
+    setDeletingVersion(versionNumber);
+    setVersionsError(null);
+    try {
+      const url = `http://localhost:5173/api/meal-plans/week/versions?userId=${userId}&startDate=${weeklyPlan.startDate}&versionNumber=${versionNumber}`;
+      const response = await fetch(url, { method: 'DELETE' });
+      if (!response.ok) {
+        throw new Error(`Failed to delete version (${response.status})`);
+      }
+      await fetchWeeklyVersions(weeklyPlan.startDate);
+    } catch (err) {
+      setVersionsError(err?.message || 'Failed to delete plan version.');
+    } finally {
+      setDeletingVersion(null);
+    }
+  };
+
   const fetchWeeklyTrends = async (startDate) => {
     if (!userId || !startDate) return;
+    if (lastWeeklyTrendStartRef.current === startDate) return;
+    lastWeeklyTrendStartRef.current = startDate;
     try {
       setTrendError(null);
       const trendUrl = `http://localhost:5173/api/meal-plans/week/trends?userId=${userId}&startDate=${startDate}`;
@@ -237,6 +340,8 @@ export function WeeklyMealPlanPage() {
 
   const fetchMonthlyTrends = async (startDate) => {
     if (!userId || !startDate) return;
+    if (lastMonthlyTrendStartRef.current === startDate) return;
+    lastMonthlyTrendStartRef.current = startDate;
     try {
       setMonthlyTrendError(null);
       const baseDate = new Date(startDate);
@@ -282,15 +387,13 @@ export function WeeklyMealPlanPage() {
     try {
       const now = new Date();
       const today = now.toLocaleDateString('en-CA');
+      const startDate = weeklyPlan?.startDate || today;
       
-      const weekUrl = `http://localhost:5173/api/meal-plans/week/refresh?userId=${userId}&startDate=${today}`;
+      const weekUrl = `http://localhost:5173/api/meal-plans/week/refresh?userId=${userId}&startDate=${startDate}`;
       const response = await fetch(weekUrl, { method: 'POST' });
-      
+
       if (response.ok) {
-        const data = await response.json();
-        setWeeklyPlan(data);
-        await fetchWeeklyTrends(today);
-        await fetchMonthlyTrends(today);
+        await reloadWeeklyPlan(startDate);
         console.log('[WEEK_PLAN_PAGE] Refresh SUCCESS!');
       } else {
         console.error('[WEEK_PLAN_PAGE] Refresh failed:', response.status);
@@ -488,6 +591,16 @@ export function WeeklyMealPlanPage() {
     return `${parts[1]}.${parts[2]}`;
   };
 
+  const formatVersionReason = (reason) => {
+    if (!reason) return 'unknown';
+    return String(reason).replace(/_/g, ' ');
+  };
+
+  const formatVersionTimestamp = (value) => {
+    if (!value) return '';
+    return String(value);
+  };
+
   const buildWeekLabels = (daysList) => {
     if (!daysList.length) return [];
     const labels = [];
@@ -660,6 +773,64 @@ export function WeeklyMealPlanPage() {
             <p className="weekly-ai-loading">{weeklyInsightsError}</p>
           ) : (
             <p className="weekly-ai-text">{weeklyInsights}</p>
+          )}
+        </div>
+      )}
+
+      {(versionsLoading || versionsError || versionHistory) && (
+        <div className="weekly-versions">
+          <div className="weekly-versions-header">
+            <h2>Plan Versions</h2>
+            <p className="weekly-versions-subtitle">Select an earlier weekly snapshot</p>
+          </div>
+
+          {versionsLoading ? (
+            <p className="weekly-versions-loading">Loading versions…</p>
+          ) : versionsError ? (
+            <p className="weekly-versions-error">{versionsError}</p>
+          ) : versionHistory?.versions?.length ? (
+            <div className="weekly-versions-list">
+              {versionHistory.versions.map((version) => {
+                const isCurrent = versionHistory.currentVersionNumber === version.versionNumber;
+                return (
+                  <div
+                    key={version.versionNumber}
+                    className={`weekly-version-row ${isCurrent ? 'current' : ''}`}
+                  >
+                    <div className="weekly-version-meta">
+                      <span className="weekly-version-number">v{version.versionNumber}</span>
+                      <span className="weekly-version-reason">{formatVersionReason(version.reason)}</span>
+                      <span className="weekly-version-date">{formatVersionTimestamp(version.createdAt)}</span>
+                      <span className="weekly-version-days">{version.dayCount} days</span>
+                    </div>
+                    <div className="weekly-version-actions">
+                      {isCurrent ? (
+                        <span className="weekly-version-current">Current</span>
+                      ) : (
+                        <>
+                          <button
+                            className="weekly-version-restore"
+                            onClick={() => handleRestoreVersion(version.versionNumber)}
+                            disabled={restoringVersion === version.versionNumber || deletingVersion === version.versionNumber}
+                          >
+                            {restoringVersion === version.versionNumber ? 'Selecting…' : 'Select'}
+                          </button>
+                          <button
+                            className="weekly-version-delete"
+                            onClick={() => handleDeleteVersion(version.versionNumber)}
+                            disabled={deletingVersion === version.versionNumber || restoringVersion === version.versionNumber}
+                          >
+                            {deletingVersion === version.versionNumber ? 'Deleting…' : 'Delete'}
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="weekly-versions-empty">No version history available.</p>
           )}
         </div>
       )}

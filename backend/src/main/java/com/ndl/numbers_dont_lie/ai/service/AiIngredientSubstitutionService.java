@@ -76,7 +76,7 @@ public class AiIngredientSubstitutionService {
             cuisines,
             availableIngredients
         );
-        JsonNode response = groqClient.callForJson(prompt);
+        JsonNode response = groqClient.callForJson(prompt, 0.3);
         AiIngredientSubstituteResponse parsed = parseResponse(response);
 
         List<AiIngredientSubstituteResponse.Alternative> filtered = filterAlternatives(

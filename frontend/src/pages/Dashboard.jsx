@@ -115,6 +115,8 @@ export default function Dashboard({ ctx }) {
   const [dailyAiSuggestions, setDailyAiSuggestions] = useState([]);
   const [dailyAiLoading, setDailyAiLoading] = useState(false);
   const [dailyAiError, setDailyAiError] = useState(null);
+  const [profileData, setProfileData] = useState(null);
+  const [prefsData, setPrefsData] = useState(null);
 
   // Initial aggregated load
   useEffect(() => { loadDashboard(); }, [loadDashboard]);
@@ -160,6 +162,23 @@ export default function Dashboard({ ctx }) {
       }
     };
     loadDailyNutrition();
+  }, []);
+
+  useEffect(() => {
+    const loadProfileInputs = async () => {
+      const token = getAccessToken();
+      if (!token) return;
+      try {
+        const profileResp = await api.getProfile(token);
+        setProfileData(profileResp?.profile || null);
+        const prefsResp = await api.getNutritionalPreferences(token);
+        setPrefsData(prefsResp?.nutritionalPreferences || null);
+      } catch (err) {
+        setProfileData(null);
+        setPrefsData(null);
+      }
+    };
+    loadProfileInputs();
   }, []);
 
   useEffect(() => {
@@ -239,6 +258,63 @@ export default function Dashboard({ ctx }) {
     return { total, target, pct, isSurplus: total > target };
   }, [dailyNutrition]);
 
+  const estimatedTargets = useMemo(() => {
+    if (!profileData) return null;
+    const weight = Number(profileData.weightKg || profileData.weight_kg);
+    const height = Number(profileData.heightCm || profileData.height_cm);
+    const age = Number(profileData.age);
+    const gender = (profileData.gender || 'male').toLowerCase();
+    if (!weight || !height || !age) return null;
+
+    const bmr =
+      gender === 'female'
+        ? 10 * weight + 6.25 * height - 5 * age - 161
+        : 10 * weight + 6.25 * height - 5 * age + 5;
+
+    const activityMap = {
+      low: 1.2,
+      sedentary: 1.2,
+      moderate: 1.375,
+      medium: 1.375,
+      high: 1.55,
+      very_high: 1.725,
+    };
+    const activityFactor = activityMap[profileData.activityLevel] || 1.2;
+    let targetCalories = bmr * activityFactor;
+
+    const goal = profileData.goal || 'general_fitness';
+    if (goal === 'weight_loss') targetCalories -= 300;
+    if (goal === 'weight_gain') targetCalories += 300;
+
+    const proteinTarget = Math.round(weight * 1.6);
+    const fatsTarget = Math.round((targetCalories * 0.3) / 9);
+    const carbsTarget = Math.round((targetCalories * 0.4) / 4);
+
+    return {
+      targetCalories: Math.round(targetCalories),
+      proteinTarget,
+      carbsTarget,
+      fatsTarget,
+      activityFactor,
+    };
+  }, [profileData]);
+
+  const wellnessScore = useMemo(() => {
+    const total = dailyNutrition?.total_calories ?? 0;
+    const target = dailyNutrition?.target_calories ?? 0;
+    if (!target) return null;
+    const diffPct = Math.min(Math.abs(total - target) / target, 1);
+    const calorieScore = Math.round((1 - diffPct) * 70);
+    const macroScore = [
+      dailyNutrition?.total_protein,
+      dailyNutrition?.total_carbs,
+      dailyNutrition?.total_fats,
+    ].every((v) => typeof v === 'number')
+      ? 30
+      : 10;
+    return Math.min(100, Math.max(0, calorieScore + macroScore));
+  }, [dailyNutrition]);
+
   return (
     <div className="dashboard-wrap">
       <h1 style={{ margin:0 }}>Dashboard</h1>
@@ -258,6 +334,27 @@ export default function Dashboard({ ctx }) {
           Load error: {dashboardError}
         </div>
       )}
+      <div className="card">
+        <h2 style={{ marginTop: 0 }}>Personalization Inputs</h2>
+        <div style={{ fontSize: 13, color: '#555', marginBottom: 8 }}>
+          These profile signals are used to personalize targets and meal planning.
+        </div>
+        <div className="daily-macro-grid">
+          <div>BMI: {summary?.bmi?.value ?? '—'} {summary?.bmi?.classification ? `(${summary.bmi.classification})` : ''}</div>
+          <div>Goal: {profileData?.goal ?? '—'}</div>
+          <div>Activity level: {profileData?.activityLevel ?? '—'}</div>
+          <div>Target weight: {profileData?.targetWeightKg ?? '—'} kg</div>
+          <div>Calorie target: {prefsData?.calorieTarget ?? '—'} kcal</div>
+          <div>Macro targets: P {prefsData?.proteinTarget ?? '—'}g · C {prefsData?.carbsTarget ?? '—'}g · F {prefsData?.fatsTarget ?? '—'}g</div>
+          {estimatedTargets && (
+            <>
+              <div>Estimated calorie target: {estimatedTargets.targetCalories} kcal</div>
+              <div>Estimated macros: P {estimatedTargets.proteinTarget}g · C {estimatedTargets.carbsTarget}g · F {estimatedTargets.fatsTarget}g</div>
+            </>
+          )}
+          <div>Wellness score (today): {wellnessScore ?? '—'}</div>
+        </div>
+      </div>
       <div className="card">
         <h2 style={{ marginTop: 0 }}>Daily Nutrition Tracking</h2>
         {dailyLoading ? (

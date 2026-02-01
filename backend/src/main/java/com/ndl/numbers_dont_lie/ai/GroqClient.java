@@ -23,6 +23,8 @@ import java.util.Map;
  */
 public class GroqClient {
     private static final String DEFAULT_MODEL = "llama-3.3-70b-versatile";
+    private static final double DEFAULT_TEMPERATURE = 0.2;
+    private static final double DEFAULT_TOP_P = 0.95;
     private final String apiKey;
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -44,7 +46,7 @@ public class GroqClient {
      * Generic method supporting all prompt types (strategy, meal structure, etc.).
      */
     public JsonNode callForJson(String prompt) {
-        return callForJson(prompt, null);
+        return callForJson(prompt, null, DEFAULT_TEMPERATURE);
     }
 
     /**
@@ -58,6 +60,14 @@ public class GroqClient {
      * @return JsonNode containing either message content or function_call
      */
     public JsonNode callForJson(String prompt, List<Map<String, Object>> functions) {
+        return callForJson(prompt, functions, DEFAULT_TEMPERATURE);
+    }
+
+    public JsonNode callForJson(String prompt, Double temperature) {
+        return callForJson(prompt, null, temperature);
+    }
+
+    public JsonNode callForJson(String prompt, List<Map<String, Object>> functions, Double temperature) {
         try {
             List<Object> messages = new ArrayList<>();
             messages.add(Map.of(
@@ -71,7 +81,8 @@ public class GroqClient {
             Map<String, Object> requestBody = new java.util.HashMap<>();
             requestBody.put("model", DEFAULT_MODEL);
             requestBody.put("messages", messages);
-            requestBody.put("temperature", 0.2);
+            requestBody.put("temperature", temperature != null ? temperature : DEFAULT_TEMPERATURE);
+            requestBody.put("top_p", DEFAULT_TOP_P);
             
             if (functions != null && !functions.isEmpty()) {
                 requestBody.put("functions", functions);
@@ -163,7 +174,8 @@ public class GroqClient {
             Map<String, Object> requestBody = new java.util.HashMap<>();
             requestBody.put("model", DEFAULT_MODEL);
             requestBody.put("messages", messages);
-            requestBody.put("temperature", 0.2);
+            requestBody.put("temperature", DEFAULT_TEMPERATURE);
+            requestBody.put("top_p", DEFAULT_TOP_P);
 
             String body = objectMapper.writeValueAsString(requestBody);
 

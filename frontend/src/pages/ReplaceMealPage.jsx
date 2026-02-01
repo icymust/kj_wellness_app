@@ -107,7 +107,7 @@ export function ReplaceMealPage() {
 
       // Redirect back to origin page
       if (returnTo === 'weekly') {
-        navigate('/meals/week');
+        navigate('/meals/week', { state: { refreshWeeklyPlan: true } });
       } else {
         navigate('/meals/today');
       }

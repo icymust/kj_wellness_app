@@ -10,4 +10,6 @@ import java.util.List;
 public interface MealPlanVersionRepository extends JpaRepository<MealPlanVersion, Long> {
     
     List<MealPlanVersion> findByMealPlanIdOrderByVersionNumberDesc(Long mealPlanId);
+
+    MealPlanVersion findByMealPlanIdAndVersionNumber(Long mealPlanId, Integer versionNumber);
 }

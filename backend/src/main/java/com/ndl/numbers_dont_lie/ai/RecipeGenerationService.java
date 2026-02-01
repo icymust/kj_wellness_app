@@ -106,7 +106,7 @@ public class RecipeGenerationService {
 
         // Step 3: Initial AI call
         logger.info("[STEP 4.3.2] Calling AI with function definition");
-        JsonNode response = groqClient.callForJson(prompt, functions);
+        JsonNode response = groqClient.callForJson(prompt, functions, 0.4);
 
         // Step 4: Check for function call
         if (response.has("function_call")) {

@@ -51,7 +51,7 @@ public class AiWeeklyNutritionInsightsService {
             estimated
         );
 
-        JsonNode response = groqClient.callForJson(prompt);
+        JsonNode response = groqClient.callForJson(prompt, 0.2);
         AiWeeklyNutritionInsightsResponse parsed = parseResponse(response);
 
         logger.info(

@@ -69,7 +69,7 @@ export function MealPlanPage() {
    */
   const loadMealPlan = async (dateToLoad = null) => {
     if (!userId) {
-      setError('Нет активного пользователя. Войдите, чтобы увидеть план.');
+      setError('No active user. Sign in to view your plan.');
       setLoading(false);
       return;
     }
@@ -204,7 +204,7 @@ export function MealPlanPage() {
         } else {
           setDietaryPreferences([]);
         }
-      } catch (err) {
+      } catch {
         setDietaryPreferences([]);
       }
     };
@@ -247,14 +247,17 @@ export function MealPlanPage() {
         });
 
         if (!response.ok) {
-          throw new Error('Failed to generate nutrition insights');
+          const msg = response.status === 429
+            ? 'AI rate limit reached. Try again later.'
+            : 'AI service unavailable. Please try again later.';
+          throw new Error(msg);
         }
 
         const data = await response.json();
         setAiNutritionSummary(data?.summary || null);
       } catch (err) {
         setAiNutritionSummary(null);
-        setAiNutritionError('AI insights temporarily unavailable (rate limit).');
+        setAiNutritionError(err?.message || 'AI insights temporarily unavailable.');
       } finally {
         setAiNutritionLoading(false);
       }
@@ -306,7 +309,10 @@ export function MealPlanPage() {
         });
 
         if (!response.ok) {
-          throw new Error('Failed to generate nutrition suggestions');
+          const msg = response.status === 429
+            ? 'AI rate limit reached. Try again later.'
+            : 'AI service unavailable. Please try again later.';
+          throw new Error(msg);
         }
 
         const data = await response.json();
@@ -314,7 +320,7 @@ export function MealPlanPage() {
         setAiSuggestions(suggestions);
       } catch (err) {
         setAiSuggestions([]);
-        setAiSuggestionsError('AI suggestions temporarily unavailable (rate limit).');
+        setAiSuggestionsError(err?.message || 'AI suggestions temporarily unavailable.');
       } finally {
         setAiSuggestionsLoading(false);
       }
@@ -361,11 +367,11 @@ export function MealPlanPage() {
         }
       } else {
         console.error('[MEAL_PLAN] Refresh failed:', refreshResponse.status);
-        setError('Не удалось обновить план питания');
+        setError('Failed to refresh the meal plan');
       }
     } catch (err) {
       console.error('[MEAL_PLAN] Error during refresh:', err);
-      setError('Ошибка при обновлении плана');
+      setError('Error refreshing the meal plan');
     } finally {
       setRefreshing(false);
     }
@@ -791,7 +797,7 @@ export function MealPlanPage() {
                       minWidth: '120px'
                     }}
                   >
-                    🔒 Недоступно (нет ID)
+                    🔒 Unavailable (no ID)
                   </button>
                 )}
 

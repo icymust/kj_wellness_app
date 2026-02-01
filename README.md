@@ -269,7 +269,7 @@ System calculates:
 ---
 
 # 10. AI Insights Logic
-Although this project does not use real external LLM API, it simulates intelligent behavior:
+This project uses Groq LLMs for recipe generation and nutrition insights. AI output is constrained to strict JSON to keep parsing stable.
 
 ### Insights include:
 - priority (high/medium/low)
@@ -288,6 +288,30 @@ Although this project does not use real external LLM API, it simulates intellige
 ### AI Caching
 - Insights cached per user per goal per period
 - If AI is unavailable → cached insights returned
+
+---
+
+# 10.1 AI Model Selection, Prompting, and Few‑Shot Strategy
+
+## Model choices
+- **Recipe generation** (creative, longer outputs): Groq `llama-3.3-70b-versatile` with **higher temperature (0.4–0.6)** to encourage variety.
+- **Nutrition analysis** (factual, consistent): same model with **lower temperature (0.2–0.3)** to reduce variability.
+
+Using one model simplifies deployment; temperature and top‑p adjustments create the necessary behavior differences.
+
+## Parameter adjustments
+- `temperature`: 0.2 for nutrition summaries, 0.3 for suggestions/substitutions, 0.4–0.6 for recipes
+- `top_p`: 0.95 (kept stable for predictable JSON shape)
+
+## Few‑shot examples
+We include small, strict JSON examples inside prompts to anchor format and tone:
+- **Daily nutrition summary** includes a short example input/output pair.
+- **Nutrition suggestions** includes a 5‑item example list covering required suggestion types.
+- **AI recipe generation (MVP)** includes a minimal example JSON output.
+
+Example selection strategy:
+- Keep examples short to avoid biasing real numbers.
+- Focus on structure, tone, and required fields rather than content.
 
 ---
 

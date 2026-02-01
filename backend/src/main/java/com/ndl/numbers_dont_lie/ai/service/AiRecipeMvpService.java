@@ -75,7 +75,7 @@ public class AiRecipeMvpService {
         Integer calorieTarget = prefs != null ? prefs.getCalorieTarget() : null;
 
         String prompt = buildPrompt(mealTypeNormalized, dietaryPrefs, allergies, disliked, cuisines, calorieTarget);
-        JsonNode response = groqClient.callForJson(prompt);
+        JsonNode response = groqClient.callForJson(prompt, 0.6);
         AiGeneratedRecipePayload payload = parsePayload(response);
 
         Recipe recipe = persistRecipe(payload, mealType);
@@ -109,6 +109,12 @@ public class AiRecipeMvpService {
         sb.append("  \"steps\": [ string ],\n");
         sb.append("  \"nutrition\": { \"calories\": number, \"protein\": number, \"carbs\": number, \"fats\": number }\n");
         sb.append("}\n\n");
+        sb.append("Example output:\n");
+        sb.append("{\"name\":\"Herbed Oat Bowl\",\"description\":\"Warm savory oats with herbs.\",");
+        sb.append("\"mealType\":\"BREAKFAST\",\"cuisine\":\"Mediterranean\",");
+        sb.append("\"ingredients\":[{\"name\":\"oats\",\"quantity\":60,\"unit\":\"g\"},{\"name\":\"olive oil\",\"quantity\":10,\"unit\":\"ml\"}],");
+        sb.append("\"steps\":[\"Simmer oats until tender.\",\"Stir in herbs and oil.\"],");
+        sb.append("\"nutrition\":{\"calories\":380,\"protein\":18,\"carbs\":45,\"fats\":14}}\n\n");
         sb.append("Constraints:\n");
         sb.append("- mealType: ").append(mealType).append("\n");
         sb.append("- dietary preferences: ").append(dietaryPrefs).append("\n");

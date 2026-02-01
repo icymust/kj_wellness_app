@@ -144,13 +144,15 @@ export default function ProgressChartsPage() {
                 dailySummaries,
               }),
             });
-            if (response.ok) {
-              const data = await response.json();
-              setWeeklyInsights(data?.summary || null);
-            }
-          } finally {
-            setWeeklyInsightsLoading(false);
+          if (response.ok) {
+            const data = await response.json();
+            setWeeklyInsights(data?.summary || null);
+          } else {
+            setWeeklyInsights('AI insights temporarily unavailable.');
           }
+        } finally {
+          setWeeklyInsightsLoading(false);
+        }
         }
       } catch (err) {
         setError('Failed to load progress charts');

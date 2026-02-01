@@ -50,7 +50,7 @@ public class AiNutritionSummaryService {
             estimated
         );
 
-        JsonNode response = groqClient.callForJson(prompt);
+        JsonNode response = groqClient.callForJson(prompt, 0.2);
         AiNutritionSummaryResponse parsed = parseResponse(response);
 
         logger.info(
@@ -99,6 +99,11 @@ public class AiNutritionSummaryService {
         sb.append("- Mention calorie surplus or deficit relative to target.\n");
         sb.append("- Comment on macro balance vs targets (good or needs attention).\n");
         sb.append("- If nutritionEstimated is true, mention values are estimated.\n");
+        sb.append("\nExample:\n");
+        sb.append("Input:\n");
+        sb.append("- calories: 2100, targetCalories: 2000, protein: 120, targetProtein: 130, carbs: 210, targetCarbs: 200, fats: 70, targetFats: 65\n");
+        sb.append("Output JSON:\n");
+        sb.append("{\"summary\":\"Your calorie intake is slightly above your target, which may slow weight loss if repeated. Protein is close to goal, supporting muscle maintenance. Carbs are a bit high while fats are near target. Since values are estimated, treat this as guidance rather than exact measurements.\"}\n");
         return sb.toString();
     }
 

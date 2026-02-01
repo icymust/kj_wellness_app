@@ -53,7 +53,7 @@ export function DebugMealPlanPage() {
           </h1>
         </div>
         <button
-          onClick={() => alert('Кнопка работает!')}
+          onClick={() => alert('Button works!')}
           style={{
             padding: '10px 20px',
             backgroundColor: '#ff6b6b',
@@ -65,7 +65,7 @@ export function DebugMealPlanPage() {
             fontWeight: 'bold'
           }}
         >
-          Нажми на меня
+          Click me
         </button>
         <p style={{ margin: '0 0 10px 0', color: '#666', fontSize: '0.95em' }}>
           <strong>⚠️ WARNING:</strong> This is a TEMPORARY debug interface for visually inspecting AI-generated meal plans.

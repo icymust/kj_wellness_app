@@ -6,6 +6,8 @@ import com.ndl.numbers_dont_lie.mealplan.entity.MealPlan;
 import com.ndl.numbers_dont_lie.mealplan.entity.MealPlanVersion;
 import com.ndl.numbers_dont_lie.mealplan.entity.VersionReason;
 import com.ndl.numbers_dont_lie.mealplan.repository.MealPlanRepository;
+import com.ndl.numbers_dont_lie.mealplan.repository.MealPlanVersionRepository;
+import com.ndl.numbers_dont_lie.mealplan.service.DayPlanAssemblerService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -110,13 +112,16 @@ public class MealPlanVersionService {
     private static final Logger logger = LoggerFactory.getLogger(MealPlanVersionService.class);
     
     private final MealPlanRepository mealPlanRepository;
-    private final WeeklyMealPlanService weeklyMealPlanService;
+    private final MealPlanVersionRepository mealPlanVersionRepository;
+    private final DayPlanAssemblerService dayPlanAssembler;
     
     public MealPlanVersionService(
             MealPlanRepository mealPlanRepository,
-            WeeklyMealPlanService weeklyMealPlanService) {
+            MealPlanVersionRepository mealPlanVersionRepository,
+            DayPlanAssemblerService dayPlanAssembler) {
         this.mealPlanRepository = mealPlanRepository;
-        this.weeklyMealPlanService = weeklyMealPlanService;
+        this.mealPlanVersionRepository = mealPlanVersionRepository;
+        this.dayPlanAssembler = dayPlanAssembler;
     }
     
     /**
@@ -167,14 +172,7 @@ public class MealPlanVersionService {
         
         logger.debug("Extracted start date: {}", startDate);
         
-        // Step 4: Generate new weekly plan (STEP 5.2 logic)
-        // This creates a completely new MealPlan with fresh recipes
-        MealPlan newGeneratedPlan = weeklyMealPlanService.generateWeeklyPlan(userId, startDate);
-        
-        // Step 5: Extract new version from generated plan
-        MealPlanVersion generatedVersion = newGeneratedPlan.getCurrentVersion();
-        
-        // Step 6: Create regeneration version for existing MealPlan
+        // Step 4: Create regeneration version for existing MealPlan
         Integer newVersionNumber = mealPlan.getVersions().stream()
             .map(MealPlanVersion::getVersionNumber)
             .max(Integer::compareTo)
@@ -186,100 +184,89 @@ public class MealPlanVersionService {
             VersionReason.REGENERATED
         );
         
-        // Step 7: Copy DayPlans from generated version
-        for (DayPlan generatedDay : generatedVersion.getDayPlans()) {
-            DayPlan clonedDay = cloneDayPlan(generatedDay, regeneratedVersion);
-            regeneratedVersion.addDayPlan(clonedDay);
+        // Step 5: Generate 7 day plans directly into this version
+        java.util.Set<String> usedRecipeIds = new java.util.HashSet<>();
+        for (int dayOffset = 0; dayOffset < 7; dayOffset++) {
+            LocalDate date = startDate.plusDays(dayOffset);
+            try {
+                DayPlan dayPlan = dayPlanAssembler.assembleDayPlan(userId, date, regeneratedVersion, null, usedRecipeIds);
+                regeneratedVersion.addDayPlan(dayPlan);
+            } catch (Exception e) {
+                DayPlan placeholder = new DayPlan();
+                placeholder.setDate(date);
+                placeholder.setUserId(userId);
+                placeholder.setContextHash(null);
+                placeholder.setMeals(new ArrayList<>());
+                regeneratedVersion.addDayPlan(placeholder);
+            }
         }
         
-        // Step 8: Update MealPlan
-        mealPlan.setCurrentVersion(regeneratedVersion);
-        mealPlan.getVersions().add(regeneratedVersion);
-        
-        // Step 9: Persist
-        MealPlan savedPlan = mealPlanRepository.save(mealPlan);
-        
+        // Step 6: Persist new version (cascades DayPlans)
+        MealPlanVersion savedVersion = mealPlanVersionRepository.saveAndFlush(regeneratedVersion);
+
+        // Step 7: Update current version pointer
+        mealPlanRepository.updateCurrentVersion(mealPlan.getId(), savedVersion.getId());
+
         logger.info("Meal plan regeneration complete. New version: {}", newVersionNumber);
         
-        return savedPlan;
+        return mealPlanRepository.findById(mealPlan.getId()).orElse(mealPlan);
     }
-    
+
     /**
-     * Restore a previous version of a meal plan.
-     *
-     * Process:
-     * 1. Fetch current MealPlan
-     * 2. Find specified historical version
-     * 3. Clone all DayPlans from historical version
-     * 4. Create new version with reason=RESTORED
-     * 5. Update MealPlan.currentVersion
-     * 6. Persist (all previous versions remain)
-     *
-     * Result:
-     * - New version created as clone of historical snapshot
-     * - Original versions remain unchanged
-     * - Version number incremented
-     * - User can restore any previous version without loss
-     *
-     * @param planId MealPlan ID
-     * @param versionNumber Version to restore (1, 2, 3, ...)
-     * @param userId User ID (for permission check)
-     * @return Updated MealPlan with restored version
-     * @throws IllegalStateException if plan/version not found
+     * Delete a non-current version from a meal plan history.
+     * Current version cannot be deleted.
      */
     @Transactional
-    public MealPlan restoreVersion(Long planId, Integer versionNumber, Long userId) {
-        logger.info("Starting version restore for planId={}, versionNumber={}, userId={}",
-            planId, versionNumber, userId);
-        
-        // Step 1: Fetch current MealPlan
+    public void deleteVersion(Long planId, Integer versionNumber, Long userId) {
         MealPlan mealPlan = mealPlanRepository.findById(planId)
             .orElseThrow(() -> new IllegalStateException("MealPlan not found: " + planId));
-        
-        // Step 2: Validate ownership
+
         if (!mealPlan.getUserId().equals(userId)) {
             throw new IllegalStateException("User " + userId + " does not own MealPlan " + planId);
         }
-        
-        // Step 3: Find historical version to restore
-        MealPlanVersion historicalVersion = mealPlan.getVersions().stream()
-            .filter(v -> v.getVersionNumber().equals(versionNumber))
-            .findFirst()
-            .orElseThrow(() -> new IllegalStateException(
-                "Version " + versionNumber + " not found in MealPlan " + planId));
-        
-        logger.debug("Found historical version: {}", versionNumber);
-        
-        // Step 4: Create new version number
-        Integer newVersionNumber = mealPlan.getVersions().stream()
-            .map(MealPlanVersion::getVersionNumber)
-            .max(Integer::compareTo)
-            .orElse(0) + 1;
-        
-        // Step 5: Create restored version
-        MealPlanVersion restoredVersion = new MealPlanVersion(
-            mealPlan,
-            newVersionNumber,
-            VersionReason.RESTORED
-        );
-        
-        // Step 6: Clone all DayPlans from historical version
-        for (DayPlan historicalDay : historicalVersion.getDayPlans()) {
-            DayPlan clonedDay = cloneDayPlan(historicalDay, restoredVersion);
-            restoredVersion.addDayPlan(clonedDay);
+
+        MealPlanVersion currentVersion = mealPlan.getCurrentVersion();
+        if (currentVersion != null && currentVersion.getVersionNumber().equals(versionNumber)) {
+            throw new IllegalStateException("Cannot delete current version");
         }
-        
-        // Step 7: Update MealPlan
-        mealPlan.setCurrentVersion(restoredVersion);
-        mealPlan.getVersions().add(restoredVersion);
-        
-        // Step 8: Persist
-        MealPlan savedPlan = mealPlanRepository.save(mealPlan);
-        
-        logger.info("Version restore complete. Restored version {} as version {}",
-            versionNumber, newVersionNumber);
-        
-        return savedPlan;
+
+        MealPlanVersion target = mealPlanVersionRepository
+            .findByMealPlanIdAndVersionNumber(planId, versionNumber);
+
+        if (target == null) {
+            throw new IllegalStateException("Version not found: " + versionNumber);
+        }
+
+        mealPlanVersionRepository.delete(target);
+        logger.info("Deleted meal plan version planId={} versionNumber={}", planId, versionNumber);
+    }
+    
+    /**
+     * Select an existing version as current (no cloning, no new version).
+     */
+    @Transactional
+    public MealPlan restoreVersion(Long planId, Integer versionNumber, Long userId) {
+        logger.info("Selecting version for planId={}, versionNumber={}, userId={}",
+            planId, versionNumber, userId);
+
+        MealPlan mealPlan = mealPlanRepository.findById(planId)
+            .orElseThrow(() -> new IllegalStateException("MealPlan not found: " + planId));
+
+        if (!mealPlan.getUserId().equals(userId)) {
+            throw new IllegalStateException("User " + userId + " does not own MealPlan " + planId);
+        }
+
+        MealPlanVersion target = mealPlanVersionRepository
+            .findByMealPlanIdAndVersionNumber(planId, versionNumber);
+
+        if (target == null) {
+            throw new IllegalStateException("Version " + versionNumber + " not found in MealPlan " + planId);
+        }
+
+        mealPlanRepository.updateCurrentVersion(mealPlan.getId(), target.getId());
+        logger.info("Current version switched to {}", versionNumber);
+
+        return mealPlanRepository.findById(mealPlan.getId()).orElse(mealPlan);
     }
     
     /**
@@ -342,7 +329,10 @@ public class MealPlanVersionService {
      * Used for restoration and regeneration snapshots.
      */
     private DayPlan cloneDayPlan(DayPlan source, MealPlanVersion newVersion) {
-        DayPlan clonedDay = new DayPlan(newVersion, source.getDate());
+        DayPlan clonedDay = new DayPlan();
+        clonedDay.setDate(source.getDate());
+        clonedDay.setUserId(source.getUserId());
+        clonedDay.setContextHash(source.getContextHash());
         
         // Clone all meals
         for (Meal sourceMeal : source.getMeals()) {
@@ -368,6 +358,9 @@ public class MealPlanVersionService {
         
         clonedMeal.setRecipeId(source.getRecipeId());
         clonedMeal.setCustomMealName(source.getCustomMealName());
+        clonedMeal.setIsCustom(source.getIsCustom());
+        clonedMeal.setCalorieTarget(source.getCalorieTarget());
+        clonedMeal.setPlannedCalories(source.getPlannedCalories());
         
         return clonedMeal;
     }

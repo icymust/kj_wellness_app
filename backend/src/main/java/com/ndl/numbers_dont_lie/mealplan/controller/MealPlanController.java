@@ -27,6 +27,7 @@ import com.ndl.numbers_dont_lie.mealplan.service.DayPlanAssemblerService;
 import com.ndl.numbers_dont_lie.mealplan.service.MealReplacementService;
 import com.ndl.numbers_dont_lie.mealplan.service.MealMoveService;
 import com.ndl.numbers_dont_lie.mealplan.service.NutritionSummaryService;
+import com.ndl.numbers_dont_lie.mealplan.service.MealPlanVersionService;
 import com.ndl.numbers_dont_lie.mealplan.service.WeeklyMealPlanService;
 import com.ndl.numbers_dont_lie.mealplan.service.CustomMealService;
 import com.ndl.numbers_dont_lie.mealplan.dto.AddCustomMealRequest;
@@ -44,6 +45,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -81,6 +84,7 @@ public class MealPlanController {
     private final RecipeRepository recipeRepository;
     private final MealMoveService mealMoveService;
     private final NutritionalPreferencesRepository nutritionalPreferencesRepository;
+    private final MealPlanVersionService mealPlanVersionService;
     
     public MealPlanController(
             DayPlanAssemblerService dayPlanAssemblerService,
@@ -97,7 +101,8 @@ public class MealPlanController {
             MealRepository mealRepository,
             RecipeRepository recipeRepository,
             MealMoveService mealMoveService,
-            NutritionalPreferencesRepository nutritionalPreferencesRepository) {
+            NutritionalPreferencesRepository nutritionalPreferencesRepository,
+            MealPlanVersionService mealPlanVersionService) {
         this.dayPlanAssemblerService = dayPlanAssemblerService;
         this.nutritionSummaryService = nutritionSummaryService;
         this.weeklyMealPlanService = weeklyMealPlanService;
@@ -113,6 +118,7 @@ public class MealPlanController {
         this.recipeRepository = recipeRepository;
         this.mealMoveService = mealMoveService;
         this.nutritionalPreferencesRepository = nutritionalPreferencesRepository;
+        this.mealPlanVersionService = mealPlanVersionService;
     }
     
     /**
@@ -340,6 +346,7 @@ public class MealPlanController {
      * Returns day plans plus aggregated weekly nutrition summary.
      */
     @GetMapping("/week")
+    @Transactional(readOnly = true)
     public ResponseEntity<?> getWeeklyPlan(
             @RequestParam(name = "userId") Long userId,
             @RequestParam(name = "startDate", required = true)
@@ -361,15 +368,19 @@ public class MealPlanController {
             LocalDate endDate = startDate.plusDays(6);
 
             // 1) Try to load most recent persisted weekly plan from DB
-            java.util.Optional<MealPlan> latestWeeklyPlan = mealPlanRepository
-                .findTopByUserIdAndDurationOrderByIdDesc(userId, PlanDuration.WEEKLY);
+            java.util.Optional<MealPlan> latestWeeklyPlan = findWeeklyPlanByStartDate(userId, startDate);
 
             if (latestWeeklyPlan.isPresent()) {
                 MealPlan plan = latestWeeklyPlan.get();
-                java.util.List<DayPlan> persistedDays = dayPlanRepository
-                    .findByMealPlanIdAndDateRangeWithMeals(plan.getId(), startDate, endDate);
+                MealPlanVersion currentVersion = plan.getCurrentVersion();
+                java.util.List<DayPlan> persistedDays = java.util.Collections.emptyList();
+                if (currentVersion != null) {
+                    persistedDays = dayPlanRepository
+                        .findByMealPlanVersionIdAndDateRangeWithMeals(currentVersion.getId(), startDate, endDate);
+                }
                 if (!persistedDays.isEmpty()) {
-                    logger.info("[WEEK_PLAN] Found {} persisted weekly day plans (planId={})", persistedDays.size(), plan.getId());
+                    logger.info("[WEEK_PLAN] Found {} persisted weekly day plans (planId={} versionId={})",
+                        persistedDays.size(), plan.getId(), currentVersion != null ? currentVersion.getId() : null);
 
                     // Fill missing dates with empty placeholders (do not persist)
                     java.util.Map<LocalDate, DayPlan> byDate = new java.util.HashMap<>();
@@ -391,6 +402,25 @@ public class MealPlanController {
                     }
 
                     WeeklyPlanResponse response = weeklyMealPlanService.buildWeeklyPlanResponse(startDate, fullWeek);
+                    return ResponseEntity.ok(response);
+                }
+
+                // If plan exists but has no day plans, regenerate within the same plan.
+                if (currentVersion == null || persistedDays.isEmpty()) {
+                    logger.info("[WEEK_PLAN] Existing plan has no day plans, regenerating for planId={}", plan.getId());
+                    if (aiStrategyService.getCachedStrategy(String.valueOf(userId)) == null ||
+                        aiStrategyService.getCachedMealStructure(String.valueOf(userId)) == null) {
+                        logger.info("[WEEK_PLAN] AI cache missing, bootstrapping for userId={}", userId);
+                        bootstrapAiForUser(userId);
+                    }
+
+                    MealPlan regenerated = mealPlanVersionService.regenerateMealPlan(plan.getId(), userId);
+                    MealPlanVersion regeneratedVersion = regenerated.getCurrentVersion();
+                    java.util.List<DayPlan> dayPlans = regeneratedVersion != null
+                        ? dayPlanRepository.findByMealPlanVersionIdAndDateRangeWithMeals(regeneratedVersion.getId(), startDate, endDate)
+                        : java.util.Collections.emptyList();
+                    dayPlans.sort(java.util.Comparator.comparing(DayPlan::getDate));
+                    WeeklyPlanResponse response = weeklyMealPlanService.buildWeeklyPlanResponse(startDate, dayPlans);
                     return ResponseEntity.ok(response);
                 }
             }
@@ -429,14 +459,120 @@ public class MealPlanController {
         } catch (Exception e) {
             logger.error("[WEEK_PLAN] Failed to load week plan: {}", e.getMessage(), e);
             LocalDate endDate = startDate.plusDays(6);
+            java.util.List<DayPlan> placeholders = new java.util.ArrayList<>();
+            for (int dayOffset = 0; dayOffset < 7; dayOffset++) {
+                LocalDate date = startDate.plusDays(dayOffset);
+                DayPlan placeholder = new DayPlan();
+                placeholder.setDate(date);
+                placeholder.setUserId(userId);
+                placeholder.setMeals(java.util.Collections.emptyList());
+                placeholders.add(placeholder);
+            }
             WeeklyPlanResponse fallback = new WeeklyPlanResponse(
                 startDate,
                 endDate,
-                java.util.Collections.emptyList(),
+                placeholders,
                 new com.ndl.numbers_dont_lie.mealplan.dto.WeeklyNutritionSummary()
             );
             return ResponseEntity.ok(fallback);
         }
+    }
+
+    /**
+     * Get version history for a weekly meal plan by start date.
+     *
+     * GET /api/meal-plans/week/versions?userId=X&startDate=YYYY-MM-DD
+     */
+    @GetMapping("/week/versions")
+    @Transactional(readOnly = true)
+    public ResponseEntity<VersionHistoryResponse> getWeeklyPlanVersions(
+            @RequestParam(name = "userId") Long userId,
+            @RequestParam(name = "startDate")
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+            LocalDate startDate) {
+        Optional<MealPlan> planOpt = findWeeklyPlanByStartDate(userId, startDate);
+        if (planOpt.isEmpty()) {
+            return ResponseEntity.ok(new VersionHistoryResponse(null, null, Collections.emptyList()));
+        }
+
+        MealPlan plan = planOpt.get();
+        Integer currentVersionNumber = plan.getCurrentVersion() != null
+                ? plan.getCurrentVersion().getVersionNumber()
+                : null;
+        List<MealPlanVersionService.VersionSummary> summaries = mealPlanVersionService.getVersionHistory(plan.getId());
+        List<VersionEntry> entries = new ArrayList<>();
+        for (MealPlanVersionService.VersionSummary summary : summaries) {
+            entries.add(new VersionEntry(
+                    summary.getVersionNumber(),
+                    summary.getReason(),
+                    summary.getCreatedAt(),
+                    summary.getDayCount()
+            ));
+        }
+        return ResponseEntity.ok(new VersionHistoryResponse(plan.getId(), currentVersionNumber, entries));
+    }
+
+    /**
+     * Restore a previous weekly plan version (creates a new version with reason=RESTORED).
+     *
+     * POST /api/meal-plans/week/versions/restore?userId=X&startDate=YYYY-MM-DD&versionNumber=Y
+     */
+    @PostMapping("/week/versions/restore")
+    @Transactional
+    public ResponseEntity<Map<String, Object>> restoreWeeklyPlanVersion(
+            @RequestParam(name = "userId") Long userId,
+            @RequestParam(name = "startDate")
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+            LocalDate startDate,
+            @RequestParam(name = "versionNumber") Integer versionNumber) {
+        Optional<MealPlan> planOpt = findWeeklyPlanByStartDate(userId, startDate);
+        if (planOpt.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Collections.singletonMap("error", "Weekly plan not found for startDate"));
+        }
+        MealPlan plan = planOpt.get();
+        MealPlan restoredPlan = mealPlanVersionService.restoreVersion(plan.getId(), versionNumber, userId);
+        Integer currentVersionNumber = restoredPlan.getCurrentVersion() != null
+                ? restoredPlan.getCurrentVersion().getVersionNumber()
+                : null;
+        Map<String, Object> response = new HashMap<>();
+        response.put("planId", restoredPlan.getId());
+        response.put("currentVersionNumber", currentVersionNumber);
+        response.put("restoredFromVersion", versionNumber);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Delete a non-current weekly plan version.
+     *
+     * DELETE /api/meal-plans/week/versions?userId=X&startDate=YYYY-MM-DD&versionNumber=Y
+     */
+    @DeleteMapping("/week/versions")
+    @Transactional
+    public ResponseEntity<Map<String, Object>> deleteWeeklyPlanVersion(
+            @RequestParam(name = "userId") Long userId,
+            @RequestParam(name = "startDate")
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+            LocalDate startDate,
+            @RequestParam(name = "versionNumber") Integer versionNumber) {
+        Optional<MealPlan> planOpt = findWeeklyPlanByStartDate(userId, startDate);
+        if (planOpt.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Collections.singletonMap("error", "Weekly plan not found for startDate"));
+        }
+
+        MealPlan plan = planOpt.get();
+        try {
+            mealPlanVersionService.deleteVersion(plan.getId(), versionNumber, userId);
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(Collections.singletonMap("error", e.getMessage()));
+        }
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("planId", plan.getId());
+        response.put("deletedVersion", versionNumber);
+        return ResponseEntity.ok(response);
     }
 
     /**
@@ -446,6 +582,7 @@ public class MealPlanController {
      * GET /api/meal-plans/week/trends?userId=X&startDate=YYYY-MM-DD
      */
     @GetMapping("/week/trends")
+    @Transactional(readOnly = true)
     public ResponseEntity<?> getWeeklyCalorieTrends(
             @RequestParam(name = "userId") Long userId,
             @RequestParam(name = "startDate", required = true)
@@ -467,11 +604,14 @@ public class MealPlanController {
             .orElse(0);
 
         java.util.List<DayPlan> dayPlans = java.util.Collections.emptyList();
-        java.util.Optional<MealPlan> latestWeeklyPlan = mealPlanRepository
-            .findTopByUserIdAndDurationOrderByIdDesc(userId, PlanDuration.WEEKLY);
+        java.util.Optional<MealPlan> latestWeeklyPlan = findWeeklyPlanByStartDate(userId, startDate);
         if (latestWeeklyPlan.isPresent()) {
             MealPlan plan = latestWeeklyPlan.get();
-            dayPlans = dayPlanRepository.findByMealPlanIdAndDateRangeWithMeals(plan.getId(), startDate, endDate);
+            MealPlanVersion currentVersion = plan.getCurrentVersion();
+            if (currentVersion != null) {
+                dayPlans = dayPlanRepository
+                    .findByMealPlanVersionIdAndDateRangeWithMeals(currentVersion.getId(), startDate, endDate);
+            }
         }
 
         java.util.Map<LocalDate, DayPlan> byDate = new java.util.HashMap<>();
@@ -514,6 +654,7 @@ public class MealPlanController {
      * Force regenerate weekly plan (new version).
      */
     @PostMapping("/week/refresh")
+    @Transactional
     public ResponseEntity<?> refreshWeeklyPlan(
             @RequestParam(name = "userId") Long userId,
             @RequestParam(name = "startDate", required = true)
@@ -533,15 +674,71 @@ public class MealPlanController {
                 bootstrapAiForUser(userId);
             }
 
-            MealPlan savedPlan = weeklyMealPlanService.generateWeeklyPlan(userId, startDate);
+            Optional<MealPlan> existingPlan = findWeeklyPlanByStartDate(userId, startDate);
+            MealPlan savedPlan;
+            if (existingPlan.isPresent()) {
+                savedPlan = mealPlanVersionService.regenerateMealPlan(existingPlan.get().getId(), userId);
+            } else {
+                savedPlan = weeklyMealPlanService.generateWeeklyPlan(userId, startDate);
+            }
+            LocalDate endDate = startDate.plusDays(6);
+            java.util.List<DayPlan> dayPlans = java.util.Collections.emptyList();
             MealPlanVersion currentVersion = savedPlan.getCurrentVersion();
-            java.util.List<DayPlan> dayPlans = currentVersion != null ? currentVersion.getDayPlans() : java.util.Collections.emptyList();
+            if (currentVersion != null) {
+                dayPlans = dayPlanRepository
+                    .findByMealPlanVersionIdAndDateRangeWithMeals(currentVersion.getId(), startDate, endDate);
+            }
+            if (dayPlans.isEmpty()) {
+                Optional<MealPlan> planOpt = findWeeklyPlanByStartDate(userId, startDate);
+                if (planOpt.isPresent() && planOpt.get().getCurrentVersion() != null) {
+                    MealPlanVersion currentVersionSnapshot = planOpt.get().getCurrentVersion();
+                    MealPlan restoredPlan = mealPlanVersionService.restoreVersion(
+                        planOpt.get().getId(),
+                        currentVersionSnapshot.getVersionNumber(),
+                        userId
+                    );
+                    MealPlanVersion restoredVersion = restoredPlan.getCurrentVersion();
+                    if (restoredVersion != null) {
+                        dayPlans = dayPlanRepository
+                            .findByMealPlanVersionIdAndDateRangeWithMeals(restoredVersion.getId(), startDate, endDate);
+                    }
+                }
+            }
             dayPlans.sort(java.util.Comparator.comparing(DayPlan::getDate));
 
             WeeklyPlanResponse response = weeklyMealPlanService.buildWeeklyPlanResponse(startDate, dayPlans);
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             logger.error("[WEEK_PLAN] Refresh failed: {}", e.getMessage(), e);
+            try {
+                Optional<MealPlan> planOpt = findWeeklyPlanByStartDate(userId, startDate);
+                if (planOpt.isEmpty()) {
+                    planOpt = mealPlanRepository.findTopByUserIdAndDurationOrderByIdDesc(userId, PlanDuration.WEEKLY);
+                }
+                if (planOpt.isPresent()) {
+                    MealPlan plan = planOpt.get();
+                    MealPlanVersion currentVersion = plan.getCurrentVersion();
+                    if (currentVersion != null) {
+                        MealPlan restoredPlan = mealPlanVersionService.restoreVersion(
+                            plan.getId(),
+                            currentVersion.getVersionNumber(),
+                            userId
+                        );
+                        LocalDate endDate = startDate.plusDays(6);
+                        java.util.List<DayPlan> dayPlans = java.util.Collections.emptyList();
+                        MealPlanVersion restoredVersion = restoredPlan.getCurrentVersion();
+                        if (restoredVersion != null) {
+                            dayPlans = dayPlanRepository
+                                .findByMealPlanVersionIdAndDateRangeWithMeals(restoredVersion.getId(), startDate, endDate);
+                        }
+                        dayPlans.sort(java.util.Comparator.comparing(DayPlan::getDate));
+                        WeeklyPlanResponse response = weeklyMealPlanService.buildWeeklyPlanResponse(startDate, dayPlans);
+                        return ResponseEntity.ok(response);
+                    }
+                }
+            } catch (Exception fallbackError) {
+                logger.warn("[WEEK_PLAN] Refresh fallback failed: {}", fallbackError.getMessage(), fallbackError);
+            }
             LocalDate endDate = startDate.plusDays(6);
             WeeklyPlanResponse fallback = new WeeklyPlanResponse(
                 startDate,
@@ -1072,6 +1269,112 @@ public class MealPlanController {
                 "message", e.getMessage()
             ));
         }
+    }
+
+    private Optional<MealPlan> findWeeklyPlanByStartDate(Long userId, LocalDate startDate) {
+        LocalDate endDate = startDate.plusDays(6);
+        List<DayPlan> rangeCandidates = dayPlanRepository
+                .findByUserIdAndDateRangeWithMealsAndDuration(userId, startDate, endDate, PlanDuration.WEEKLY);
+
+        if (!rangeCandidates.isEmpty()) {
+            MealPlan bestPlan = null;
+            int bestMealCount = -1;
+            int bestCurrentMealCount = -1;
+
+            java.util.Map<Long, java.util.List<DayPlan>> byPlan = new java.util.HashMap<>();
+            for (DayPlan dayPlan : rangeCandidates) {
+                MealPlanVersion version = dayPlan.getMealPlanVersion();
+                if (version == null || version.getMealPlan() == null) {
+                    continue;
+                }
+                Long planId = version.getMealPlan().getId();
+                byPlan.computeIfAbsent(planId, k -> new java.util.ArrayList<>()).add(dayPlan);
+            }
+
+            for (java.util.Map.Entry<Long, java.util.List<DayPlan>> entry : byPlan.entrySet()) {
+                int mealCount = 0;
+                int currentMealCount = 0;
+                MealPlan plan = null;
+                MealPlanVersion currentVersion = null;
+                for (DayPlan dayPlan : entry.getValue()) {
+                    if (plan == null && dayPlan.getMealPlanVersion() != null) {
+                        plan = dayPlan.getMealPlanVersion().getMealPlan();
+                        currentVersion = plan != null ? plan.getCurrentVersion() : null;
+                    }
+                    mealCount += dayPlan.getMeals() != null ? dayPlan.getMeals().size() : 0;
+                    if (currentVersion != null
+                            && dayPlan.getMealPlanVersion() != null
+                            && currentVersion.getId() != null
+                            && currentVersion.getId().equals(dayPlan.getMealPlanVersion().getId())) {
+                        currentMealCount += dayPlan.getMeals() != null ? dayPlan.getMeals().size() : 0;
+                    }
+                }
+                if (plan == null) {
+                    continue;
+                }
+                // Prefer the plan whose CURRENT version has meals for this date range
+                if (currentMealCount > bestCurrentMealCount
+                        || (currentMealCount == bestCurrentMealCount && mealCount > bestMealCount)
+                        || (currentMealCount == bestCurrentMealCount && mealCount == bestMealCount && bestPlan != null
+                            && plan.getId() != null && bestPlan.getId() != null
+                            && plan.getId() > bestPlan.getId())) {
+                    bestPlan = plan;
+                    bestCurrentMealCount = currentMealCount;
+                    bestMealCount = mealCount;
+                }
+            }
+
+            if (bestPlan != null) {
+                return Optional.of(bestPlan);
+            }
+        }
+
+        List<DayPlan> candidates = dayPlanRepository
+                .findByUserIdAndDateWithMealsAndDurationOrderByIdDesc(userId, startDate, PlanDuration.WEEKLY);
+        if (candidates.isEmpty()) {
+            return Optional.empty();
+        }
+        DayPlan dayPlan = candidates.get(0);
+        MealPlanVersion version = dayPlan.getMealPlanVersion();
+        if (version == null || version.getMealPlan() == null) {
+            return Optional.empty();
+        }
+        return Optional.of(version.getMealPlan());
+    }
+
+    public static class VersionHistoryResponse {
+        private final Long planId;
+        private final Integer currentVersionNumber;
+        private final List<VersionEntry> versions;
+
+        public VersionHistoryResponse(Long planId, Integer currentVersionNumber, List<VersionEntry> versions) {
+            this.planId = planId;
+            this.currentVersionNumber = currentVersionNumber;
+            this.versions = versions;
+        }
+
+        public Long getPlanId() { return planId; }
+        public Integer getCurrentVersionNumber() { return currentVersionNumber; }
+        public List<VersionEntry> getVersions() { return versions; }
+    }
+
+    public static class VersionEntry {
+        private final Integer versionNumber;
+        private final VersionReason reason;
+        private final LocalDateTime createdAt;
+        private final Integer dayCount;
+
+        public VersionEntry(Integer versionNumber, VersionReason reason, LocalDateTime createdAt, Integer dayCount) {
+            this.versionNumber = versionNumber;
+            this.reason = reason;
+            this.createdAt = createdAt;
+            this.dayCount = dayCount;
+        }
+
+        public Integer getVersionNumber() { return versionNumber; }
+        public VersionReason getReason() { return reason; }
+        public LocalDateTime getCreatedAt() { return createdAt; }
+        public Integer getDayCount() { return dayCount; }
     }
     
     /**
