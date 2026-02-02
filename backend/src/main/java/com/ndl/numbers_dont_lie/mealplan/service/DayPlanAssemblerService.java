@@ -394,6 +394,9 @@ public class DayPlanAssemblerService {
         Recipe dbRecipe = selectDatabaseRecipeForSlot(slot, constraints, usedRecipeTitles, Double.valueOf(slot.getCalorieTarget()), excludeRecipeIds);
         if (dbRecipe != null) {
             logger.info("[RECIPE_SELECTION] SUCCESS - Selected DB recipe: {} (stableId={})", dbRecipe.getTitle(), dbRecipe.getStableId());
+            if (excludeRecipeIds != null && dbRecipe.getStableId() != null) {
+                excludeRecipeIds.add(dbRecipe.getStableId());
+            }
             GeneratedRecipe dbGenerated = convertRecipeToGeneratedRecipe(dbRecipe);
             if (dbGenerated.getTitle() != null) {
                 usedRecipeTitles.add(dbGenerated.getTitle().toLowerCase());

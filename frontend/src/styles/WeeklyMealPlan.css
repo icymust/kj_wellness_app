@@ -321,11 +321,11 @@
 }
 
 .trend-bar.positive {
-  background-color: #e53935;
+  background-color: #2e7d32;
 }
 
 .trend-bar.negative {
-  background-color: #2e7d32;
+  background-color: #ff9800;
 }
 
 .trend-bar:hover {

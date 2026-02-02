@@ -12,6 +12,14 @@ export default function ProgressChartsPage() {
   const [weeklyInsightsLoading, setWeeklyInsightsLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  const getWeekStart = (date) => {
+    const d = new Date(date);
+    const day = d.getDay();
+    const diff = day === 0 ? -6 : 1 - day;
+    d.setDate(d.getDate() + diff);
+    return d.toLocaleDateString('en-CA');
+  };
+
   const formatShortDate = (value) => {
     if (!value) return '';
     const parts = value.split('-');
@@ -77,15 +85,16 @@ export default function ProgressChartsPage() {
           throw new Error('No userId');
         }
 
-        const today = new Date().toLocaleDateString('en-CA');
-        const weekUrl = `http://localhost:5173/api/meal-plans/week/trends?userId=${userId}&startDate=${today}`;
+        const today = new Date();
+        const weekStart = getWeekStart(today);
+        const weekUrl = `http://localhost:5173/api/meal-plans/week/trends?userId=${userId}&startDate=${weekStart}`;
         const weekRes = await fetch(weekUrl);
         if (weekRes.ok) {
           const data = await weekRes.json();
           setTrendDays(data?.days || []);
         }
 
-        const baseDate = new Date(today);
+        const baseDate = new Date(weekStart);
         const weekStarts = Array.from({ length: 4 }, (_, idx) => {
           const d = new Date(baseDate);
           d.setDate(baseDate.getDate() + idx * 7);
@@ -110,7 +119,7 @@ export default function ProgressChartsPage() {
         setMonthlyTrendDays(merged);
 
         const weeklyPlanRes = await fetch(
-          `http://localhost:5173/api/meal-plans/week?userId=${userId}&startDate=${today}`
+          `http://localhost:5173/api/meal-plans/week?userId=${userId}&startDate=${weekStart}`
         );
         if (weeklyPlanRes.ok) {
           const weeklyPlan = await weeklyPlanRes.json();

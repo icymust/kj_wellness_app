@@ -148,6 +148,10 @@ public class MealPlanVersionService {
      */
     @Transactional
     public MealPlan regenerateMealPlan(Long planId, Long userId) {
+        return regenerateMealPlan(planId, userId, null);
+    }
+
+    public MealPlan regenerateMealPlan(Long planId, Long userId, LocalDate startDateOverride) {
         logger.info("Starting meal plan regeneration for planId={}, userId={}", planId, userId);
         
         // Step 1: Fetch current MealPlan
@@ -159,16 +163,18 @@ public class MealPlanVersionService {
             throw new IllegalStateException("User " + userId + " does not own MealPlan " + planId);
         }
         
-        // Step 3: Extract start date from current version
+        // Step 3: Extract start date from current version (or override)
         MealPlanVersion currentVersion = mealPlan.getCurrentVersion();
         if (currentVersion == null || currentVersion.getDayPlans().isEmpty()) {
             throw new IllegalStateException("Current version has no day plans");
         }
-        
-        LocalDate startDate = currentVersion.getDayPlans().stream()
-            .map(DayPlan::getDate)
-            .min(LocalDate::compareTo)
-            .orElseThrow(() -> new IllegalStateException("Cannot determine start date"));
+
+        LocalDate startDate = startDateOverride != null
+            ? startDateOverride
+            : currentVersion.getDayPlans().stream()
+                .map(DayPlan::getDate)
+                .min(LocalDate::compareTo)
+                .orElseThrow(() -> new IllegalStateException("Cannot determine start date"));
         
         logger.debug("Extracted start date: {}", startDate);
         
@@ -186,10 +192,20 @@ public class MealPlanVersionService {
         
         // Step 5: Generate 7 day plans directly into this version
         java.util.Set<String> usedRecipeIds = new java.util.HashSet<>();
+        java.util.Set<String> usedRecipeTitles = new java.util.HashSet<>();
         for (int dayOffset = 0; dayOffset < 7; dayOffset++) {
             LocalDate date = startDate.plusDays(dayOffset);
             try {
                 DayPlan dayPlan = dayPlanAssembler.assembleDayPlan(userId, date, regeneratedVersion, null, usedRecipeIds);
+                dayPlan.getMeals().forEach(meal -> {
+                    if (meal.getRecipeId() != null) {
+                        usedRecipeIds.add(meal.getRecipeId());
+                    }
+                    String title = meal.getCustomMealName();
+                    if (title != null && !title.isBlank()) {
+                        usedRecipeTitles.add(title.toLowerCase());
+                    }
+                });
                 regeneratedVersion.addDayPlan(dayPlan);
             } catch (Exception e) {
                 DayPlan placeholder = new DayPlan();

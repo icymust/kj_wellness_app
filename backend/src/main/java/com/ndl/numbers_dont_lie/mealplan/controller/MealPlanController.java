@@ -414,7 +414,7 @@ public class MealPlanController {
                         bootstrapAiForUser(userId);
                     }
 
-                    MealPlan regenerated = mealPlanVersionService.regenerateMealPlan(plan.getId(), userId);
+                    MealPlan regenerated = mealPlanVersionService.regenerateMealPlan(plan.getId(), userId, startDate);
                     MealPlanVersion regeneratedVersion = regenerated.getCurrentVersion();
                     java.util.List<DayPlan> dayPlans = regeneratedVersion != null
                         ? dayPlanRepository.findByMealPlanVersionIdAndDateRangeWithMeals(regeneratedVersion.getId(), startDate, endDate)
@@ -677,7 +677,7 @@ public class MealPlanController {
             Optional<MealPlan> existingPlan = findWeeklyPlanByStartDate(userId, startDate);
             MealPlan savedPlan;
             if (existingPlan.isPresent()) {
-                savedPlan = mealPlanVersionService.regenerateMealPlan(existingPlan.get().getId(), userId);
+                savedPlan = mealPlanVersionService.regenerateMealPlan(existingPlan.get().getId(), userId, startDate);
             } else {
                 savedPlan = weeklyMealPlanService.generateWeeklyPlan(userId, startDate);
             }
@@ -705,6 +705,26 @@ public class MealPlanController {
                 }
             }
             dayPlans.sort(java.util.Comparator.comparing(DayPlan::getDate));
+            if (dayPlans.size() < 7) {
+                java.util.Map<LocalDate, DayPlan> byDate = new java.util.HashMap<>();
+                for (DayPlan day : dayPlans) {
+                    byDate.put(day.getDate(), day);
+                }
+                java.util.List<DayPlan> fullWeek = new java.util.ArrayList<>();
+                for (int dayOffset = 0; dayOffset < 7; dayOffset++) {
+                    LocalDate date = startDate.plusDays(dayOffset);
+                    DayPlan dayPlan = byDate.get(date);
+                    if (dayPlan == null) {
+                        DayPlan placeholder = new DayPlan();
+                        placeholder.setDate(date);
+                        placeholder.setUserId(userId);
+                        placeholder.setMeals(java.util.Collections.emptyList());
+                        dayPlan = placeholder;
+                    }
+                    fullWeek.add(dayPlan);
+                }
+                dayPlans = fullWeek;
+            }
 
             WeeklyPlanResponse response = weeklyMealPlanService.buildWeeklyPlanResponse(startDate, dayPlans);
             return ResponseEntity.ok(response);
@@ -1273,60 +1293,49 @@ public class MealPlanController {
 
     private Optional<MealPlan> findWeeklyPlanByStartDate(Long userId, LocalDate startDate) {
         LocalDate endDate = startDate.plusDays(6);
-        List<DayPlan> rangeCandidates = dayPlanRepository
-                .findByUserIdAndDateRangeWithMealsAndDuration(userId, startDate, endDate, PlanDuration.WEEKLY);
+        MealPlan bestPlan = null;
+        int bestDayCount = -1;
+        int bestMealCount = -1;
+        int bestVersionNumber = -1;
+        Long bestPlanId = null;
 
-        if (!rangeCandidates.isEmpty()) {
-            MealPlan bestPlan = null;
-            int bestMealCount = -1;
-            int bestCurrentMealCount = -1;
-
-            java.util.Map<Long, java.util.List<DayPlan>> byPlan = new java.util.HashMap<>();
-            for (DayPlan dayPlan : rangeCandidates) {
-                MealPlanVersion version = dayPlan.getMealPlanVersion();
-                if (version == null || version.getMealPlan() == null) {
-                    continue;
-                }
-                Long planId = version.getMealPlan().getId();
-                byPlan.computeIfAbsent(planId, k -> new java.util.ArrayList<>()).add(dayPlan);
+        List<MealPlan> plans = mealPlanRepository.findByUserId(userId);
+        for (MealPlan plan : plans) {
+            if (plan == null || plan.getDuration() != PlanDuration.WEEKLY) {
+                continue;
             }
-
-            for (java.util.Map.Entry<Long, java.util.List<DayPlan>> entry : byPlan.entrySet()) {
-                int mealCount = 0;
-                int currentMealCount = 0;
-                MealPlan plan = null;
-                MealPlanVersion currentVersion = null;
-                for (DayPlan dayPlan : entry.getValue()) {
-                    if (plan == null && dayPlan.getMealPlanVersion() != null) {
-                        plan = dayPlan.getMealPlanVersion().getMealPlan();
-                        currentVersion = plan != null ? plan.getCurrentVersion() : null;
-                    }
-                    mealCount += dayPlan.getMeals() != null ? dayPlan.getMeals().size() : 0;
-                    if (currentVersion != null
-                            && dayPlan.getMealPlanVersion() != null
-                            && currentVersion.getId() != null
-                            && currentVersion.getId().equals(dayPlan.getMealPlanVersion().getId())) {
-                        currentMealCount += dayPlan.getMeals() != null ? dayPlan.getMeals().size() : 0;
-                    }
-                }
-                if (plan == null) {
-                    continue;
-                }
-                // Prefer the plan whose CURRENT version has meals for this date range
-                if (currentMealCount > bestCurrentMealCount
-                        || (currentMealCount == bestCurrentMealCount && mealCount > bestMealCount)
-                        || (currentMealCount == bestCurrentMealCount && mealCount == bestMealCount && bestPlan != null
-                            && plan.getId() != null && bestPlan.getId() != null
-                            && plan.getId() > bestPlan.getId())) {
-                    bestPlan = plan;
-                    bestCurrentMealCount = currentMealCount;
-                    bestMealCount = mealCount;
-                }
+            MealPlanVersion currentVersion = plan.getCurrentVersion();
+            if (currentVersion == null || currentVersion.getId() == null) {
+                continue;
             }
-
-            if (bestPlan != null) {
-                return Optional.of(bestPlan);
+            List<DayPlan> dayPlans = dayPlanRepository
+                .findByMealPlanVersionIdAndDateRangeWithMeals(currentVersion.getId(), startDate, endDate);
+            if (dayPlans.isEmpty()) {
+                continue;
             }
+            int dayCount = dayPlans.size();
+            int mealCount = 0;
+            for (DayPlan dayPlan : dayPlans) {
+                mealCount += dayPlan.getMeals() != null ? dayPlan.getMeals().size() : 0;
+            }
+            int versionNumber = currentVersion.getVersionNumber() != null ? currentVersion.getVersionNumber() : 0;
+            Long planId = plan.getId();
+
+            if (dayCount > bestDayCount
+                    || (dayCount == bestDayCount && mealCount > bestMealCount)
+                    || (dayCount == bestDayCount && mealCount == bestMealCount && versionNumber > bestVersionNumber)
+                    || (dayCount == bestDayCount && mealCount == bestMealCount && versionNumber == bestVersionNumber
+                        && bestPlanId != null && planId != null && planId > bestPlanId)) {
+                bestPlan = plan;
+                bestDayCount = dayCount;
+                bestMealCount = mealCount;
+                bestVersionNumber = versionNumber;
+                bestPlanId = planId;
+            }
+        }
+
+        if (bestPlan != null) {
+            return Optional.of(bestPlan);
         }
 
         List<DayPlan> candidates = dayPlanRepository

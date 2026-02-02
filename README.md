@@ -1,486 +1,181 @@
-# Numbers Don't Lie — Wellness Platform
+# Numbers Don't Lie — Meal Planning & Wellness Platform
 
-A full-stack wellness analytics platform built with **Java Spring Boot**, **PostgreSQL**, **Docker**, and **JavaScript frontend**. The project implements user authentication (email + password, OAuth, 2FA), health data storage, analytics (BMI, wellness score, goals), AI‑style insights, dashboards, and full data export.
+A full‑stack meal planning and wellness application built with **Spring Boot**, **PostgreSQL**, and a **React (Vite)** frontend. It supports daily and weekly meal plans, meal replacement, custom meals, AI‑assisted features, nutrition summaries, shopping lists, progress charts, and versioned weekly plans.
 
-This README explains:
-- Project goals
-- System architecture
-- Folder structure
-- Database structure
-- Authentication flow
-- Health profile logic
-- BMI & wellness score formulas
-- AI insights logic
-- Dashboards & visualizations
-- Export functionality
-- Setup instructions (Docker, environment)
-- How to run the project
+This README covers:
+- Project overview and architecture
+- Setup and run instructions
+- Usage guide
+- Prompt engineering strategy
+- AI model selection rationale
+- Data model decisions
+- Error handling approach
 
 ---
 
-# 1. Project Overview
-Numbers Don't Lie is a wellness platform that collects user health metrics, performs analytics, and generates personalized insights.
+## 1) Project Overview
 
-Main features:
-- User registration with email verification
-- Login via password, Google OAuth, GitHub OAuth
-- JWT authentication (access + refresh tokens)
-- Optional Two-Factor Authentication (TOTP)
-- Health profile collection: demographics, metrics, goals
-- Weight history & activity history with unique timestamps
-- BMI calculation + classification
-- Wellness score calculation
-- Weekly & monthly summaries
-- AI‑style insights (prioritized)
-- Dashboard with responsive graphs
-- Export of all user health data as JSON
+Core capabilities:
+- Daily and weekly meal plans (profile‑driven)
+- Meal replacement and custom meals
+- Weekly plan versioning (regenerate + restore)
+- Nutrition summaries and progress visualizations
+- Shopping lists (daily and weekly)
+- AI‑assisted recipe generation and nutrition insights
 
 ---
 
-# 2. Technologies Used
+## 2) Architecture
+
+**Backend**
+- Java 17+, Spring Boot 3+
+- PostgreSQL
+- REST API endpoints for meal plans, recipes, AI, shopping lists, and analytics
+
+**Frontend**
+- React + Vite
+- Fetch API for backend communication
+- Pages for Today Plan, Weekly Plan, Recipes, Shopping Lists, Progress Charts
+
+**Deployment**
+- Docker Compose (backend + frontend + PostgreSQL)
+
+---
+
+## 3) Setup & Run
+
+### Prerequisites
+- Docker + Docker Compose
+
+### Environment
+Copy example and fill secrets:
+```bash
+cp .env.example .env
+```
+
+Key variables:
+- `GROQ_API_KEY` (AI features)
+- `FRONTEND_ORIGIN` (default: http://localhost:5173)
+
+### Run with Docker
+```bash
+docker compose up -d --build
+```
+
+Services:
+- Frontend: http://localhost:5173
+- Backend:  http://localhost:5173 (proxied)
+- Health:   http://localhost:5173/health
+
+---
+
+## 4) Usage Guide (Quick)
+
+### Daily Plan
+- View meals for today
+- Replace a meal with another recipe
+- Add custom meals
+- Generate AI recipes
+- See daily nutrition summary + AI insights
+
+### Weekly Plan
+- View week (Monday → Sunday)
+- Regenerate weekly plan (creates new version)
+- Restore previous version
+- Replace meals / add custom meals
+- Weekly nutrition summaries and trends
+
+### Shopping List
+- Daily shopping list: `/shopping-list/day`
+- Weekly shopping list: `/shopping-list/week`
+
+### Progress Charts
+- Weekly and monthly calorie trends
+- AI weekly insights (if API key available)
+
+---
+
+## 5) Prompt Engineering Strategy
+
+AI flows are structured as **multi‑step prompts** to improve consistency:
+1. **Strategy analysis** — determine user goals, calorie targets, and overall plan direction.
+2. **Meal structure** — decide meal slots and per‑meal calorie distribution.
+3. **Recipe generation** — generate or retrieve recipes based on constraints and targets.
+
+This separation improves control and reliability compared to a single prompt.
+
+---
+
+## 6) AI Model Selection Rationale
+
+- **Recipe generation** uses a model tuned for creative text + structured JSON output.
+- **Nutrition insights** use a model optimized for concise, factual summaries.
+
+Rationale:
+- Recipe generation benefits from creativity and variety.
+- Nutrition insights require precision and stable tone.
+
+(Models are configurable via the Groq client and environment keys.)
+
+---
+
+## 7) Data Model Decisions (Highlights)
+
+### Meal Plans
+- `MealPlan` (weekly/daily) owns `MealPlanVersion`
+- `MealPlanVersion` contains 7 `DayPlan` rows for a week
+- `DayPlan` owns `Meal` records
+
+### Meals
+- `Meal` stores type, planned time, recipe id, and calories
+- `is_custom` marks user‑added meals
+
+### Recipes
+- Recipes store ingredients + steps
+- AI‑generated recipes are flagged in DB (`is_ai_generated`)
+
+### Shopping Lists
+- Generated on‑demand (no persistence)
+- Aggregates ingredients by name + unit
+
+---
+
+## 8) Error Handling
 
 ### Backend
-- Java 17+
-- Spring Boot 3+
-- Spring Security
-- PostgreSQL
-- JWT (HS256)
-- TOTP (Google Authenticator compatible)
-- Docker & Docker Compose
+- Input validation (missing/invalid params → 400)
+- Safe fallbacks (empty lists instead of 500)
+- Clear error JSON payloads
+- AI failures handled without blocking core features
 
 ### Frontend
-- Vanilla JavaScript + JSX components
-- Fetch API
-- Charting (Recharts‑style responsive charts)
-
-### DevOps
-- Docker Compose (backend + frontend + PostgreSQL + pgAdmin)
+- Loading + error states per page
+- Graceful fallbacks if AI endpoints fail
+- No blocking UI if AI unavailable
 
 ---
 
-# 3. Folder Structure
+## 9) API Quick Reference
 
-```
-project/
-│
-├── backend/
-│   ├── src/main/java/com/ndl/numbers_dont_lie/
-│   │   ├── auth/           (JWT, OAuth, email verify, 2FA)
-│   │   ├── profile/        (health profile logic)
-│   │   ├── activity/       (activity history)
-│   │   ├── weight/         (weight history)
-│   │   ├── analytics/      (BMI + wellness engine)
-│   │   ├── ai/             (AI insights generation + caching)
-│   │   ├── export/         (data export endpoint)
-│   │   └── ...
-│   └── resources/
-│       └── application.yml
-│
-├── frontend/
-│   ├── index.html
-│   ├── App.jsx
-│   ├── pages/
-│   │   ├── Login.jsx
-│   │   ├── Register.jsx
-│   │   ├── Profile.jsx
-│   │   ├── Security.jsx
-│   │   ├── Dashboard.jsx
-│   │   └── ...
-│   └── lib/api.js
-│
-└── docker-compose.yml
-```
+Examples:
+- `GET /api/meal-plans/day?userId=...&date=YYYY-MM-DD`
+- `GET /api/meal-plans/week?userId=...&startDate=YYYY-MM-DD`
+- `POST /api/meal-plans/week/refresh?userId=...&startDate=YYYY-MM-DD`
+- `GET /api/meal-plans/week/versions?userId=...&startDate=YYYY-MM-DD`
+- `POST /api/meal-plans/week/versions/restore?...`
+- `GET /api/shopping-list/day?userId=...&date=YYYY-MM-DD`
+- `GET /api/shopping-list/week?userId=...&startDate=YYYY-MM-DD`
 
 ---
 
-# 4. Database Structure
+## 10) Notes
 
-## Users
-```
-users (
-  id BIGSERIAL PRIMARY KEY,
-  email TEXT UNIQUE,
-  password_hash TEXT,
-  email_verified BOOLEAN,
-  two_factor_enabled BOOLEAN,
-  totp_secret TEXT,
-  created_at TIMESTAMP,
-  updated_at TIMESTAMP
-)
-```
-
-## Health Profile
-```
-health_profile (
-  user_id BIGINT PRIMARY KEY,
-  age INT,
-  gender TEXT,
-  height_cm DOUBLE,
-  weight_kg DOUBLE,
-  target_weight_kg DOUBLE,
-  activity_level TEXT,
-  goal TEXT,
-  updated_at TIMESTAMP
-)
-```
-
-## Weight History
-```
-weight_history (
-  id BIGSERIAL PRIMARY KEY,
-  user_id BIGINT,
-  value_kg DOUBLE,
-  recorded_at TIMESTAMP UNIQUE
-)
-```
-
-## Activity History
-```
-activity_history (
-  id BIGSERIAL PRIMARY KEY,
-  user_id BIGINT,
-  type TEXT,
-  minutes INT,
-  intensity TEXT,
-  at TIMESTAMP UNIQUE
-)
-```
-
-## Consent History
-```
-consents (
-  id BIGSERIAL PRIMARY KEY,
-  user_id BIGINT,
-  version TEXT,
-  accepted BOOLEAN,
-  public_profile BOOLEAN,
-  public_stats BOOLEAN,
-  allow_ai_use_profile BOOLEAN,
-  allow_ai_use_history BOOLEAN,
-  allow_ai_use_habits BOOLEAN,
-  email_product BOOLEAN,
-  email_summaries BOOLEAN,
-  saved_at TIMESTAMP
-)
-```
+- AI features require `GROQ_API_KEY`.
+- Meal plan versions are immutable snapshots; regenerating creates a new version.
+- Week always runs Monday → Sunday.
 
 ---
 
-# 5. Authentication Flow
+## 11) Old README
 
-## Registration
-1. User submits email + password
-2. Backend sends verification email
-3. User clicks link → backend marks email as verified
-
-## Login
-- If email not verified → return `error: Email not verified`
-- If 2FA enabled → user receives TOTP challenge
-
-## JWT
-- `accessToken` (short life: ~10 min)
-- `refreshToken` (longer life: days)
-- When access expires → frontend uses refresh to request new ones
-
----
-
-# 6. Health Profile Logic
-Health profile is the core dataset for analytics and AI insights.
-
-Collected data:
-- Age, gender
-- Height (cm), weight (kg)
-- Activity level (low/moderate/high)
-- Goal (weight loss / gain / general fitness)
-- Dietary restrictions
-- Lifestyle indicators
-- Initial fitness assessment
-
-### Validation Rules
-```
-height_cm > 0
-weight_kg > 0
-age ≥ 0
-```
-If invalid → return HTTP 400 with error JSON.
-
----
-
-# 7. BMI Formula & Classification
-
-## BMI
-```
-BMI = weight_kg / (height_cm / 100)^2
-```
-
-## Classification
-```
-< 18.5       → underweight
-18.5–24.9    → normal
-25.0–29.9    → overweight
-≥ 30         → obese
-```
-
----
-
-# 8. Wellness Score Formula
-Final wellness score is 0–100.
-
-```
-score = (bmi_score * 0.3)
-       + (activity_score * 0.3)
-       + (progress_score * 0.2)
-       + (habits_score * 0.2)
-```
-
-### BMI Score Example
-- BMI in normal range → 100
-- Slightly out of range → 60–80
-- Obese/underweight → 20–40
-
-### Activity Score
-Based on:
-- weekly minutes
-- type of activity
-- number of sessions
-
-### Progress Score
-Based on user goal:
-```
-progress_percent = (initial - current) / (initial - target)
-```
-
-### Habits Score
-Based on:
-- consistency streaks
-- daily steps
-- routine formation
-
----
-
-# 9. Weekly & Monthly Summaries
-System calculates:
-- total sessions
-- total minutes
-- weight change
-- wellness delta
-- trend direction
-
----
-
-# 10. AI Insights Logic
-This project uses Groq LLMs for recipe generation and nutrition insights. AI output is constrained to strict JSON to keep parsing stable.
-
-### Insights include:
-- priority (high/medium/low)
-- recommendations
-- explanation
-- personalized actions
-
-### Insights depend on:
-- user goals
-- weekly/monthly progress
-- BMI classification
-- trends
-- restrictions
-- consents
-
-### AI Caching
-- Insights cached per user per goal per period
-- If AI is unavailable → cached insights returned
-
----
-
-# 10.1 AI Model Selection, Prompting, and Few‑Shot Strategy
-
-## Model choices
-- **Recipe generation** (creative, longer outputs): Groq `llama-3.3-70b-versatile` with **higher temperature (0.4–0.6)** to encourage variety.
-- **Nutrition analysis** (factual, consistent): same model with **lower temperature (0.2–0.3)** to reduce variability.
-
-Using one model simplifies deployment; temperature and top‑p adjustments create the necessary behavior differences.
-
-## Parameter adjustments
-- `temperature`: 0.2 for nutrition summaries, 0.3 for suggestions/substitutions, 0.4–0.6 for recipes
-- `top_p`: 0.95 (kept stable for predictable JSON shape)
-
-## Few‑shot examples
-We include small, strict JSON examples inside prompts to anchor format and tone:
-- **Daily nutrition summary** includes a short example input/output pair.
-- **Nutrition suggestions** includes a 5‑item example list covering required suggestion types.
-- **AI recipe generation (MVP)** includes a minimal example JSON output.
-
-Example selection strategy:
-- Keep examples short to avoid biasing real numbers.
-- Focus on structure, tone, and required fields rather than content.
-
----
-
-# 11. Dashboard & Visualization
-
-Includes:
-- BMI card
-- Wellness score gauge
-- Progress bars toward goal
-- Weight graph (with target line)
-- Activity charts (weekly/monthly)
-- Trends & insights
-- Comparison view: current vs target metrics
-
-### Responsive Charts
-Charts use responsive containers to resize on mobile.
-
-### Placeholder UI
-Dashboard shows loading skeletons when fetching data.
-
----
-
-# 12. Data Export
-Endpoint:
-```
-GET /export/health
-```
-Exports:
-- profile
-- weight history
-- activity history
-- consents
-- timestamps
-
-Frontend downloads JSON file automatically.
-
----
-
-# 13. Recipe Data Loading
-
-The project includes 500 recipes and 1,342 ingredients sourced from Food.com dataset. These are pre-processed and stored in JSON files.
-
-## Data Files
-- `backend/src/main/resources/data/recipes.json` (500 recipes)
-- `backend/src/main/resources/data/ingredients.json` (1,342 ingredients)
-
-## Loading Data into Database
-
-### Method 1: Automated Script (Recommended)
-```bash
-./run-data-loader.sh
-```
-
-This script will:
-1. Check if PostgreSQL is running (starts docker-compose if needed)
-2. Verify JSON files exist
-3. Run the data loader with proper Spring profile
-4. Display comprehensive loading summary
-
-### Method 2: Manual Execution
-```bash
-cd backend
-mvn spring-boot:run -Dspring-boot.run.profiles=data-loader
-```
-
-### Method 3: With Docker Compose
-Add to backend service environment in `docker-compose.yml`:
-```yaml
-environment:
-  - SPRING_PROFILES_ACTIVE=data-loader
-```
-
-## Data Loader Features
-
-- **Validation**: Ensures all fields meet requirements (non-negative nutrition, required fields)
-- **Normalization**: Converts ingredient labels to lowercase for consistent matching
-- **Referential Integrity**: Validates recipe ingredients exist before persisting
-- **Duplicate Prevention**: Skips ingredients already in database
-- **Comprehensive Logging**: Tracks inserted/skipped counts, validation errors, missing ingredients
-- **Idempotent**: Safe to run multiple times
-
-## Expected Output
-
-```
-================================================================================
-DATA LOADING SUMMARY
-================================================================================
-
-INGREDIENTS:
-  ✓ Inserted: 1342
-  ⊗ Skipped:  0
-  → Total:    1342
-
-RECIPES:
-  ✓ Inserted: 500
-  ⊗ Skipped:  0
-  → Total:    500
-
-✓ ALL DATA LOADED SUCCESSFULLY
-================================================================================
-```
-
-## Troubleshooting
-
-If recipes are skipped, check for:
-- Missing ingredient references (ingredient name mismatch)
-- Invalid JSON structure
-- Database connection issues
-
-See [DATA_LOADER_README.md](DATA_LOADER_README.md) for detailed documentation.
-
----
-
-# 14. Installation & Setup
-
-## Requirements
-- Docker
-- Docker Compose
-
-## 1. Clone the project
-```
-git clone <repo>
-cd project
-```
-
-## 2. Create `.env` file
-```
-cp .env.example .env
-check HELP.md for additional help with this step
-```
-
-## 3. Run Docker
-```
-docker compose up --build
-```
-Services will start:
-- backend on port 5173
-- frontend on port 8080
-- database on 5432
-- pgAdmin on 5050
-
-## 4. Load Recipe Data (Optional)
-```bash
-./run-data-loader.sh
-```
-
-This loads 500 recipes and 1,342 ingredients into the database for the recipe recommendation feature.
-
----
-
-# 15. Usage
-
-## Register → verify email
-## Login → optionally pass 2FA
-## Fill health profile
-## Add weight entries
-## Add activity entries
-## View dashboard
-## Generate insights
-## Export your data
-
----
-
-# 16. License
-MIT
-
----
-
-# 17. Author
-Numbers Don't Lie Project — Kood Jõhvi assignment implementation.
-
-https://www.kaggle.com/datasets/shuyangli94/food-com-recipes-and-user-interactions?resource=download&select=RAW_recipes.csv
+Previous version preserved as `README_OLD.md`.

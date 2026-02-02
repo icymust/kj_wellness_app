@@ -47,6 +47,21 @@ export function WeeklyMealPlanPage() {
   const [weeklyInsights, setWeeklyInsights] = useState(null);
   const [weeklyInsightsLoading, setWeeklyInsightsLoading] = useState(false);
   const [weeklyInsightsError, setWeeklyInsightsError] = useState(null);
+
+  const getWeekStart = (date) => {
+    const d = new Date(date);
+    const day = d.getDay();
+    const diff = day === 0 ? -6 : 1 - day;
+    d.setDate(d.getDate() + diff);
+    return d.toLocaleDateString('en-CA');
+  };
+
+  const normalizeWeekStart = (startDate, fallbackDate = new Date()) => {
+    const fallback = getWeekStart(fallbackDate);
+    if (!startDate) return fallback;
+    const normalized = getWeekStart(new Date(startDate));
+    return startDate === normalized ? startDate : fallback;
+  };
   const [userGoal, setUserGoal] = useState('maintenance');
   const [versionHistory, setVersionHistory] = useState(null);
   const [versionsLoading, setVersionsLoading] = useState(false);
@@ -112,14 +127,13 @@ export function WeeklyMealPlanPage() {
       setLoading(true);
       setError(null);
 
-      // Use today as start date
       const now = new Date();
-      const today = now.toLocaleDateString('en-CA'); // YYYY-MM-DD in local TZ
+      const weekStart = normalizeWeekStart(weeklyPlan?.startDate, now);
 
-      console.log(`[WEEK_PLAN_PAGE] Loading weekly plan for userId=${userId} startDate=${today}`);
+      console.log(`[WEEK_PLAN_PAGE] Loading weekly plan for userId=${userId} startDate=${weekStart}`);
 
       // Fetch weekly plan from backend
-      const weekUrl = `http://localhost:5173/api/meal-plans/week?userId=${userId}&startDate=${today}`;
+      const weekUrl = `http://localhost:5173/api/meal-plans/week?userId=${userId}&startDate=${weekStart}`;
       const response = await fetch(weekUrl);
       
       if (!response.ok) {
@@ -128,9 +142,9 @@ export function WeeklyMealPlanPage() {
 
       const data = await response.json();
       setWeeklyPlan(data);
-      await fetchWeeklyTrends(today);
-      await fetchMonthlyTrends(today);
-      await fetchWeeklyVersions(today);
+      await fetchWeeklyTrends(weekStart);
+      await fetchMonthlyTrends(weekStart);
+      await fetchWeeklyVersions(weekStart);
 
       // Debug: log meal IDs
       if (data.days && data.days.length > 0) {
@@ -141,7 +155,7 @@ export function WeeklyMealPlanPage() {
         }
       }
 
-      console.log(`[WEEK_PLAN_PAGE] Loaded weekly plan for userId=${userId} startDate=${today}`);
+      console.log(`[WEEK_PLAN_PAGE] Loaded weekly plan for userId=${userId} startDate=${weekStart}`);
     } catch (err) {
       console.error('[WEEK_PLAN_PAGE] Error loading weekly plan:', err);
       setError(err.message || 'Error loading weekly plan');
@@ -243,8 +257,8 @@ export function WeeklyMealPlanPage() {
       }
       lastReloadRef.current = nowMs;
       const now = new Date();
-      const today = now.toLocaleDateString('en-CA');
-      const startDate = startDateOverride || weeklyPlan?.startDate || today;
+    const weekStart = normalizeWeekStart(weeklyPlan?.startDate, now);
+    const startDate = normalizeWeekStart(startDateOverride || weeklyPlan?.startDate || weekStart, now);
       const weekUrl = `http://localhost:5173/api/meal-plans/week?userId=${userId}&startDate=${startDate}`;
       const response = await fetch(weekUrl);
       if (response.ok) {
@@ -270,8 +284,8 @@ export function WeeklyMealPlanPage() {
     locationRefreshHandledRef.current = true;
     const runRefresh = async () => {
       const now = new Date();
-      const today = now.toLocaleDateString('en-CA');
-      const startDate = weeklyPlan?.startDate || today;
+    const weekStart = normalizeWeekStart(weeklyPlan?.startDate, now);
+    const startDate = normalizeWeekStart(weeklyPlan?.startDate || weekStart, now);
       lastWeeklyTrendStartRef.current = null;
       lastMonthlyTrendStartRef.current = null;
       await reloadWeeklyPlan(startDate);
@@ -386,8 +400,8 @@ export function WeeklyMealPlanPage() {
     setRefreshing(true);
     try {
       const now = new Date();
-      const today = now.toLocaleDateString('en-CA');
-      const startDate = weeklyPlan?.startDate || today;
+      const weekStart = normalizeWeekStart(weeklyPlan?.startDate, now);
+      const startDate = normalizeWeekStart(weeklyPlan?.startDate || weekStart, now);
       
       const weekUrl = `http://localhost:5173/api/meal-plans/week/refresh?userId=${userId}&startDate=${startDate}`;
       const response = await fetch(weekUrl, { method: 'POST' });
@@ -580,6 +594,17 @@ export function WeeklyMealPlanPage() {
   const maxAbsDelta = trendDays.length > 0
     ? Math.max(...trendDays.map(day => Math.abs(day.delta)))
     : 0;
+
+  const getNegativeTrendColor = (delta) => {
+    if (delta >= 0) return null;
+    const ratio = maxAbsDelta > 0 ? Math.min(1, Math.abs(delta) / maxAbsDelta) : 0;
+    const start = [255, 152, 0]; // orange
+    const end = [229, 57, 53]; // red
+    const r = Math.round(start[0] + (end[0] - start[0]) * ratio);
+    const g = Math.round(start[1] + (end[1] - start[1]) * ratio);
+    const b = Math.round(start[2] + (end[2] - start[2]) * ratio);
+    return `rgb(${r}, ${g}, ${b})`;
+  };
   const monthlyMaxAbsDelta = monthlyTrendDays.length > 0
     ? Math.max(...monthlyTrendDays.map(day => Math.abs(day.delta)))
     : 0;
@@ -855,12 +880,13 @@ export function WeeklyMealPlanPage() {
               const barHeight = maxAbsDelta > 0
                 ? Math.max(32, Math.round((Math.abs(delta) / maxAbsDelta) * 240))
                 : 48;
-              const barClass = delta > 0 ? 'trend-bar positive' : 'trend-bar negative';
+              const barClass = delta >= 0 ? 'trend-bar positive' : 'trend-bar negative';
+              const barColor = delta < 0 ? getNegativeTrendColor(delta) : null;
               return (
                 <div key={day.date} className="trend-day">
                   <div
                     className={barClass}
-                    style={{ height: `${barHeight}px` }}
+                    style={{ height: `${barHeight}px`, backgroundColor: barColor || undefined }}
                     title={`Actual: ${day.actualCalories} kcal / Target: ${day.targetCalories} kcal`}
                   ></div>
                   <div className="trend-date">{day.date}</div>
