@@ -73,6 +73,7 @@ export function MealShoppingListPage() {
       console.log('[SHOPPING_LIST_PAGE] Loaded meal shopping list');
       console.log('[SHOPPING_LIST_PAGE] Items count:', data?.items?.length || 0);
     } catch (err) {
+      console.warn('Meal shopping list load failed', err);
       setError('Failed to load shopping list');
     } finally {
       setLoading(false);

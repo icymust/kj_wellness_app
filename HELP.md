@@ -22,6 +22,9 @@ MAIL_PASSWORD=
 
 # JWT signing secret (>=32 secure characters)
 JWT_SECRET=
+
+# Groq API key (AI features)
+GROQ_API_KEY=
 ```
 
 Generate a secure secret (macOS / Linux):
@@ -31,6 +34,16 @@ openssl rand -base64 48 | tr -d '\n'
 ```
 
 Put the result into `JWT_SECRET`. Rotate when moving to production.
+
+## Groq API key (AI features)
+
+To enable AI features (recipe generation and nutrition insights), create a Groq API key:
+
+1. Go to Groq Console: https://console.groq.com/keys
+2. Create a new API key.
+3. Copy it into your root `.env` as:
+   `GROQ_API_KEY=your_key_here`
+4. Restart Docker so the backend picks it up.
 
 ## Obtaining OAuth credentials
 

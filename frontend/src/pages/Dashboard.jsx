@@ -19,7 +19,7 @@ function SkeletonBlock({ lines = 3, height = 14 }) {
   );
 }
 
-function DashboardComparison({ summary, week, monthData, ai }) {
+function DashboardComparison({ summary, week, monthData, ai, dailyNutrition }) {
   if (!summary) return null;
   const current = summary.latestWeightKg;
   const target = summary.goal?.targetWeightKg;
@@ -155,6 +155,7 @@ export default function Dashboard({ ctx }) {
         const data = await response.json();
         setDailyNutrition({ ...data, date: today, userId });
       } catch (err) {
+        console.warn('Daily nutrition load failed', err);
         setDailyError('Daily nutrition unavailable');
         setDailyNutrition(null);
       } finally {
@@ -174,6 +175,7 @@ export default function Dashboard({ ctx }) {
         const prefsResp = await api.getNutritionalPreferences(token);
         setPrefsData(prefsResp?.nutritionalPreferences || null);
       } catch (err) {
+        console.warn('Profile inputs load failed', err);
         setProfileData(null);
         setPrefsData(null);
       }
@@ -243,6 +245,7 @@ export default function Dashboard({ ctx }) {
           setDailyAiSuggestions(Array.isArray(data?.suggestions) ? data.suggestions : []);
         }
       } catch (err) {
+        console.warn('Daily AI load failed', err);
         setDailyAiError('AI insights temporarily unavailable');
       } finally {
         setDailyAiLoading(false);
@@ -405,7 +408,7 @@ export default function Dashboard({ ctx }) {
           </>
         )}
       </div>
-      <DashboardComparison summary={summary} week={week} monthData={monthData} ai={comparisonAi} />
+      <DashboardComparison summary={summary} week={week} monthData={monthData} ai={comparisonAi} dailyNutrition={dailyNutrition} />
     </div>
   );
 }

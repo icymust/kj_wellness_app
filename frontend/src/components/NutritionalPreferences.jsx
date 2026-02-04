@@ -1,5 +1,5 @@
 import '../styles/NutritionalPreferences.css';
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 
 export default function NutritionalPreferences({ token }) {
   const [nutritionalPrefs, setNutritionalPrefs] = useState(null);
@@ -33,11 +33,7 @@ export default function NutritionalPreferences({ token }) {
   const [dirty, setDirty] = useState(false);
   const [readOnly, setReadOnly] = useState(true);
 
-  useEffect(() => {
-    loadPreferences();
-  }, [token]);
-
-  const loadPreferences = async () => {
+  const loadPreferences = useCallback(async () => {
     setLoading(true);
     setStatus(null);
     try {
@@ -84,7 +80,11 @@ export default function NutritionalPreferences({ token }) {
       setDirty(false);
       setReadOnly(true);
     }
-  };
+  }, [token]);
+
+  useEffect(() => {
+    loadPreferences();
+  }, [loadPreferences]);
 
   const handleDietaryChange = (preference) => {
     if (readOnly) return;

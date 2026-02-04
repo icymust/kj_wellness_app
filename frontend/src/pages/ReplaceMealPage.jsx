@@ -13,7 +13,7 @@
  * 6. Redirect back to origin page (daily or weekly)
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import '../styles/ReplaceMeal.css';
 import { useUser } from '../contexts/UserContext';
@@ -39,7 +39,7 @@ export function ReplaceMealPage() {
   // Load meal and available recipes
   useEffect(() => {
     loadMealAndRecipes();
-  }, [mealId]);
+  }, [loadMealAndRecipes]);
 
   // Filter recipes based on search term
   useEffect(() => {
@@ -54,7 +54,7 @@ export function ReplaceMealPage() {
     }
   }, [searchTerm, recipes]);
 
-  const loadMealAndRecipes = async () => {
+  const loadMealAndRecipes = useCallback(async () => {
     if (!mealId || !userId) {
       setError('Invalid parameters');
       setLoading(false);
@@ -88,7 +88,7 @@ export function ReplaceMealPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [mealId, userId]);
 
   const handleSelectRecipe = async (recipe) => {8
     if (!mealId || replacing) return;

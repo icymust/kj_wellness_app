@@ -164,6 +164,7 @@ export default function ProgressChartsPage() {
         }
         }
       } catch (err) {
+        console.warn('Progress charts load failed', err);
         setError('Failed to load progress charts');
       }
     };

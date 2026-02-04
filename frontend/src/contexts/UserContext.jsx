@@ -1,9 +1,10 @@
+/* eslint-disable react-refresh/only-export-components */
 /**
  * UserContext
- * 
+ *
  * Provides shared user state across the app.
  * Temporarily tracks current userId until authentication is wired.
- * 
+ *
  * Usage:
  *   const { userId, setUserId } = useUser();
  */
@@ -38,7 +39,6 @@ export function UserProvider({ children }) {
 }
 
 export function useUser() {
-  // eslint-disable-next-line no-unused-vars
   const context = useContext(UserContext);
   if (!context) {
     throw new Error('useUser must be used within UserProvider');

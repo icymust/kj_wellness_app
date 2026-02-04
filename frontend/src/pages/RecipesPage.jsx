@@ -35,6 +35,7 @@ export function RecipesPage() {
         const data = await api.getRecipes(token, null);
         setRecipes(Array.isArray(data) ? data : []);
       } catch (err) {
+        console.warn('Recipes load failed', err);
         setError('Failed to load recipes');
       } finally {
         setLoading(false);

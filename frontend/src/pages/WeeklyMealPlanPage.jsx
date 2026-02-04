@@ -48,20 +48,20 @@ export function WeeklyMealPlanPage() {
   const [weeklyInsightsLoading, setWeeklyInsightsLoading] = useState(false);
   const [weeklyInsightsError, setWeeklyInsightsError] = useState(null);
 
-  const getWeekStart = (date) => {
+  const getWeekStart = useCallback((date) => {
     const d = new Date(date);
     const day = d.getDay();
     const diff = day === 0 ? -6 : 1 - day;
     d.setDate(d.getDate() + diff);
     return d.toLocaleDateString('en-CA');
-  };
+  }, []);
 
-  const normalizeWeekStart = (startDate, fallbackDate = new Date()) => {
+  const normalizeWeekStart = useCallback((startDate, fallbackDate = new Date()) => {
     const fallback = getWeekStart(fallbackDate);
     if (!startDate) return fallback;
     const normalized = getWeekStart(new Date(startDate));
     return startDate === normalized ? startDate : fallback;
-  };
+  }, [getWeekStart]);
   const [userGoal, setUserGoal] = useState('maintenance');
   const [versionHistory, setVersionHistory] = useState(null);
   const [versionsLoading, setVersionsLoading] = useState(false);
@@ -113,6 +113,64 @@ export function WeeklyMealPlanPage() {
     }
   }, [userId]);
 
+  const fetchWeeklyTrends = useCallback(async (startDate) => {
+    if (!userId || !startDate) return;
+    if (lastWeeklyTrendStartRef.current === startDate) return;
+    lastWeeklyTrendStartRef.current = startDate;
+    try {
+      setTrendError(null);
+      const trendUrl = `http://localhost:5173/api/meal-plans/week/trends?userId=${userId}&startDate=${startDate}`;
+      const response = await fetch(trendUrl);
+      if (!response.ok) {
+        throw new Error(`Failed to load trends (${response.status})`);
+      }
+      const data = await response.json();
+      setTrendData(data);
+    } catch (err) {
+      console.error('[WEEK_PLAN_PAGE] Trend load error:', err);
+      setTrendError(err.message || 'Failed to load trends');
+    }
+  }, [userId]);
+
+  const fetchMonthlyTrends = useCallback(async (startDate) => {
+    if (!userId || !startDate) return;
+    if (lastMonthlyTrendStartRef.current === startDate) return;
+    lastMonthlyTrendStartRef.current = startDate;
+    try {
+      setMonthlyTrendError(null);
+      const baseDate = new Date(startDate);
+      const weekStarts = Array.from({ length: 4 }, (_, idx) => {
+        const d = new Date(baseDate);
+        d.setDate(baseDate.getDate() + idx * 7);
+        return d.toLocaleDateString('en-CA');
+      });
+
+      const responses = await Promise.all(
+        weekStarts.map((weekStart) =>
+          fetch(`http://localhost:5173/api/meal-plans/week/trends?userId=${userId}&startDate=${weekStart}`)
+        )
+      );
+
+      const payloads = await Promise.all(
+        responses.map((response) => (response.ok ? response.json() : null))
+      );
+
+      const merged = [];
+      payloads.forEach((data) => {
+        if (data?.days?.length) {
+          merged.push(...data.days);
+        }
+      });
+
+      setMonthlyTrendDays(merged);
+    } catch (err) {
+      console.error('[WEEK_PLAN_PAGE] Monthly trend load error:', err);
+      setMonthlyTrendError(err.message || 'Failed to load monthly trends');
+      setMonthlyTrendDays([]);
+    }
+  }, [userId]);
+
+
   /**
    * Load weekly meal plan
    */
@@ -162,7 +220,14 @@ export function WeeklyMealPlanPage() {
     } finally {
       setLoading(false);
     }
-  }, [userId, fetchWeeklyVersions, loading]);
+  }, [
+    userId,
+    normalizeWeekStart,
+    weeklyPlan?.startDate,
+    fetchWeeklyTrends,
+    fetchMonthlyTrends,
+    fetchWeeklyVersions,
+  ]);
 
   useEffect(() => {
     if (!userId) return;
@@ -248,7 +313,7 @@ export function WeeklyMealPlanPage() {
     generateWeeklyInsights();
   }, [weeklyPlan, trendData, userGoal, userId]);
 
-  const reloadWeeklyPlan = async (startDateOverride) => {
+  const reloadWeeklyPlan = useCallback(async (startDateOverride) => {
     if (!userId) return;
     try {
       const nowMs = Date.now();
@@ -257,8 +322,8 @@ export function WeeklyMealPlanPage() {
       }
       lastReloadRef.current = nowMs;
       const now = new Date();
-    const weekStart = normalizeWeekStart(weeklyPlan?.startDate, now);
-    const startDate = normalizeWeekStart(startDateOverride || weeklyPlan?.startDate || weekStart, now);
+      const weekStart = normalizeWeekStart(weeklyPlan?.startDate, now);
+      const startDate = normalizeWeekStart(startDateOverride || weeklyPlan?.startDate || weekStart, now);
       const weekUrl = `http://localhost:5173/api/meal-plans/week?userId=${userId}&startDate=${startDate}`;
       const response = await fetch(weekUrl);
       if (response.ok) {
@@ -273,7 +338,14 @@ export function WeeklyMealPlanPage() {
     } catch (err) {
       console.error('[WEEK_PLAN_PAGE] Reload error:', err);
     }
-  };
+  }, [
+    userId,
+    weeklyPlan?.startDate,
+    normalizeWeekStart,
+    fetchWeeklyTrends,
+    fetchMonthlyTrends,
+    fetchWeeklyVersions,
+  ]);
 
   useEffect(() => {
     if (!location.state?.refreshWeeklyPlan) {
@@ -284,15 +356,15 @@ export function WeeklyMealPlanPage() {
     locationRefreshHandledRef.current = true;
     const runRefresh = async () => {
       const now = new Date();
-    const weekStart = normalizeWeekStart(weeklyPlan?.startDate, now);
-    const startDate = normalizeWeekStart(weeklyPlan?.startDate || weekStart, now);
+      const weekStart = normalizeWeekStart(weeklyPlan?.startDate, now);
+      const startDate = normalizeWeekStart(weeklyPlan?.startDate || weekStart, now);
       lastWeeklyTrendStartRef.current = null;
       lastMonthlyTrendStartRef.current = null;
       await reloadWeeklyPlan(startDate);
       navigate(location.pathname, { replace: true, state: {} });
     };
     runRefresh();
-  }, [location.state, weeklyPlan, reloadWeeklyPlan, navigate, location.pathname]);
+  }, [location.state, weeklyPlan, reloadWeeklyPlan, navigate, location.pathname, normalizeWeekStart]);
 
   const handleRestoreVersion = async (versionNumber) => {
     if (!userId || !weeklyPlan?.startDate) return;
@@ -330,63 +402,6 @@ export function WeeklyMealPlanPage() {
       setVersionsError(err?.message || 'Failed to delete plan version.');
     } finally {
       setDeletingVersion(null);
-    }
-  };
-
-  const fetchWeeklyTrends = async (startDate) => {
-    if (!userId || !startDate) return;
-    if (lastWeeklyTrendStartRef.current === startDate) return;
-    lastWeeklyTrendStartRef.current = startDate;
-    try {
-      setTrendError(null);
-      const trendUrl = `http://localhost:5173/api/meal-plans/week/trends?userId=${userId}&startDate=${startDate}`;
-      const response = await fetch(trendUrl);
-      if (!response.ok) {
-        throw new Error(`Failed to load trends (${response.status})`);
-      }
-      const data = await response.json();
-      setTrendData(data);
-    } catch (err) {
-      console.error('[WEEK_PLAN_PAGE] Trend load error:', err);
-      setTrendError(err.message || 'Failed to load trends');
-    }
-  };
-
-  const fetchMonthlyTrends = async (startDate) => {
-    if (!userId || !startDate) return;
-    if (lastMonthlyTrendStartRef.current === startDate) return;
-    lastMonthlyTrendStartRef.current = startDate;
-    try {
-      setMonthlyTrendError(null);
-      const baseDate = new Date(startDate);
-      const weekStarts = Array.from({ length: 4 }, (_, idx) => {
-        const d = new Date(baseDate);
-        d.setDate(baseDate.getDate() + idx * 7);
-        return d.toLocaleDateString('en-CA');
-      });
-
-      const responses = await Promise.all(
-        weekStarts.map((weekStart) =>
-          fetch(`http://localhost:5173/api/meal-plans/week/trends?userId=${userId}&startDate=${weekStart}`)
-        )
-      );
-
-      const payloads = await Promise.all(
-        responses.map((response) => (response.ok ? response.json() : null))
-      );
-
-      const merged = [];
-      payloads.forEach((data) => {
-        if (data?.days?.length) {
-          merged.push(...data.days);
-        }
-      });
-
-      setMonthlyTrendDays(merged);
-    } catch (err) {
-      console.error('[WEEK_PLAN_PAGE] Monthly trend error:', err);
-      setMonthlyTrendError('Failed to load monthly trends');
-      setMonthlyTrendDays([]);
     }
   };
 

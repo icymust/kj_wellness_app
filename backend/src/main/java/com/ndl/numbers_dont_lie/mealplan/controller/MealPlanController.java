@@ -52,18 +52,6 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 
-/**
- * STEP 6.4: Production Meal Plan API
- * 
- * User-facing API for meal plan and nutrition endpoints.
- * Delegates to existing services (DayPlanAssemblerService, NutritionSummaryService).
- * 
- * TEMPORARY:
- * - userId hardcoded to 2 (will be replaced with auth context when available)
- * - No authentication required yet
- * 
- * This controller will remain minimal until authentication is integrated.
- */
 @RestController
 @RequestMapping("/api/meal-plans")
 public class MealPlanController {
@@ -121,15 +109,6 @@ public class MealPlanController {
         this.mealPlanVersionService = mealPlanVersionService;
     }
     
-    /**
-     * Get today's meal plan.
-     * 
-     * AUTO-BOOTSTRAPS: If no AI strategy exists, automatically generates one.
-     * User will see meals on first visit without manual bootstrap.
-     * 
-     * @param date optional date (defaults to today if omitted)
-     * @return DayPlan with meals (auto-generated if needed)
-     */
     @GetMapping("/day")
     @Transactional
     public ResponseEntity<DayPlan> getDayPlan(

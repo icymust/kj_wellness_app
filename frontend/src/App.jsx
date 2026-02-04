@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate, Link, useNavigate, useLocation } from "react-router-dom";
 import { api } from "./lib/api";
 import { setTokens, clearTokens, getAccessToken, getRefreshToken } from "./lib/tokens";
@@ -134,14 +134,14 @@ function AppShell() {
   const [consentLoaded, setConsentLoaded] = useState(false);
 
   // Load user profile data (/protected/me) and cache id
-  const loadMe = async (tokenArg) => {
+  const loadMe = useCallback(async (tokenArg) => {
     if (!tokenArg && !accessToken) return null;
     const result = await api.me(tokenArg || accessToken);
     const payload = result?.user || result;
     setMe(payload);
     if (payload?.id) setUserId(payload.id);
     return payload;
-  };
+  }, [accessToken, setMe, setUserId]);
 
   // small helpers / placeholders so pages can call them without crashing
   const handleRegister = async (e) => {
@@ -287,14 +287,14 @@ function AppShell() {
     if (accessToken && !userId) {
       loadMe(accessToken).catch((err) => console.warn('Auto /me failed', err));
     }
-  }, [accessToken, userId]);
+  }, [accessToken, userId, loadMe]);
 
   // Clear stale userId when tokens are absent
   useEffect(() => {
     if (!accessToken && userId != null) {
       setUserId(null);
     }
-  }, [accessToken, userId]);
+  }, [accessToken, userId, setUserId]);
 
   // Profile handlers
   const loadProfile = async () => {

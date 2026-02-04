@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import '../styles/DailyShoppingList.css';
 import { useUser } from '../contexts/UserContext';
@@ -92,7 +92,7 @@ export function DailyShoppingListPage() {
     fillUserId();
   }, [userId, setUserId]);
 
-  const loadShoppingList = async () => {
+  const loadShoppingList = useCallback(async () => {
     if (!userId) {
       setError('No active user. Sign in to view shopping list.');
       setLoading(false);
@@ -108,15 +108,16 @@ export function DailyShoppingListPage() {
       console.log('[SHOPPING_LIST_PAGE] Loaded daily shopping list');
       console.log('[SHOPPING_LIST_PAGE] Items count:', data?.items?.length || 0);
     } catch (err) {
+      console.warn('Daily shopping list load failed', err);
       setError('Failed to load shopping list');
     } finally {
       setLoading(false);
     }
-  };
+  }, [userId, date]);
 
   useEffect(() => {
     loadShoppingList();
-  }, [userId, date]);
+  }, [loadShoppingList]);
 
   const groupedItems = useMemo(() => {
     if (!shoppingList?.items) return [];

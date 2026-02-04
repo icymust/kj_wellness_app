@@ -10,6 +10,7 @@ This README covers:
 - AI model selection rationale
 - Data model decisions
 - Error handling approach
+- Help reference (GROQ key + environment guide) → see `HELP.md`
 
 ---
 
@@ -63,7 +64,7 @@ docker compose up -d --build
 ```
 
 Services:
-- Frontend: http://localhost:5173
+- Frontend: http://localhost:8080
 - Backend:  http://localhost:5173 (proxied)
 - Health:   http://localhost:5173/health
 
@@ -140,6 +141,16 @@ Rationale:
 
 ---
 
+## 8) Error Handling Approach
+
+The system uses explicit error handling at both API and UI layers:
+- API validates required params and returns 400 on invalid input.
+- AI calls are guarded with timeouts and connectivity checks; failures return safe error responses.
+- Rate‑limit responses are surfaced as user‑friendly messages in the UI.
+- UI components never block main rendering when AI fails; fallbacks are shown or sections hidden.
+
+---
+
 ## 8) Error Handling
 
 ### Backend
@@ -179,3 +190,7 @@ Examples:
 ## 11) Old README
 
 Previous version preserved as `README_OLD.md`.
+
+## 12) Author 
+
+Created by Martin Mustonen

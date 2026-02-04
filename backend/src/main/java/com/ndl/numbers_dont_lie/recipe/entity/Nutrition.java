@@ -3,13 +3,6 @@ package com.ndl.numbers_dont_lie.recipe.entity;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.Embeddable;
 
-/**
- * Embeddable class representing nutritional information.
- * 
- * IMPORTANT: These values are REFERENCE DATA ONLY.
- * All nutritional calculations must be performed via function calling,
- * NOT directly using these Ingredient reference values.
- */
 @Embeddable
 public class Nutrition {
 

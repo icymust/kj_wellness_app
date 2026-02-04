@@ -9,6 +9,10 @@ export default function Home() {
         The dashboard shows progress, weekly/monthly summaries, and AI-style insights based on your profile and history.
       </p>
       <p>
+        New in counting-calories: daily and weekly meal plans with nutrition summaries, calorie balance trends,
+        AI nutrition insights, and shopping lists generated from your meals.
+      </p>
+      <p>
         Use the navigation above to explore: register/login, fill your health profile, add weight/activity entries,
         view analytics and insights, and export your data. If you are not signed in, some pages will be unavailable.
       </p>

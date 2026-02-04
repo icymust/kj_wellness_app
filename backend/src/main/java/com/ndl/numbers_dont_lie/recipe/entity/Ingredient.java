@@ -41,12 +41,6 @@ public class Ingredient {
     @JsonProperty("quantity")
     private Double quantityPer100; // always 100.0 for standardization
 
-    /**
-     * Embedded nutrition information.
-     * IMPORTANT: These values are REFERENCE DATA ONLY.
-     * All nutritional calculations must be performed via function calling,
-     * NOT directly using these Ingredient reference values.
-     */
     @Embedded
     @JsonProperty("nutrition")
     private Nutrition nutrition;

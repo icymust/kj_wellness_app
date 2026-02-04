@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import '../styles/WeeklyShoppingList.css';
 import { useUser } from '../contexts/UserContext';
@@ -60,7 +60,7 @@ export function WeeklyShoppingListPage() {
       } else {
         setCheckedItems({});
       }
-    } catch (err) {
+    } catch {
       setCheckedItems({});
     }
   }, [storageKey]);
@@ -80,7 +80,7 @@ export function WeeklyShoppingListPage() {
       } else {
         setItemEdits({});
       }
-    } catch (err) {
+    } catch {
       setItemEdits({});
     }
   }, [editsKey]);
@@ -103,7 +103,7 @@ export function WeeklyShoppingListPage() {
     fillUserId();
   }, [userId, setUserId]);
 
-  const loadShoppingList = async () => {
+  const loadShoppingList = useCallback(async () => {
     if (!userId) {
       setError('No active user. Sign in to view shopping list.');
       setLoading(false);
@@ -119,15 +119,16 @@ export function WeeklyShoppingListPage() {
       console.log('[SHOPPING_LIST_PAGE] Loaded weekly shopping list');
       console.log('[SHOPPING_LIST_PAGE] Items count:', data?.items?.length || 0);
     } catch (err) {
+      console.warn('Weekly shopping list load failed', err);
       setError('Failed to load shopping list');
     } finally {
       setLoading(false);
     }
-  };
+  }, [userId, startDate]);
 
   useEffect(() => {
     loadShoppingList();
-  }, [userId, startDate]);
+  }, [loadShoppingList]);
 
   const groupedItems = useMemo(() => {
     if (!shoppingList?.items) return [];
@@ -156,7 +157,7 @@ export function WeeklyShoppingListPage() {
       if (storageKey) {
         try {
           localStorage.setItem(storageKey, JSON.stringify(next));
-        } catch (err) {
+        } catch {
           // ignore localStorage errors
         }
       }
@@ -171,7 +172,7 @@ export function WeeklyShoppingListPage() {
       if (editsKey) {
         try {
           localStorage.setItem(editsKey, JSON.stringify(next));
-        } catch (err) {
+        } catch {
           // ignore localStorage errors
         }
       }
@@ -185,7 +186,7 @@ export function WeeklyShoppingListPage() {
       if (editsKey) {
         try {
           localStorage.setItem(editsKey, JSON.stringify(next));
-        } catch (err) {
+        } catch {
           // ignore localStorage errors
         }
       }

@@ -12,7 +12,7 @@
  * - Uses temporary userId=1 (until auth is wired)
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import '../styles/MealPlan.css';
 import { useUser } from '../contexts/UserContext';
@@ -67,7 +67,7 @@ export function MealPlanPage() {
   /**
    * Load meal plan for a specific date
    */
-  const loadMealPlan = async (dateToLoad = null) => {
+  const loadMealPlan = useCallback(async (dateToLoad = null) => {
     if (!userId) {
       setError('No active user. Sign in to view your plan.');
       setLoading(false);
@@ -112,11 +112,11 @@ export function MealPlanPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [userId]);
 
   useEffect(() => {
     loadMealPlan();
-  }, [userId]);
+  }, [loadMealPlan]);
 
   useEffect(() => {
     if (!dayPlan?.meals || dayPlan.meals.length === 0) {
