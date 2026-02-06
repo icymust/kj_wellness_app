@@ -36,24 +36,6 @@ export function ReplaceMealPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [replacing, setReplacing] = useState(false);
 
-  // Load meal and available recipes
-  useEffect(() => {
-    loadMealAndRecipes();
-  }, [loadMealAndRecipes]);
-
-  // Filter recipes based on search term
-  useEffect(() => {
-    if (searchTerm.trim() === '') {
-      setFilteredRecipes(recipes);
-    } else {
-      const term = searchTerm.toLowerCase();
-      setFilteredRecipes(recipes.filter(r => 
-        r.title.toLowerCase().includes(term) ||
-        r.summary?.toLowerCase().includes(term)
-      ));
-    }
-  }, [searchTerm, recipes]);
-
   const loadMealAndRecipes = useCallback(async () => {
     if (!mealId || !userId) {
       setError('Invalid parameters');
@@ -90,7 +72,25 @@ export function ReplaceMealPage() {
     }
   }, [mealId, userId]);
 
-  const handleSelectRecipe = async (recipe) => {8
+  // Load meal and available recipes
+  useEffect(() => {
+    loadMealAndRecipes();
+  }, [loadMealAndRecipes]);
+
+  // Filter recipes based on search term
+  useEffect(() => {
+    if (searchTerm.trim() === '') {
+      setFilteredRecipes(recipes);
+    } else {
+      const term = searchTerm.toLowerCase();
+      setFilteredRecipes(recipes.filter(r =>
+        r.title.toLowerCase().includes(term) ||
+        r.summary?.toLowerCase().includes(term)
+      ));
+    }
+  }, [searchTerm, recipes]);
+
+  const handleSelectRecipe = async (recipe) => {
     if (!mealId || replacing) return;
 
     try {

@@ -1,4 +1,4 @@
-# Numbers Don't Lie — Meal Planning & Wellness Platform
+# Numbers Don't Lie(Counting calories) — Meal Planning & Wellness Platform
 
 A full‑stack meal planning and wellness application built with **Spring Boot**, **PostgreSQL**, and a **React (Vite)** frontend. It supports daily and weekly meal plans, meal replacement, custom meals, AI‑assisted features, nutrition summaries, shopping lists, progress charts, and versioned weekly plans.
 
@@ -56,7 +56,7 @@ cp .env.example .env
 
 Key variables:
 - `GROQ_API_KEY` (AI features)
-- `FRONTEND_ORIGIN` (default: http://localhost:5173)
+- `FRONTEND_ORIGIN` (default: http://localhost:8080)
 
 ### Run with Docker
 ```bash
@@ -150,8 +150,6 @@ The system uses explicit error handling at both API and UI layers:
 - UI components never block main rendering when AI fails; fallbacks are shown or sections hidden.
 
 ---
-
-## 8) Error Handling
 
 ### Backend
 - Input validation (missing/invalid params → 400)

@@ -12,7 +12,7 @@
  * - Uses temporary userId=1 (until auth is wired)
  */
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import '../styles/MealPlan.css';
 import { useUser } from '../contexts/UserContext';
@@ -35,9 +35,12 @@ export function MealPlanPage() {
   const [aiSuggestions, setAiSuggestions] = useState([]);
   const [aiSuggestionsLoading, setAiSuggestionsLoading] = useState(false);
   const [aiSuggestionsError, setAiSuggestionsError] = useState(null);
+  const [aiRateLimitUntil, setAiRateLimitUntil] = useState(null);
   const [mealNutritionMap, setMealNutritionMap] = useState({});
   const [dietaryPreferences, setDietaryPreferences] = useState([]);
   const [userGoal, setUserGoal] = useState('general_fitness');
+  const lastAiSummaryKeyRef = useRef(null);
+  const lastAiSuggestionsKeyRef = useRef(null);
 
   // Get userId from shared context (persisted in localStorage)
   const { userId, setUserId } = useUser();
@@ -221,10 +224,20 @@ export function MealPlanPage() {
       if (!dayPlan?.date) {
         return;
       }
+      const summaryKey = `${userId}|${dayPlan.date}|${nutritionSummary.total_calories ?? 0}|${nutritionSummary.total_protein ?? 0}|${nutritionSummary.total_carbs ?? 0}|${nutritionSummary.total_fats ?? 0}|${userGoal}`;
+      if (lastAiSummaryKeyRef.current === summaryKey) {
+        return;
+      }
+      if (aiRateLimitUntil && Date.now() < aiRateLimitUntil) {
+        setAiNutritionSummary(null);
+        setAiNutritionError('AI rate limit reached. Try again later.');
+        return;
+      }
       setAiNutritionLoading(true);
 
       try {
         setAiNutritionError(null);
+        lastAiSummaryKeyRef.current = summaryKey;
         const response = await fetch('http://localhost:5173/api/ai/nutrition/summary', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -247,6 +260,11 @@ export function MealPlanPage() {
         });
 
         if (!response.ok) {
+          const errBody = await response.json().catch(() => ({}));
+          const errorText = `${errBody?.error || ''}`.toLowerCase();
+          if (response.status === 429 || errorText.includes('rate limit')) {
+            setAiRateLimitUntil(Date.now() + 10 * 60 * 1000);
+          }
           const msg = response.status === 429
             ? 'AI rate limit reached. Try again later.'
             : 'AI service unavailable. Please try again later.';
@@ -264,7 +282,7 @@ export function MealPlanPage() {
     };
 
     generateInsights();
-  }, [nutritionSummary, dayPlan?.date, userGoal, userId]);
+  }, [nutritionSummary, dayPlan?.date, userGoal, userId, aiRateLimitUntil]);
 
   useEffect(() => {
     const generateSuggestions = async () => {
@@ -276,10 +294,23 @@ export function MealPlanPage() {
       if (!dayPlan?.date || !dayPlan?.meals) {
         return;
       }
+      const mealKey = (dayPlan.meals || [])
+        .map((meal) => `${meal.id || ''}:${meal.recipe_id || meal.recipeId || ''}:${meal.meal_type || meal.mealType || ''}`)
+        .join('|');
+      const suggestionsKey = `${userId}|${dayPlan.date}|${mealKey}|${userGoal}|${(dietaryPreferences || []).join(',')}`;
+      if (lastAiSuggestionsKeyRef.current === suggestionsKey) {
+        return;
+      }
+      if (aiRateLimitUntil && Date.now() < aiRateLimitUntil) {
+        setAiSuggestions([]);
+        setAiSuggestionsError('AI rate limit reached. Try again later.');
+        return;
+      }
 
       setAiSuggestionsLoading(true);
       try {
         setAiSuggestionsError(null);
+        lastAiSuggestionsKeyRef.current = suggestionsKey;
         const meals = dayPlan.meals.map((meal) => ({
           mealType: (meal.meal_type || meal.mealType || '').toString().toUpperCase(),
           name: meal.custom_meal_name || meal.customMealName || meal.title || 'Meal',
@@ -309,6 +340,11 @@ export function MealPlanPage() {
         });
 
         if (!response.ok) {
+          const errBody = await response.json().catch(() => ({}));
+          const errorText = `${errBody?.error || ''}`.toLowerCase();
+          if (response.status === 429 || errorText.includes('rate limit')) {
+            setAiRateLimitUntil(Date.now() + 10 * 60 * 1000);
+          }
           const msg = response.status === 429
             ? 'AI rate limit reached. Try again later.'
             : 'AI service unavailable. Please try again later.';
@@ -471,21 +507,61 @@ export function MealPlanPage() {
   };
 
   const handleGenerateAiRecipe = async (meal) => {
-    if (!meal || !userId) return;
-    const mealType = (meal.meal_type || meal.mealType || '').toString().toUpperCase();
-    if (!mealType) return;
+    if (!meal) {
+      console.warn('[AI_RECIPE] Missing meal payload');
+      return;
+    }
+    const resolvedUserId = userId || meal.user_id || dayPlan?.user_id;
+    if (!resolvedUserId) {
+      console.warn('[AI_RECIPE] Missing userId for generation');
+      alert('Unable to generate recipe: user not resolved.');
+      return;
+    }
+    if (!userId && resolvedUserId) {
+      setUserId(resolvedUserId);
+    }
+    const mealType = (meal.meal_type || meal.mealType || meal.type || '').toString().toUpperCase();
+    if (!mealType) {
+      console.warn('[AI_RECIPE] Missing meal type', meal);
+      alert('Unable to generate recipe: meal type missing.');
+      return;
+    }
 
     try {
       setGeneratingMealId(meal.id || mealType);
+      console.log('[AI_RECIPE] Requesting AI recipe', { userId: resolvedUserId, mealType, mealId: meal.id });
       const response = await fetch('http://localhost:5173/api/ai/recipes/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, mealType })
+        body: JSON.stringify({ userId: resolvedUserId, mealType, mealId: meal.id })
       });
 
       if (!response.ok) {
         const errBody = await response.json().catch(() => ({}));
         throw new Error(errBody.error || `Failed to generate AI recipe (${response.status})`);
+      }
+
+      const generatedRecipe = await response.json().catch(() => null);
+      if (generatedRecipe && meal?.id) {
+        const recipeId =
+          generatedRecipe.stable_id ??
+          generatedRecipe.stableId ??
+          generatedRecipe.id ??
+          null;
+        const recipeName = generatedRecipe.title || generatedRecipe.name || meal.custom_meal_name;
+        setDayPlan(prevPlan => ({
+          ...prevPlan,
+          meals: prevPlan.meals.map(m => (
+            m.id === meal.id
+              ? {
+                  ...m,
+                  recipe_id: recipeId ?? m.recipe_id,
+                  custom_meal_name: recipeName,
+                  is_ai_generated: true
+                }
+              : m
+          ))
+        }));
       }
 
       await refreshMealPlan();
@@ -664,7 +740,9 @@ export function MealPlanPage() {
                   className={`calorie-progress-bar ${
                     (nutritionSummary.total_calories ?? 0) > (nutritionSummary.target_calories ?? 0)
                       ? 'surplus'
-                      : 'deficit'
+                      : (nutritionSummary.total_calories ?? 0) === (nutritionSummary.target_calories ?? 0)
+                        ? 'on-target'
+                        : 'deficit'
                   }`}
                 >
                   <div
@@ -682,14 +760,11 @@ export function MealPlanPage() {
                 <div className="calorie-progress-note">
                   {(nutritionSummary.total_calories ?? 0) > (nutritionSummary.target_calories ?? 0)
                     ? 'Surplus'
-                    : 'Deficit'}
+                    : (nutritionSummary.total_calories ?? 0) === (nutritionSummary.target_calories ?? 0)
+                      ? 'On target'
+                      : 'Deficit'}
                 </div>
               </div>
-              {renderNutritionBar(
-                nutritionSummary.total_calories,
-                nutritionSummary.target_calories,
-                'Calories'
-              )}
               {renderNutritionBar(
                 nutritionSummary.total_protein,
                 nutritionSummary.target_protein,

@@ -172,9 +172,23 @@ export default function ProgressChartsPage() {
     loadProgress();
   }, []);
 
-  const weeklyMaxAbs = useMemo(() => {
-    return trendDays.length ? Math.max(...trendDays.map((day) => Math.abs(day.delta || 0))) : 0;
+  const weeklyAdjustedDays = useMemo(() => {
+    const today = new Date();
+    const cutoff = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    return trendDays.map((day) => {
+      const dayDate = new Date(`${day.date}T00:00:00`);
+      if (dayDate > cutoff) {
+        return { ...day, delta: 0 };
+      }
+      return day;
+    });
   }, [trendDays]);
+
+  const weeklyMaxAbs = useMemo(() => {
+    return weeklyAdjustedDays.length
+      ? Math.max(...weeklyAdjustedDays.map((day) => Math.abs(day.delta || 0)))
+      : 0;
+  }, [weeklyAdjustedDays]);
 
   const monthlyMaxAbs = useMemo(() => {
     return monthlyTrendDays.length
@@ -196,7 +210,7 @@ export default function ProgressChartsPage() {
 
       <section className="progress-card">
         <h2>Weekly Calorie Trend</h2>
-        {renderTrendLine(trendDays, weeklyMaxAbs, buildWeekLabels(trendDays))}
+        {renderTrendLine(weeklyAdjustedDays, weeklyMaxAbs, buildWeekLabels(weeklyAdjustedDays))}
       </section>
 
       <section className="progress-card">

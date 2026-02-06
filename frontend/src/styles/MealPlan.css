@@ -234,6 +234,10 @@
   background: linear-gradient(90deg, #e53935, #c62828);
 }
 
+.calorie-progress-bar.on-target .calorie-progress-fill {
+  background: linear-gradient(90deg, #4caf50, #45a049);
+}
+
 .calorie-progress-note {
   font-size: 12px;
   color: #666;

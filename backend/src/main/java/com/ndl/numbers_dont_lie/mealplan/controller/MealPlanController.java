@@ -325,7 +325,7 @@ public class MealPlanController {
      * Returns day plans plus aggregated weekly nutrition summary.
      */
     @GetMapping("/week")
-    @Transactional(readOnly = true)
+    @Transactional
     public ResponseEntity<?> getWeeklyPlan(
             @RequestParam(name = "userId") Long userId,
             @RequestParam(name = "startDate", required = true)
@@ -414,7 +414,11 @@ public class MealPlanController {
             try {
                 MealPlan savedPlan = weeklyMealPlanService.generateWeeklyPlan(userId, startDate);
                 MealPlanVersion currentVersion = savedPlan.getCurrentVersion();
-                java.util.List<DayPlan> dayPlans = currentVersion != null ? currentVersion.getDayPlans() : java.util.Collections.emptyList();
+                java.util.List<DayPlan> dayPlans = java.util.Collections.emptyList();
+                if (currentVersion != null) {
+                    dayPlans = dayPlanRepository
+                        .findByMealPlanVersionIdAndDateRangeWithMeals(currentVersion.getId(), startDate, endDate);
+                }
                 dayPlans.sort(java.util.Comparator.comparing(DayPlan::getDate));
 
                 WeeklyPlanResponse response = weeklyMealPlanService.buildWeeklyPlanResponse(startDate, dayPlans);
@@ -427,7 +431,11 @@ public class MealPlanController {
 
                     MealPlan savedPlan = weeklyMealPlanService.generateWeeklyPlan(userId, startDate);
                     MealPlanVersion currentVersion = savedPlan.getCurrentVersion();
-                    java.util.List<DayPlan> dayPlans = currentVersion != null ? currentVersion.getDayPlans() : java.util.Collections.emptyList();
+                    java.util.List<DayPlan> dayPlans = java.util.Collections.emptyList();
+                    if (currentVersion != null) {
+                        dayPlans = dayPlanRepository
+                            .findByMealPlanVersionIdAndDateRangeWithMeals(currentVersion.getId(), startDate, endDate);
+                    }
                     dayPlans.sort(java.util.Comparator.comparing(DayPlan::getDate));
 
                     WeeklyPlanResponse response = weeklyMealPlanService.buildWeeklyPlanResponse(startDate, dayPlans);
