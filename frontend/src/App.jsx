@@ -29,6 +29,7 @@ import { MealShoppingListPage } from "./pages/MealShoppingListPage";
 import { ReplaceMealPage } from "./pages/ReplaceMealPage";
 import { RecipePage } from "./pages/RecipePage";
 import { RecipesPage } from "./pages/RecipesPage";
+import AssistantPage from "./pages/AssistantPage";
 
 // Root component wraps router so inner shell can use hooks
 export default function App(){
@@ -589,6 +590,7 @@ function AppShell() {
         <h1 style={{ margin: 0, fontSize: 18 }}>Numbers-Don't-Lie</h1>
         <nav style={{ marginLeft: 12, display: 'flex', gap: 8, alignItems: 'center' }}>
           <Link to="/ai">AI</Link>
+          <Link to="/assistant">Assistant</Link>
           <Link to="/dashboard">Dashboard</Link>
           <Link to="/progress">Progress Charts</Link>
           <Link to="/profile">Profile</Link>
@@ -642,6 +644,7 @@ function AppShell() {
           <Route path="/weight" element={<Protected><Weight ctx={ctx} /></Protected>} />
           <Route path="/analytics" element={<Protected><Analytics ctx={ctx} /></Protected>} />
           <Route path="/ai" element={<Protected><AI ctx={ctx} /></Protected>} />
+          <Route path="/assistant" element={<Protected><AssistantPage /></Protected>} />
           <Route path="/dashboard" element={<Protected><Dashboard ctx={ctx} /></Protected>} />
           <Route path="/progress" element={<Protected><ProgressChartsPage /></Protected>} />
           <Route path="/profile" element={<Protected><Profile ctx={ctx} /></Protected>} />

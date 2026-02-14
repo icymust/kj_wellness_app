@@ -141,6 +141,10 @@ export const api = {
   aiRegen: (token, scope = "weekly") => request(`/ai/insights/regenerate?scope=${encodeURIComponent(scope)}`, { method: "POST", token }),
   aiStatus: (token) => request(`/ai/status`, { token }),
   aiSetStatus: (token, enabled) => request(`/ai/status`, { method: "PUT", token, body: { enabled } }),
+  // Assistant
+  assistantChat: (token, body) => request("/api/assistant/chat", { method: "POST", token, body }),
+  assistantCreateSession: (token, body = {}) => request("/api/assistant/sessions", { method: "POST", token, body }),
+  assistantHistory: (token, sessionId) => request(`/api/assistant/sessions/${encodeURIComponent(sessionId)}/messages`, { token }),
   // 2FA
   twofaEnroll: (token) => request("/2fa/enroll", { method: "POST", token }),
   twofaVerifySetup: (token, code) => request("/2fa/verify-setup", { method: "POST", token, body: { code } }),

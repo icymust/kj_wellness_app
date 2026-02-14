@@ -3,6 +3,8 @@ package com.ndl.numbers_dont_lie.ai;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.ndl.numbers_dont_lie.ai.exception.AiClientException;
 
 import java.io.IOException;
@@ -46,7 +48,7 @@ public class GroqClient {
      * Generic method supporting all prompt types (strategy, meal structure, etc.).
      */
     public JsonNode callForJson(String prompt) {
-        return callForJson(prompt, null, DEFAULT_TEMPERATURE);
+        return callForJson(prompt, (List<Map<String, Object>>) null, DEFAULT_TEMPERATURE);
     }
 
     /**
@@ -64,7 +66,60 @@ public class GroqClient {
     }
 
     public JsonNode callForJson(String prompt, Double temperature) {
-        return callForJson(prompt, null, temperature);
+        return callForJson(prompt, (List<Map<String, Object>>) null, temperature);
+    }
+
+    /**
+     * Call Groq API with custom system prompt.
+     * This is used by the conversational assistant so prompt policy can be
+     * scoped per feature instead of reusing nutrition-only defaults.
+     */
+    public JsonNode callForJson(String systemPrompt, String prompt, Double temperature) {
+        try {
+            List<Object> messages = new ArrayList<>();
+            messages.add(Map.of(
+                "role", "system",
+                "content", systemPrompt
+            ));
+            messages.add(Map.of("role", "user", "content", prompt));
+
+            Map<String, Object> requestBody = new java.util.HashMap<>();
+            requestBody.put("model", DEFAULT_MODEL);
+            requestBody.put("messages", messages);
+            requestBody.put("temperature", temperature != null ? temperature : DEFAULT_TEMPERATURE);
+            requestBody.put("top_p", DEFAULT_TOP_P);
+
+            String body = objectMapper.writeValueAsString(requestBody);
+
+            HttpRequest httpRequest = HttpRequest.newBuilder()
+                    .uri(URI.create("https://api.groq.com/openai/v1/chat/completions"))
+                    .header("Authorization", "Bearer " + apiKey)
+                    .header("Content-Type", "application/json")
+                    .timeout(Duration.ofSeconds(60))
+                    .POST(HttpRequest.BodyPublishers.ofString(body))
+                    .build();
+
+            HttpResponse<String> response = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString());
+            handleHttpErrors(response);
+
+            JsonNode root = objectMapper.readTree(response.body());
+            JsonNode content = root.path("choices").path(0).path("message").path("content");
+            if (content == null || content.isMissingNode() || !content.isTextual()) {
+                throw new AiClientException("Malformed Groq response. No content.");
+            }
+
+            String contentText = content.asText();
+            return parseAssistantJson(contentText);
+        } catch (HttpTimeoutException e) {
+            Thread.currentThread().interrupt();
+            throw new AiClientException("Groq request timed out. Please retry.", e);
+        } catch (ConnectException e) {
+            Thread.currentThread().interrupt();
+            throw new AiClientException("Groq connectivity error. Check network.", e);
+        } catch (IOException | InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new AiClientException("Groq request failed.", e);
+        }
     }
 
     public JsonNode callForJson(String prompt, List<Map<String, Object>> functions, Double temperature) {
@@ -229,5 +284,82 @@ public class GroqClient {
         if (response.statusCode() >= 400) {
             throw new AiClientException("Groq request error: " + response.statusCode() + " " + body);
         }
+    }
+
+    private JsonNode parseAssistantJson(String contentText) {
+        try {
+            return objectMapper.readTree(contentText);
+        } catch (JsonProcessingException ignored) {
+            // Continue with lenient parsing
+        }
+
+        String withoutFences = contentText
+                .replaceFirst("(?s)^\\s*```(?:json)?\\s*", "")
+                .replaceFirst("(?s)\\s*```\\s*$", "")
+                .trim();
+        try {
+            return objectMapper.readTree(withoutFences);
+        } catch (JsonProcessingException ignored) {
+            // Continue with object extraction
+        }
+        try {
+            return objectMapper.readTree(escapeNewlinesInsideStrings(withoutFences));
+        } catch (JsonProcessingException ignored) {
+            // Continue with object extraction
+        }
+
+        int firstBrace = withoutFences.indexOf('{');
+        int lastBrace = withoutFences.lastIndexOf('}');
+        if (firstBrace >= 0 && lastBrace > firstBrace) {
+            String objectSlice = withoutFences.substring(firstBrace, lastBrace + 1);
+            try {
+                return objectMapper.readTree(objectSlice);
+            } catch (JsonProcessingException ignored) {
+                // Try to repair multiline strings inside JSON-like object
+            }
+            try {
+                return objectMapper.readTree(escapeNewlinesInsideStrings(objectSlice));
+            } catch (JsonProcessingException ignored) {
+                // Fall through to wrapped answer
+            }
+        }
+
+        ObjectNode wrapped = objectMapper.createObjectNode();
+        wrapped.put(
+                "answer",
+                withoutFences.isBlank() ? "I could not generate a structured answer." : withoutFences
+        );
+        wrapped.put("lastTopic", "general");
+        wrapped.set("entities", objectMapper.createObjectNode());
+        ArrayNode warnings = objectMapper.createArrayNode();
+        warnings.add("Model returned non-JSON response; raw answer was used.");
+        wrapped.set("warnings", warnings);
+        return wrapped;
+    }
+
+    private String escapeNewlinesInsideStrings(String input) {
+        StringBuilder out = new StringBuilder(input.length() + 16);
+        boolean inString = false;
+        boolean escaped = false;
+        for (int i = 0; i < input.length(); i++) {
+            char c = input.charAt(i);
+            if (c == '"' && !escaped) {
+                inString = !inString;
+                out.append(c);
+                continue;
+            }
+            if (inString && (c == '\n' || c == '\r')) {
+                out.append("\\n");
+                escaped = false;
+                continue;
+            }
+            out.append(c);
+            if (c == '\\' && !escaped) {
+                escaped = true;
+            } else {
+                escaped = false;
+            }
+        }
+        return out.toString();
     }
 }
